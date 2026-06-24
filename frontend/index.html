@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" /></noscript>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="app-booting">
+    <div id="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">
+            <img class="brand-logo-img" src="./logo.jpg" alt="" />
+          </div>
+          <div class="brand-text">
+            <h1>Nexus</h1>
+            <p>Workspace</p>
+          </div>
+          <button id="sidebarCollapseBtn" class="sidebar-collapse-btn" type="button" aria-label="Toggle sidebar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+        </div>
+
+        <button id="mobileSidebarCloseBtn" class="mobile-sidebar-close" type="button" aria-label="Close sidebar">×</button>
+
+        <section class="auth-panel hidden" id="authPanel">
+          <div class="tabs" role="tablist">
+            <button class="tab active" id="loginTab" type="button">Login</button>
+            <button class="tab" id="registerTab" type="button">Register</button>
+          </div>
+          <form id="authForm" class="stack">
+            <input id="usernameInput" class="hidden" autocomplete="username" placeholder="Username" />
+            <input id="emailInput" autocomplete="email" placeholder="Email" />
+            <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Password" />
+            <button type="submit" class="primary">Continue</button>
+          </form>
+        </section>
+
+        <section class="workspace-card">
+          <button class="workspace-switcher" type="button" data-tool="workspaces" aria-label="Workspace">
+            <span id="workspaceSwitcherAvatar" class="workspace-avatar">W</span>
+            <span>
+              <strong id="workspaceSwitcherName">Select workspace</strong>
+              <small id="workspaceMeta">No workspace selected</small>
+            </span>
+            <span class="chevron">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </button>
+          <button id="workspaceOnlineSummary" class="workspace-online-summary" type="button" data-tool="members">
+            <span id="workspaceOnlineText">Only you online</span>
+            <span id="workspaceOnlineAvatars" class="online-avatar-stack"></span>
+          </button>
+
+          <div class="legacy-sidebar-controls" aria-hidden="true">
+            <form id="workspaceForm" class="create-row">
+              <input id="workspaceNameInput" placeholder="New workspace" />
+              <button id="refreshWorkspacesBtn" class="icon-button" title="Refresh workspaces" type="button">↻</button>
+              <button class="icon-button" title="Create workspace" type="submit">+</button>
+            </form>
+
+            <div id="workspaceList" class="workspace-list"></div>
+          </div>
+        </section>
+
+        <nav class="sidebar-nav" aria-label="Main navigation">
+          <a href="#/home" data-route-link="home" class="nav-item" aria-label="Home">
+            <span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </span>
+            <span class="nav-text">Home</span>
+          </a>
+          <button class="nav-item search-button" data-command-palette-open type="button" aria-label="Search">
+            <span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+            <span class="nav-text">Search</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+          <a href="#/workspace" data-route-link="workspace" class="nav-item" aria-label="Documents">
+            <span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+            </span>
+            <span class="nav-text">Documents</span>
+          </a>
+          <a href="#/chat" data-route-link="chat" class="nav-item" aria-label="Chat">
+            <span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </span>
+            <span class="nav-text">Chat</span>
+            <small id="chatUnreadBadge" class="nav-badge hidden">0</small>
+          </a>
+          <a href="#/threads" data-route-link="threads" class="nav-item" aria-label="Threads">
+            <span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+            </span>
+            <span class="nav-text">Threads</span>
+          </a>
+          <a href="#/tasks" data-route-link="tasks" class="nav-item" aria-label="Tasks">
+            <span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+            </span>
+            <span class="nav-text">Tasks</span>
+          </a>
+          <a href="#/members" data-route-link="members" class="nav-item" aria-label="Members">
+            <span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+            <span class="nav-text">Members</span>
+          </a>
+          <a href="#/settings" data-route-link="settings" class="nav-item" aria-label="Settings">
+            <span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+            <span class="nav-text">Settings</span>
+          </a>
+        </nav>
+
+        <section class="sidebar-section channel-section legacy-sidebar-controls" aria-hidden="true">
+          <div class="section-heading">
+            <h2>Discussions</h2>
+          </div>
+          <form id="channelForm" class="create-row compact-create-row">
+            <input id="channelNameInput" placeholder="New channel" />
+            <button class="icon-button" title="Create channel" type="submit">+</button>
+          </form>
+          <div id="channelList" class="channel-list"></div>
+        </section>
+
+        <section class="account-card" aria-label="Profile">
+          <span id="sidebarUserAvatar" class="user-avatar" data-tool="profile" style="cursor: pointer;">U</span>
+          <span data-tool="profile" style="cursor: pointer;">
+            <strong id="sessionName">Signed out</strong>
+            <small id="sessionLabel">Sign in to continue</small>
+          </span>
+          <button id="sidebarThemeToggleBtn" class="icon-button" type="button" title="Toggle theme">
+            <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+            <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </button>
+          <button id="logoutBtn" class="icon-button logout-button hidden" type="button" title="Logout">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          </button>
+        </section>
+      </aside>
+
+      <div id="toolPanel" class="tool-panel"></div>
+
+      <main class="app-main">
+        <div id="demoBanner" class="demo-banner hidden">
+          <span>You are viewing a demo workspace. Demo changes are temporary.</span>
+          <button data-route-go="signup" type="button">Create Account</button>
+          <button data-route-go="login" type="button">Login</button>
+        </div>
+
+        <section id="routePage" class="route-page hidden"></section>
+
+        <section class="workspace-layout nexus-documents hidden">
+          <header class="topbar">
+            <button id="mobileSidebarOpenBtn" class="ghost mobile-sidebar-open" type="button">Menu</button>
+            <div class="topbar-breadcrumb">
+              <p id="workspaceTitle">Choose or create a workspace</p>
+              <h2 id="documentBreadcrumb">Current document</h2>
+            </div>
+            <div class="topbar-actions">
+              <div id="presenceList" class="presence-list"></div>
+              <div class="topbar-save-chip" id="topbarSaveChip">
+                <span class="topbar-save-dot"></span>
+                <span id="topbarSaveLabel">Saved just now</span>
+              </div>
+              <button id="focusModeBtn" class="ghost" type="button" title="Focus mode">Focus</button>
+              <button id="saveDocBtn" class="primary hidden" type="button">Save</button>
+            </div>
+          </header>
+
+          <aside class="document-workspace-panel sidebar-section document-section">
+            <div class="section-heading">
+              <div>
+                <h2>Documents</h2>
+                <p class="section-subtitle">Notes in this workspace</p>
+              </div>
+              <button id="newDocBtn" class="icon-button" title="Create document" type="button">+</button>
+            </div>
+            <div id="documentList" class="document-tree"></div>
+            <div class="document-new-page-footer">
+              <button id="documentNewPageBtn" class="document-new-page-button" type="button">+ New page</button>
+            </div>
+          </aside>
+
+          <div
+            id="documentsResizeHandle"
+            class="resize-handle documents-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize documents panel"
+            tabindex="0"
+          >
+            <span class="resize-grip" aria-hidden="true"></span>
+          </div>
+
+          <section class="editor-pane">
+            <div class="editor-toolbar plain-text-toolbar" aria-label="Editor mode">
+              <span class="editor-mode-pill">Plain text collaborative editor</span>
+            </div>
+
+            <div class="document-head">
+              <div class="workspace-badge" id="workspaceBadge">
+                <span class="workspace-badge-dot"></span>
+                <span id="workspaceBadgeLabel">WORKSPACE</span>
+              </div>
+              <input id="documentTitleInput" class="title-input" placeholder="Untitled document" />
+              
+              <div class="document-metadata-row">
+                <span class="meta-text">Plain text collaborative editor</span>
+                <span class="meta-sep">·</span>
+                <span class="meta-text" id="lastEditedStatus">Edited just now</span>
+                <span class="meta-sep">·</span>
+                <span class="meta-text" id="typingStatus">You are editing</span>
+                <span id="collabStatus" class="hidden">Offline</span>
+                <span id="autosaveStatus" class="hidden">Autosaved</span>
+                <span class="status-dot hidden"></span>
+                <div id="saveStatusChip" class="hidden"></div>
+              </div>
+
+              <div class="editor-ai-shortcuts unified-action-bar" aria-label="AI study shortcuts">
+                <button data-ai-study-action="summarize" class="action-btn action-primary" type="button">
+                  <span class="action-icon">✦</span> Ask AI
+                </button>
+                <button id="emptyActionPaste" class="action-btn" type="button">
+                  <span class="action-icon">📋</span> Paste lecture
+                </button>
+                <button id="askDoubtEditorBtn" class="action-btn action-primary" type="button">
+                  <span class="action-icon">💬</span> Ask Doubt
+                </button>
+                <button data-ai-study-action="quiz" class="action-btn" type="button">
+                  <span class="action-icon">❓</span> Quiz
+                </button>
+                <button data-ai-study-action="flashcards" class="action-btn" type="button">
+                  <span class="action-icon">🎴</span> Flashcards
+                </button>
+                <button data-ai-study-action="summarize" class="action-btn" type="button">
+                  <span class="action-icon">📝</span> Summarize
+                </button>
+                <button data-ai-study-action="simple-explanation" class="action-btn" type="button">
+                  <span class="action-icon">💡</span> Explain
+                </button>
+              </div>
+            </div>
+
+            <div class="editor-wrap">
+              <div id="remoteCursorLayer" class="remote-cursor-layer"></div>
+              
+              <div id="editorEmptyState" class="editor-premium-empty hidden">
+                <h3 class="empty-title">Start your study note</h3>
+                <p class="empty-subtitle">Write freely, paste class content, or let Nexus generate a clean outline for you.</p>
+                <div class="empty-actions-grid">
+                  <button type="button" class="empty-action-card" id="emptyActionBlank">
+                    <span class="action-icon">📝</span>
+                    <span class="action-label">Start blank note</span>
+                  </button>
+                  <button type="button" class="empty-action-card" data-dashboard-ai="outline">
+                    <span class="action-icon">✨</span>
+                    <span class="action-label">Generate outline</span>
+                  </button>
+                  <button type="button" class="empty-action-card" id="emptyActionPaste2">
+                    <span class="action-icon">📋</span>
+                    <span class="action-label">Paste lecture</span>
+                  </button>
+                  <button type="button" class="empty-action-card" data-dashboard-action="ai">
+                    <span class="action-icon">🤖</span>
+                    <span class="action-label">Ask AI</span>
+                  </button>
+                </div>
+              </div>
+
+              <textarea
+                id="documentEditor"
+                class="rich-editor document-editor-input"
+                spellcheck="true"
+                placeholder="Start writing your notes, paste lecture content, or ask AI to create a study outline..."
+              ></textarea>
+            </div>
+          </section>
+
+          <div
+            id="aiResizeHandle"
+            class="resize-handle ai-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize AI assistant panel"
+            tabindex="0"
+          >
+            <span class="resize-grip" aria-hidden="true"></span>
+          </div>
+
+          <aside class="context-panel">
+            <div class="context-tabs" role="tablist" aria-label="Document context">
+              <button class="context-tab active" data-context-tab="ai" type="button">AI</button>
+              <button class="context-tab" data-context-tab="library" type="button">Library</button>
+              <button class="context-tab" data-context-tab="tasks" type="button">Tasks</button>
+              <button class="context-tab" data-context-tab="threads" type="button">Threads</button>
+              <button class="context-tab" data-context-tab="activity" type="button">Activity</button>
+              <button class="context-tab" data-context-tab="members" type="button">Members</button>
+            </div>
+
+            <section class="context-view active" data-context-view="ai">
+              <div class="context-header">
+                <span class="context-icon">✦</span>
+                <div>
+                  <h3>AI Study Assistant</h3>
+                  <p id="aiContextLabel">Use the current document as context.</p>
+                </div>
+              </div>
+              <div class="ai-source-toggle" aria-label="AI source">
+                <label><input type="radio" name="aiSource" value="document" checked /> Full document</label>
+                <label><input type="radio" name="aiSource" value="selection" /> Selected text</label>
+              </div>
+              <p id="aiSelectionHint" class="ai-selection-hint">Select text in the editor to use a focused paragraph.</p>
+              <div class="ai-actions">
+                <select id="aiActionSelect" class="hidden">
+                  <option value="summarize">Summarize</option>
+                  <option value="quiz">Generate Quiz</option>
+                  <option value="flashcards">Generate Flashcards</option>
+                  <option value="simple-explanation">Explain Like I'm 10</option>
+                  <option value="important-questions">Important Questions</option>
+                </select>
+                <button class="ai-tool-button" data-ai-study-action="summarize" type="button">Summarize</button>
+                <button class="ai-tool-button" data-ai-study-action="quiz" type="button">Quiz</button>
+                <button class="ai-tool-button" data-ai-study-action="flashcards" type="button">Flashcards</button>
+                <button class="ai-tool-button" data-ai-study-action="simple-explanation" type="button">Explain Simply</button>
+                <button class="ai-tool-button" data-ai-study-action="important-questions" type="button">Important Questions</button>
+                <button id="createAiDocumentBtn" class="ai-tool-button" type="button">Create new doc</button>
+                <button id="runAiBtn" class="primary hidden" type="button">Run</button>
+              </div>
+              <div id="demoAiPrompts" class="demo-ai-prompts hidden">
+                <button data-demo-ai="summarize" type="button">Summarize this note</button>
+                <button data-demo-ai="quiz" type="button">Generate quiz</button>
+                <button data-demo-ai="explain" type="button">Explain like I'm 10</button>
+                <button data-demo-ai="exam" type="button">Find exam questions</button>
+                <button data-demo-ai="flashcards" type="button">Create flashcards</button>
+              </div>
+              <div id="aiOutput" class="ai-output"></div>
+              <div class="ai-result-actions">
+                <button id="saveAiToLibraryBtn" class="ghost" type="button">Save to Library</button>
+                <button id="copyAiOutputBtn" class="ghost" type="button">Copy</button>
+                <button id="regenerateAiBtn" class="ghost" type="button">Regenerate</button>
+              </div>
+            </section>
+
+            <section class="context-view" data-context-view="library" hidden>
+              <div class="context-header">
+                <span class="context-icon">▣</span>
+                <div>
+                  <h3>Study Library</h3>
+                  <p id="libraryContextLabel">Saved study material for this document.</p>
+                </div>
+              </div>
+              <div id="studyLibraryList" class="study-library-list"></div>
+            </section>
+
+            <section class="context-view" data-context-view="tasks" hidden>
+              <div class="context-header">
+                <span class="context-icon">✓</span>
+                <div>
+                  <h3>Tasks</h3>
+                  <p id="tasksContextLabel">Lightweight tasks beside the document.</p>
+                </div>
+              </div>
+              <form id="taskForm" class="composer">
+                <input id="taskInput" placeholder="Add a task for this document..." />
+                <button class="primary" type="submit">Add</button>
+              </form>
+              <div id="taskList" class="task-list"></div>
+            </section>
+
+            <section class="context-view" data-context-view="threads" hidden>
+              <div class="context-header">
+                <span class="context-icon">#</span>
+                <div>
+                  <h3 id="channelTitle">Threads / Doubts</h3>
+                  <p id="discussionContextLabel">Ask and resolve doubts linked to this document.</p>
+                </div>
+              </div>
+              <button id="askDoubtBtn" class="primary" type="button">Ask Doubt</button>
+              <div class="thread-filters" aria-label="Thread filters">
+                <button class="active" data-thread-filter="open" type="button">Open</button>
+                <button data-thread-filter="resolved" type="button">Resolved</button>
+                <button data-thread-filter="mine" type="button">Mine</button>
+                <button data-thread-filter="all" type="button">All</button>
+              </div>
+              <div id="messageList" class="messages"></div>
+              <div id="messageFormContextContainer" class="composer-context-badge hidden"></div>
+              <form id="messageForm" class="composer">
+                <input id="messageInput" placeholder="Ask a doubt..." />
+                <button class="primary" type="submit">Post</button>
+              </form>
+              <button id="refreshMessagesBtn" class="ghost" type="button">Refresh</button>
+            </section>
+
+            <section class="context-view" data-context-view="members" hidden>
+              <div class="context-header">
+                <span class="context-icon">●</span>
+                <div>
+                  <h3>Members</h3>
+                  <p id="membersContextLabel">Presence and collaborators.</p>
+                </div>
+              </div>
+              <div id="memberPresenceList" class="member-presence"></div>
+              <button class="ghost" data-tool="members" type="button">Manage members</button>
+            </section>
+
+            <section class="context-view" data-context-view="activity" hidden>
+              <div class="context-header">
+                <span class="context-icon">◌</span>
+                <div>
+                  <h3>Activity</h3>
+                  <p>Recent collaboration in this workspace.</p>
+                </div>
+              </div>
+              <div id="activityList" class="activity-list"></div>
+            </section>
+          </aside>
+        </section>
+      </main>
+
+      <div id="commandPalette" class="command-palette nexus-command-palette hidden" role="dialog" aria-modal="true" aria-label="Command palette">
+        <div class="command-card">
+          <div class="command-search">
+            <span class="search-icon-svg">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </span>
+            <input id="commandInput" placeholder="Search documents, channels, and actions..." autocomplete="off" aria-label="Search documents, channels, and actions" />
+            <kbd class="esc-hint">Esc</kbd>
+          </div>
+          <div id="commandResults" class="command-results"></div>
+          <div class="command-footer">
+            <span class="footer-hint"><kbd>↑↓</kbd> Navigate</span>
+            <span class="footer-hint"><kbd>Enter</kbd> Open</span>
+            <span class="footer-hint"><kbd>Esc</kbd> Close</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="toast" class="toast hidden"></div>
+    </div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,30 @@
+# Dependencies
+node_modules
+frontend/node_modules
+backend/node_modules
+
+# Next.js
+.next
+frontend/.next
+
+# Build outputs
+dist
+build
+backend/dist
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+
+# Logs
+*.log
+
+# OS files
+.DS_Store 
+
+#chrome profile
+tmp_chrome_profile
+
+
