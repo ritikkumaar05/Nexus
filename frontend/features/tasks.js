@@ -93,9 +93,7 @@ export const renderTaskCardHtml = (task) => {
   const isMenuOpen = activeTaskMoreMenuId === task._id;
 
   return `
-    <article class="task-page-card ${isDone ? 'completed' : ''}" data-task-id="${task._id}" data-doc-id="${task.documentId || ''}">
-      <input type="checkbox" class="task-checkbox-v2" ${isDone ? 'checked' : ''} data-check-task-id="${task._id}" />
-      
+    <article class="task-page-card task-card-v2 ${isDone ? 'completed' : ''}" data-task-id="${task._id}" data-doc-id="${task.documentId || ''}">
       <div class="task-card-body" style="display: flex; flex-direction: column; gap: 10px; width: 100%; min-width: 0;">
         <div class="card-top-badges" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
           <div class="left-badges" style="display: flex; align-items: center; gap: 6px;">
@@ -129,7 +127,8 @@ export const renderTaskCardHtml = (task) => {
           </div>
         </div>
         
-        <div class="task-title-row" style="display: flex; flex-direction: column;">
+        <div class="task-title-row">
+          <input type="checkbox" class="task-checkbox-v2" ${isDone ? 'checked' : ''} data-check-task-id="${task._id}" />
           <strong>${escapeHtml(task.title)}</strong>
         </div>
         
@@ -158,7 +157,7 @@ export const renderTaskCardHtml = (task) => {
 };
 
 
-export const showAddTaskModal = () => {
+export const showAddTaskModal = async () => {
   const docs = state.documents || [];
   if (!docs.length) {
     return showToast('Create a document first before creating a task.', true);
@@ -218,7 +217,7 @@ export const showAddTaskModal = () => {
     </form>
   `;
 
-  showChatModal('Add Task', modalHtml);
+  await showChatModal('Add Task', modalHtml);
 
   const cancelBtn = document.getElementById('cancelAddTaskModalBtn');
   cancelBtn?.addEventListener('click', () => {
@@ -294,7 +293,7 @@ export const showAddTaskModal = () => {
 };
 
 
-export const showEditTaskModal = (taskId) => {
+export const showEditTaskModal = async (taskId) => {
   const allTasks = [...state.dashboardTasks, ...state.documentTasks];
   const task = allTasks.find(t => t._id === taskId);
   if (!task) return;
@@ -361,7 +360,7 @@ export const showEditTaskModal = (taskId) => {
     </form>
   `;
 
-  showChatModal('Edit Task', modalHtml);
+  await showChatModal('Edit Task', modalHtml);
 
   const cancelBtn = document.getElementById('cancelEditTaskModalBtn');
   cancelBtn?.addEventListener('click', () => {
@@ -604,5 +603,3 @@ export const renderTasksPage = () => {
     }
   }
 };
-
-

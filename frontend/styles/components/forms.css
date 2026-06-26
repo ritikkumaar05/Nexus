@@ -1,0 +1,172 @@
+/* components/forms.css */
+
+.command-search input {
+  border: 0;
+  min-height: 34px;
+  padding: 0;
+  box-shadow: none !important;
+}
+
+.profile-input-field input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid color-mix(in srgb, var(--line) 88%, var(--primary) 12%);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--panel-soft) 12%);
+  color: var(--text);
+  padding: 0 12px;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.profile-input-field input::placeholder {
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
+}
+
+.profile-input-field input:focus {
+  border-color: color-mix(in srgb, var(--primary) 72%, var(--line) 28%);
+  background: var(--panel);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+@media (max-width: 760px) {
+  .workspace-member-row select { max-width: none; }
+}
+
+.workspace-rename-form input {
+  min-height: 38px;
+}
+
+.workspace-member-row select {
+  min-height: 38px;
+  max-width: 150px;
+}
+
+.workspace-create-field input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid color-mix(in srgb, var(--line) 88%, var(--primary) 12%);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--panel-soft) 12%);
+  color: var(--text);
+  padding: 0 12px;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.workspace-create-field input::placeholder {
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
+}
+
+.workspace-create-field input:focus {
+  border-color: color-mix(in srgb, var(--primary) 72%, var(--line) 28%);
+  background: var(--panel);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.composer-form-wrapper textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.4;
+  padding: 4px 2px;
+  max-height: 120px;
+}
+
+.nexus-command-palette .command-search input {
+  flex: 1 !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  font-family: inherit !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  padding: 4px 0 !important;
+  min-height: auto !important;
+  color: var(--text, #ffffff) !important;
+  box-shadow: none !important;
+}
+
+.nexus-command-palette .command-search input::placeholder {
+  color: var(--muted, #64748b) !important;
+  opacity: 0.65 !important;
+}
+
+/* Selected/Hover Active Row States */
+
+/* Light Mode Hover/Selected */
+
+body:not([data-theme="dark"]):not([data-theme="system"]) .nexus-command-palette .command-item.selected {
+  background: rgba(99, 102, 241, 0.06) !important;
+  border-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+body:not([data-theme="dark"]):not([data-theme="system"]) .nexus-command-palette .command-item.selected .command-item-icon {
+  background: var(--primary, #6366f1) !important;
+  color: white !important;
+}
+
+body:not([data-theme="dark"]):not([data-theme="system"]) .nexus-command-palette .command-item.selected .command-item-action {
+  opacity: 1 !important;
+  transform: translateX(0) !important;
+  color: var(--primary, #6366f1) !important;
+}
+
+.toolbar-select-label select {
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Modal form extensions */
+
+.form-field-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.form-field-v2 label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, var(--muted));
+}
+
+.form-field-v2 input,
+.form-field-v2 textarea,
+.form-field-v2 select {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.form-field-v2 textarea {
+  resize: vertical;
+}
+
+.form-field-v2 input:focus,
+.form-field-v2 textarea:focus,
+.form-field-v2 select:focus {
+  border-color: var(--primary);
+  outline: none;
+}

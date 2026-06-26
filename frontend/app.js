@@ -6090,7 +6090,7 @@ els.routePage.addEventListener('click', async (event) => {
   const taskAddBtn = event.target.closest('#tasksPageAddTaskBtn, #tasksOpenEmptyAddTaskBtn');
   if (taskAddBtn) {
     event.preventDefault();
-    showAddTaskModal();
+    await showAddTaskModal();
     return;
   }
 
@@ -6140,7 +6140,7 @@ els.routePage.addEventListener('click', async (event) => {
     event.preventDefault();
     const taskId = taskEditBtn.dataset.editTaskId;
     activeTaskMoreMenuId = '';
-    showEditTaskModal(taskId);
+    await showEditTaskModal(taskId);
     return;
   }
 

@@ -1,0 +1,221 @@
+/* components/buttons.css */
+
+.channel-list button::before { content: "#"; }
+
+.demo-banner button {
+  min-height: 30px;
+  border: 1px solid rgba(92, 85, 223, 0.28);
+  border-radius: 999px;
+  padding: 0 12px;
+  color: var(--primary);
+  background: var(--panel-glass);
+  font-weight: 820;
+}
+
+.demo-banner button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.ghost,
+.soft-button {
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: var(--panel);
+}
+
+.ghost:hover,
+.soft-button:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.toolbar-button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  color: #2f3142;
+  background: transparent;
+  font-weight: 780;
+}
+
+.demo-ai-prompts button {
+  min-height: 34px;
+  border: 1px solid rgba(92, 85, 223, 0.18);
+  border-radius: 999px;
+  padding: 0 12px;
+  color: var(--primary);
+  background: rgba(92, 85, 223, 0.08);
+  font-size: 12px;
+  font-weight: 820;
+  transition: transform 0.16s ease, background 0.16s ease;
+}
+
+.demo-ai-prompts button:hover {
+  background: rgba(92, 85, 223, 0.14);
+  transform: translateY(-1px);
+}
+
+.resolve-button {
+  min-height: 40px;
+  border: 1px solid rgba(22, 163, 74, 0.14);
+  border-radius: 12px;
+  padding: 0 15px;
+  color: var(--success);
+  background: var(--panel);
+  font-weight: 800;
+}
+
+.tabs-line button {
+  height: 42px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 780;
+}
+
+.tabs-line button.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.empty-actions button {
+  min-height: 34px;
+  border-radius: 999px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .workspace-invite-form .primary { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .workspace-invite-form .primary { grid-column: auto; }
+}
+
+.workspace-action-menu button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.workspace-action-menu button:hover {
+  background: var(--panel-soft);
+}
+
+.workspace-action-menu button[data-delete-workspace-id] {
+  color: var(--danger);
+}
+
+.workspace-action-menu button:disabled {
+  color: var(--muted-2);
+}
+
+.danger-button {
+  min-height: 40px;
+  border: 1px solid var(--danger);
+  border-radius: 11px;
+  padding: 0 14px;
+  color: #fff;
+  background: var(--danger);
+  font-weight: 780;
+}
+
+.danger-button:hover {
+  filter: brightness(0.96);
+}
+
+.workspace-create-card .primary {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 11px;
+  font-weight: 760;
+}
+
+.detail-header-actions button.subtle-btn {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+
+.detail-header-actions button.subtle-btn:hover {
+  background: var(--line);
+}
+
+.detail-header-actions button.primary {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.detail-header-actions button.primary:hover {
+  opacity: 0.9;
+}
+
+.empty-actions button.primary {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.empty-actions button.subtle-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  color: var(--text);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.empty-actions button.subtle-btn:hover {
+  background: var(--line);
+}
+
+/* Logout button visual feedback overrides */
+
+.logout-button {
+  color: var(--muted) !important;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  transition: all 0.16s ease;
+}
+
+.logout-button:hover {
+  color: var(--danger) !important;
+  background: hsla(350, 80%, 55%, 0.12) !important;
+  border-color: hsla(350, 80%, 55%, 0.2) !important;
+}

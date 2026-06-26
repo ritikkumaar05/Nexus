@@ -1,0 +1,142 @@
+/* components/modals.css */
+
+body.overlay-scroll-locked {
+  position: fixed;
+  left: 0;
+  right: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.tool-panel.open {
+  position: fixed;
+  inset: 0;
+  z-index: var(--overlay-z);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: hidden;
+  background: var(--overlay-backdrop);
+  backdrop-filter: var(--overlay-blur);
+}
+
+.tool-panel-card {
+  position: relative;
+  z-index: 1;
+  width: min(500px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  display: grid;
+  gap: 16px;
+  overflow: visible;
+  border: 1px solid var(--line);
+  border-radius: var(--overlay-radius);
+  padding: 18px;
+  background: var(--panel);
+  box-shadow: var(--overlay-shadow);
+  animation: var(--overlay-animation);
+}
+
+.tool-panel-card {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 34%, transparent) transparent;
+}
+
+.tool-panel-card::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tool-panel-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tool-panel-card::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 28%, transparent);
+  background-clip: content-box;
+}
+
+.tool-panel-card::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted) 44%, transparent);
+  background-clip: content-box;
+}
+
+.tool-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding: 4px 4px 14px;
+}
+
+.tool-panel-head strong { display: block; font-size: 16px; }
+
+.tool-panel-head small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+
+@keyframes overlay-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.toast {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: calc(var(--overlay-z) + 20);
+  max-width: min(420px, calc(100vw - 44px));
+  border-radius: 14px;
+  padding: 13px 16px;
+  color: #fff;
+  background: #151529;
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.22);
+  font-weight: 750;
+}
+
+.toast.error { background: #b4233a; }
+
+@media (max-width: 1100px) {
+  .tool-panel.open {
+      padding: 18px;
+    }
+}
+
+@media (max-width: 1100px) {
+  .tool-panel-card {
+      width: min(430px, calc(100vw - 36px));
+    }
+}
+
+@media (max-height: 760px) {
+  .tool-panel-card {
+      overflow: auto;
+    }
+}
+
+@keyframes overlay-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes command-scale-up {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

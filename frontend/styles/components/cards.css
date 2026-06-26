@@ -1,0 +1,40 @@
+/* components/cards.css */
+
+.task-list,
+.messages,
+.study-library-list,
+.member-presence,
+.activity-list,
+.dashboard-activity-list {
+  display: grid;
+  gap: 10px;
+}
+
+.task-list label,
+.message,
+.member-row,
+.activity-item,
+.tool-card,
+.empty-state,
+.error-state {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-header-v3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-header-v3 h3 {
+  font-family: var(--font-display, inherit);
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text, #ffffff);
+}
