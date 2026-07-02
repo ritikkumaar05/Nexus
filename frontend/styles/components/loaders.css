@@ -7,6 +7,16 @@
   background: linear-gradient(90deg, var(--panel-soft), var(--line-strong), var(--panel-soft));
   background-size: 220% 100%;
   animation: shimmer 1.3s linear infinite;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+
+.skeleton-row:nth-child(2n) {
+  width: 86%;
+}
+
+.skeleton-row:nth-child(3n) {
+  width: 68%;
 }
 
 @keyframes shimmer {

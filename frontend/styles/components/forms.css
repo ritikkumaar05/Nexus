@@ -170,3 +170,31 @@ body:not([data-theme="dark"]):not([data-theme="system"]) .nexus-command-palette 
   border-color: var(--primary);
   outline: none;
 }
+
+.auth-field [aria-invalid="true"],
+.form-field-v2 [aria-invalid="true"],
+.workspace-create-field [aria-invalid="true"],
+.profile-input-field [aria-invalid="true"] {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14) !important;
+}
+
+.field-error-text {
+  display: block;
+  margin-top: 2px;
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+button[aria-busy="true"],
+button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+  transform: none !important;
+}
+
+button[aria-busy="true"] {
+  position: relative;
+}

@@ -166,7 +166,7 @@ export const showAddTaskModal = async () => {
   const currentDocId = state.selectedDocumentId || docs[0]?._id;
 
   const modalHtml = `
-    <form id="addTaskModalForm" style="display: flex; flex-direction: column; gap: 16px;">
+    <form id="addTaskModalForm" novalidate style="display: flex; flex-direction: column; gap: 16px;">
       <div class="form-field-v2">
         <label>Task Title *</label>
         <input type="text" id="addTaskModalTitle" placeholder="e.g. Read CAP theorem paper" required />
@@ -228,9 +228,11 @@ export const showAddTaskModal = async () => {
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const submitBtn = document.getElementById('submitAddTaskModalBtn');
+    clearInlineErrors(form);
     if (submitBtn) submitBtn.disabled = true;
 
-    const title = document.getElementById('addTaskModalTitle').value.trim();
+    const titleInput = document.getElementById('addTaskModalTitle');
+    const title = titleInput.value.trim();
     const description = document.getElementById('addTaskModalDesc').value.trim();
     const priority = document.getElementById('addTaskModalPriority').value;
     const dueDateVal = document.getElementById('addTaskModalDueDate').value;
@@ -239,7 +241,9 @@ export const showAddTaskModal = async () => {
 
     if (!title) {
       if (submitBtn) submitBtn.disabled = false;
-      return showToast('Task title is required', true);
+      showInlineError(titleInput, 'Give this task a short action title.');
+      focusFirstInvalid(form);
+      return showToast('Please add a task title.', true);
     }
 
     const payload = {
@@ -286,7 +290,7 @@ export const showAddTaskModal = async () => {
       document.getElementById('chatOverlayModal')?.remove();
       renderTasksPage();
     } catch (err) {
-      showToast(err.message, true);
+      showToast(friendlyUiMessage(err.message, { isError: true }), true);
       if (submitBtn) submitBtn.disabled = false;
     }
   });
@@ -309,7 +313,7 @@ export const showEditTaskModal = async (taskId) => {
   const assigneeId = task.assignee?._id || task.assignee || '';
 
   const modalHtml = `
-    <form id="editTaskModalForm" style="display: flex; flex-direction: column; gap: 16px;">
+    <form id="editTaskModalForm" novalidate style="display: flex; flex-direction: column; gap: 16px;">
       <div class="form-field-v2">
         <label>Task Title *</label>
         <input type="text" id="editTaskModalTitle" value="${escapeHtml(task.title)}" placeholder="Task title" required />
@@ -371,9 +375,11 @@ export const showEditTaskModal = async (taskId) => {
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const submitBtn = document.getElementById('submitEditTaskModalBtn');
+    clearInlineErrors(form);
     if (submitBtn) submitBtn.disabled = true;
 
-    const title = document.getElementById('editTaskModalTitle').value.trim();
+    const titleInput = document.getElementById('editTaskModalTitle');
+    const title = titleInput.value.trim();
     const description = document.getElementById('editTaskModalDesc').value.trim();
     const priority = document.getElementById('editTaskModalPriority').value;
     const dueDateVal = document.getElementById('editTaskModalDueDate').value;
@@ -381,7 +387,9 @@ export const showEditTaskModal = async (taskId) => {
 
     if (!title) {
       if (submitBtn) submitBtn.disabled = false;
-      return showToast('Task title is required', true);
+      showInlineError(titleInput, 'Give this task a short action title.');
+      focusFirstInvalid(form);
+      return showToast('Please add a task title.', true);
     }
 
     const payload = {
@@ -424,7 +432,7 @@ export const showEditTaskModal = async (taskId) => {
       document.getElementById('chatOverlayModal')?.remove();
       renderTasksPage();
     } catch (err) {
-      showToast(err.message, true);
+      showToast(friendlyUiMessage(err.message, { isError: true }), true);
       if (submitBtn) submitBtn.disabled = false;
     }
   });

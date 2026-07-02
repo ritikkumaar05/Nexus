@@ -133,6 +133,50 @@ const uniqueDocuments = (documents = []) => {
   });
 };
 
+const friendlyUiMessage = (message = '', { isError = false } = {}) => {
+  const text = String(message || '').trim();
+  const lower = text.toLowerCase();
+
+  if (!text) return isError ? "Something didn't go through. Please try again." : '';
+  if (lower.includes('failed to fetch') || lower.includes('networkerror')) {
+    return "Couldn't connect right now. Check your connection and try again.";
+  }
+  if (lower.includes('invalid or expired refresh token') || lower.includes('invalid or expired token') || lower.includes('session expired')) {
+    return 'Your session expired. Please sign in again.';
+  }
+  if (lower.includes('too many')) {
+    return 'Too many attempts. Please wait a moment and try again.';
+  }
+  if (lower.includes('gemini_api_key') || lower.includes('not configured')) {
+    return 'AI is not available yet. Try again later or continue writing your notes.';
+  }
+  if (lower.includes('request failed')) {
+    return "Something didn't go through. Please try again.";
+  }
+
+  return text;
+};
+
+const clearInlineErrors = (form) => {
+  form?.querySelectorAll('.field-error-text').forEach((node) => node.remove());
+  form?.querySelectorAll('[aria-invalid="true"]').forEach((field) => field.removeAttribute('aria-invalid'));
+};
+
+const showInlineError = (field, message) => {
+  if (!field) return;
+  const container = field.closest('label, .form-field-v2, .workspace-create-field, .profile-input-field') || field.parentElement;
+  field.setAttribute('aria-invalid', 'true');
+  const error = document.createElement('span');
+  error.className = 'field-error-text';
+  error.textContent = message;
+  container?.appendChild(error);
+};
+
+const focusFirstInvalid = (form) => {
+  const invalid = form?.querySelector('[aria-invalid="true"], input:invalid, textarea:invalid, select:invalid');
+  invalid?.focus?.();
+};
+
 
 
 const loadDemoWorkspaceModule = async () => {
@@ -1170,10 +1214,10 @@ const renderAiEmptyState = (doc = selectedDocument()) => {
   els.aiOutput.innerHTML = emptyState({
     title: doc ? 'Ready to study smarter?' : 'Open a note to use AI',
     body: doc
-      ? 'Turn your notes into summaries, quizzes, flashcards, and simple explanations.'
-      : 'Select a document, then Nexus can generate study material from your notes.',
-    action: '',
-    actionId: '',
+      ? 'Choose an AI action above, then run it to turn this note into study material.'
+      : 'Select or create a document first. AI works best after you add lecture notes or a study outline.',
+    action: doc ? 'Run selected AI action' : 'Create a note',
+    actionId: doc ? 'emptyAiRunBtn' : 'emptyAiCreateNoteBtn',
     secondaryAction: '',
     secondaryActionId: '',
     icon: '✦',
@@ -4009,8 +4053,16 @@ const runStudyAiAction = async (action) => {
     addActivity({ action: `generated ${aiActionLabel(action).toLowerCase()} from`, target: selectedDocumentTitle() });
     return result.response;
   } catch (err) {
-    els.aiOutput.textContent = 'AI could not generate right now. Try again in a few seconds.';
-    showToast(err.message, true);
+    const message = friendlyUiMessage(err.message, { isError: true });
+    els.aiOutput.innerHTML = emptyState({
+      title: 'AI could not finish that request',
+      body: message,
+      action: 'Try Again',
+      actionId: 'emptyAiRetryBtn',
+      icon: '!',
+      className: 'ai-empty-state'
+    });
+    showToast(message, true);
     return null;
   } finally {
     setAiGenerating(false);
@@ -4615,6 +4667,21 @@ const handleEmptyStateAction = async (target) => {
     'emptyToolJoinWorkspaceBtn'
   ].includes(id)) {
     renderJoinWorkspaceTool();
+    return true;
+  }
+
+  if (id === 'emptyAiCreateNoteBtn') {
+    els.newDocBtn.click();
+    return true;
+  }
+
+  if (id === 'emptyAiRunBtn') {
+    await runStudyAiAction(els.aiActionSelect?.value || 'summarize');
+    return true;
+  }
+
+  if (id === 'emptyAiRetryBtn') {
+    await runStudyAiAction(state.lastAiAction || els.aiActionSelect?.value || 'summarize');
     return true;
   }
 
@@ -5991,20 +6058,50 @@ const handleAuthRouteSubmit = async (event) => {
   if (state.demoMode) exitDemoMode();
 
   const submitButton = document.getElementById('pageAuthSubmit');
+  const form = event.target;
+  clearInlineErrors(form);
 
   try {
     const mode = currentRoute() === 'signup' ? 'register' : 'login';
+    const emailInput = document.getElementById('pageEmailInput');
+    const passwordInput = document.getElementById('pagePasswordInput');
     const payload = {
-      email: document.getElementById('pageEmailInput').value,
-      password: document.getElementById('pagePasswordInput').value
+      email: emailInput.value.trim(),
+      password: passwordInput.value
     };
+    let hasError = false;
+    if (!payload.email) {
+      showInlineError(emailInput, 'Enter the email address for your Nexus account.');
+      hasError = true;
+    } else if (!emailInput.validity.valid) {
+      showInlineError(emailInput, 'Enter a valid email address.');
+      hasError = true;
+    }
+    if (!payload.password) {
+      showInlineError(passwordInput, 'Enter your password.');
+      hasError = true;
+    } else if (mode === 'register' && payload.password.length < 6) {
+      showInlineError(passwordInput, 'Use at least 6 characters.');
+      hasError = true;
+    }
     if (mode === 'register') {
-      const confirmPassword = document.getElementById('pageConfirmPasswordInput').value;
-      if (payload.password !== confirmPassword) {
-        showToast('Passwords do not match', true);
-        return true;
+      const usernameInput = document.getElementById('pageUsernameInput');
+      const confirmPasswordInput = document.getElementById('pageConfirmPasswordInput');
+      const confirmPassword = confirmPasswordInput.value;
+      payload.username = usernameInput.value.trim();
+      if (!payload.username) {
+        showInlineError(usernameInput, 'Choose a username for your profile.');
+        hasError = true;
       }
-      payload.username = document.getElementById('pageUsernameInput').value;
+      if (payload.password !== confirmPassword) {
+        showInlineError(confirmPasswordInput, 'Passwords do not match.');
+        hasError = true;
+      }
+    }
+    if (hasError) {
+      focusFirstInvalid(form);
+      showToast('Please fix the highlighted fields.', true);
+      return true;
     }
 
     submitButton.disabled = true;
@@ -6017,7 +6114,13 @@ const handleAuthRouteSubmit = async (event) => {
     });
     completeAuthenticatedSession(result);
   } catch (err) {
-    showToast(err.message, true);
+    const message = friendlyUiMessage(err.message, { isError: true });
+    showToast(message, true);
+    const emailInput = document.getElementById('pageEmailInput');
+    const passwordInput = document.getElementById('pagePasswordInput');
+    if (/email|registered|credentials|password|sign in/i.test(message)) {
+      showInlineError(/password/i.test(message) ? passwordInput : emailInput, message);
+    }
   } finally {
     if (submitButton) {
       submitButton.disabled = false;
@@ -6531,19 +6634,50 @@ els.routePage.addEventListener('click', async (event) => {
   if (state.demoMode) exitDemoMode();
 
   const submitButton = document.getElementById('pageAuthSubmit');
+  const form = event.target;
+  clearInlineErrors(form);
 
   try {
     const mode = currentRoute() === 'signup' ? 'register' : 'login';
+    const emailInput = document.getElementById('pageEmailInput');
+    const passwordInput = document.getElementById('pagePasswordInput');
     const payload = {
-      email: document.getElementById('pageEmailInput').value,
-      password: document.getElementById('pagePasswordInput').value
+      email: emailInput.value.trim(),
+      password: passwordInput.value
     };
+    let hasError = false;
+    if (!payload.email) {
+      showInlineError(emailInput, 'Enter the email address for your Nexus account.');
+      hasError = true;
+    } else if (!emailInput.validity.valid) {
+      showInlineError(emailInput, 'Enter a valid email address.');
+      hasError = true;
+    }
+    if (!payload.password) {
+      showInlineError(passwordInput, 'Enter your password.');
+      hasError = true;
+    } else if (mode === 'register' && payload.password.length < 6) {
+      showInlineError(passwordInput, 'Use at least 6 characters.');
+      hasError = true;
+    }
     if (mode === 'register') {
-      const confirmPassword = document.getElementById('pageConfirmPasswordInput').value;
-      if (payload.password !== confirmPassword) {
-        return showToast('Passwords do not match', true);
+      const usernameInput = document.getElementById('pageUsernameInput');
+      const confirmPasswordInput = document.getElementById('pageConfirmPasswordInput');
+      const confirmPassword = confirmPasswordInput.value;
+      payload.username = usernameInput.value.trim();
+      if (!payload.username) {
+        showInlineError(usernameInput, 'Choose a username for your profile.');
+        hasError = true;
       }
-      payload.username = document.getElementById('pageUsernameInput').value;
+      if (payload.password !== confirmPassword) {
+        showInlineError(confirmPasswordInput, 'Passwords do not match.');
+        hasError = true;
+      }
+    }
+    if (hasError) {
+      focusFirstInvalid(form);
+      showToast('Please fix the highlighted fields.', true);
+      return;
     }
 
     submitButton.disabled = true;
@@ -6556,7 +6690,7 @@ els.routePage.addEventListener('click', async (event) => {
     });
     completeAuthenticatedSession(result);
   } catch (err) {
-    showToast(err.message, true);
+    showToast(friendlyUiMessage(err.message, { isError: true }), true);
   } finally {
     if (submitButton) {
       submitButton.disabled = false;
@@ -6579,12 +6713,32 @@ els.registerTab.addEventListener('click', () => {
 els.authForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (state.demoMode) exitDemoMode();
+  clearInlineErrors(event.target);
   try {
     const payload = {
-      email: els.emailInput.value,
+      email: els.emailInput.value.trim(),
       password: els.passwordInput.value
     };
-    if (state.authMode === 'register') payload.username = els.usernameInput.value;
+    let hasError = false;
+    if (!payload.email) {
+      showInlineError(els.emailInput, 'Enter your email address.');
+      hasError = true;
+    }
+    if (!payload.password) {
+      showInlineError(els.passwordInput, 'Enter your password.');
+      hasError = true;
+    }
+    if (state.authMode === 'register') {
+      payload.username = els.usernameInput.value.trim();
+      if (!payload.username) {
+        showInlineError(els.usernameInput, 'Choose a username.');
+        hasError = true;
+      }
+    }
+    if (hasError) {
+      focusFirstInvalid(event.target);
+      return showToast('Please fix the highlighted fields.', true);
+    }
 
     const result = await request(`/api/auth/${state.authMode === 'register' ? 'register' : 'login'}`, {
       method: 'POST',
@@ -6592,7 +6746,7 @@ els.authForm.addEventListener('submit', async (event) => {
     });
     completeAuthenticatedSession(result);
   } catch (err) {
-    showToast(err.message, true);
+    showToast(friendlyUiMessage(err.message, { isError: true }), true);
   }
 });
 
@@ -6623,16 +6777,27 @@ document.querySelector('.editor-toolbar')?.addEventListener('click', (event) => 
 
 els.workspaceForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (!els.workspaceNameInput.value.trim()) return;
+  clearInlineErrors(event.target);
+  const createButton = event.target.querySelector('button[type="submit"], .primary');
+  const workspaceName = els.workspaceNameInput.value.trim();
+  if (!workspaceName) {
+    showInlineError(els.workspaceNameInput, 'Name this workspace so you can find it later.');
+    focusFirstInvalid(event.target);
+    return showToast('Workspace name is required.', true);
+  }
   if (state.demoMode) {
     els.workspaceNameInput.value = '';
     return showToast('Demo mode uses the sample CS Final Year workspace. Sign up to create your own.');
   }
 
   try {
+    if (createButton) {
+      createButton.disabled = true;
+      createButton.setAttribute('aria-busy', 'true');
+    }
     const workspace = await request('/api/workspaces', {
       method: 'POST',
-      body: JSON.stringify({ name: els.workspaceNameInput.value })
+      body: JSON.stringify({ name: workspaceName })
     });
     els.workspaceNameInput.value = '';
     state.selectedWorkspaceId = workspace._id;
@@ -6641,7 +6806,12 @@ els.workspaceForm.addEventListener('submit', async (event) => {
     await bootstrapWorkspace();
     showToast('Workspace created');
   } catch (err) {
-    showToast(err.message, true);
+    showToast(friendlyUiMessage(err.message, { isError: true }), true);
+  } finally {
+    if (createButton) {
+      createButton.disabled = false;
+      createButton.removeAttribute('aria-busy');
+    }
   }
 });
 
@@ -7656,6 +7826,10 @@ const exposeLazyRouteShellBindings = () => {
     finishDocumentOpenProfile: { configurable: true, get: () => finishDocumentOpenProfile },
     els: { configurable: true, get: () => els },
     showToast: { configurable: true, get: () => showToast },
+    friendlyUiMessage: { configurable: true, get: () => friendlyUiMessage },
+    clearInlineErrors: { configurable: true, get: () => clearInlineErrors },
+    showInlineError: { configurable: true, get: () => showInlineError },
+    focusFirstInvalid: { configurable: true, get: () => focusFirstInvalid },
     copyText: { configurable: true, get: () => copyText },
     formatInviteRole: { configurable: true, get: () => formatInviteRole },
     formatInviteExpiry: { configurable: true, get: () => formatInviteExpiry },

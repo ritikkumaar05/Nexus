@@ -211,6 +211,24 @@
   color: var(--primary);
 }
 
+.sidebar-top,
+.sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.sidebar-top {
+  gap: 20px;
+}
+
+.sidebar-bottom {
+  gap: 8px;
+  margin-top: auto;
+}
+
 .sidebar-nav {
   display: flex;
   flex-direction: column;
@@ -220,11 +238,26 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--primary) 26%, transparent) transparent;
+  overscroll-behavior: contain;
 }
 
 .sidebar-nav::-webkit-scrollbar {
-  display: none;
+  width: 6px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--primary) 36%, transparent);
 }
 
 .nav-item,
@@ -343,7 +376,7 @@
 }
 
 .account-card {
-  margin-top: auto;
+  margin-top: 0;
   flex: 0 0 auto;
   min-height: 54px;
   display: flex;
@@ -737,7 +770,7 @@ body.sidebar-collapsed .sidebar-collapse-btn:focus-visible::after {
 
 @media (max-width: 1100px) {
   .sidebar {
-      overflow-y: auto;
+      overflow: hidden !important;
     }
 }
 
@@ -838,6 +871,23 @@ body:not([data-theme="dark"]):not([data-theme="system"]) .account-card .icon-but
   background: color-mix(in srgb, var(--sidebar) 94%, transparent) !important;
   border-right-color: var(--line) !important;
   min-height: 0;
+  overflow: hidden !important;
+}
+
+.sidebar-top,
+.sidebar-bottom {
+  width: 100% !important;
+  min-width: 0;
+  flex: 0 0 auto !important;
+}
+
+.sidebar-top {
+  gap: var(--space-5) !important;
+}
+
+.sidebar-bottom {
+  gap: var(--space-2) !important;
+  margin-top: auto !important;
 }
 
 .brand {
@@ -877,14 +927,16 @@ body:not([data-theme="dark"]):not([data-theme="system"]) .account-card .icon-but
   flex: 1 1 auto;
   min-height: 0;
   gap: var(--space-1) !important;
-  padding: var(--space-1) 0;
+  padding: var(--space-1) 2px var(--space-1) 0;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--primary) 26%, transparent) transparent;
 }
 
 .account-card {
   flex: 0 0 auto;
-  margin-top: auto !important;
+  margin-top: 0 !important;
 }
 
 .nav-item,
@@ -970,6 +1022,22 @@ body.sidebar-collapsed .sidebar {
   align-items: center !important;
 }
 
+body.sidebar-collapsed .sidebar-top,
+body.sidebar-collapsed .sidebar-bottom {
+  width: 100% !important;
+  align-items: center !important;
+  flex: 0 0 auto !important;
+}
+
+body.sidebar-collapsed .sidebar-top {
+  gap: 14px !important;
+}
+
+body.sidebar-collapsed .sidebar-bottom {
+  gap: 8px !important;
+  margin-top: auto !important;
+}
+
 body.sidebar-collapsed .brand {
   width: 100% !important;
   min-height: auto !important;
@@ -1030,9 +1098,15 @@ body.sidebar-collapsed .sidebar-nav {
   width: 100% !important;
   align-items: center !important;
   gap: 6px !important;
-  padding: 0 !important;
+  padding: 0 2px 0 0 !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
+}
+
+body.sidebar-collapsed .sidebar-nav .legacy-sidebar-controls,
+body.sidebar-collapsed .sidebar-nav .channel-section,
+body.sidebar-collapsed .sidebar-nav .sidebar-section {
+  display: none !important;
 }
 
 body.sidebar-collapsed .nav-item > span:not(.nav-text),

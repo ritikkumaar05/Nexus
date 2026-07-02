@@ -2669,8 +2669,9 @@ body.sidebar-collapsed .sidebar-nav {
   width: 100% !important;
   align-items: center !important;
   gap: 6px !important;
-  padding: 0 !important;
-  overflow: visible !important;
+  padding: 0 2px 0 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
 }
 
 @media (max-width: 1100px) {
@@ -4248,6 +4249,21 @@ body.document-workspace-screen:not(.focus-mode) .nexus-documents .document-tree 
   height: 14px !important;
 }
 
+body.document-workspace-screen .sidebar {
+  overflow: hidden !important;
+}
+
+body.document-workspace-screen .sidebar-nav {
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+body.document-workspace-screen.sidebar-collapsed .sidebar-nav {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
 body.document-workspace-screen:not(.focus-mode) .nexus-documents .document-tree .document-row .document-delete-button:hover,
 body.document-workspace-screen:not(.focus-mode) .nexus-documents .document-tree .document-row .document-delete-button:focus-visible {
   color: var(--docs-danger) !important;
@@ -4840,6 +4856,19 @@ body.document-workspace-screen.focus-mode .document-editor-input:focus {
       padding: 20px;
       overflow: auto;
     }
+}
+
+/* Keep the global app sidebar split into fixed top/bottom and scrollable nav,
+   even on the documents screen where editor panes need visible overflow. */
+body.document-workspace-screen .sidebar {
+  overflow: hidden !important;
+}
+
+body.document-workspace-screen .sidebar-nav,
+body.document-workspace-screen.sidebar-collapsed .sidebar-nav {
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
 }
 
 /* Toolbar */

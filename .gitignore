@@ -27,4 +27,7 @@ backend/dist
 #chrome profile
 tmp_chrome_profile
 
+#folder
+tmp
+
 

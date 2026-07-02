@@ -63,6 +63,24 @@ export const renderHomePage = () => {
   setRouteChrome('home');
   const dashboard = getDashboardData();
   const { workspace, recentDocuments, todayTasks, completedTasks, activeMembers, doubts, stats } = dashboard;
+  if (state.loading.workspaces) {
+    els.routePage.innerHTML = `
+      <div class="dashboard-shell dashboard-shell-v2 nexus-dashboard" aria-busy="true">
+        <header class="home-welcome-header">
+          <div class="welcome-copy">
+            <span class="eyebrow">Nexus Workspace</span>
+            <h2>Loading your workspace...</h2>
+            <p>We are getting your notes, tasks, and chats ready.</p>
+          </div>
+        </header>
+        <div class="home-grid">
+          <div class="home-main-col">${loadingRows(5)}</div>
+          <div class="home-side-col">${loadingRows(4)}</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
   if (!workspace && !state.loading.workspaces) {
     els.routePage.innerHTML = `
       <div class="dashboard-shell dashboard-shell-v2">

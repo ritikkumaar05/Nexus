@@ -1020,3 +1020,24 @@ body:not([data-theme="dark"]):not([data-theme="system"]) .chat-channel-badge {
   background: rgba(99, 102, 241, 0.06) !important;
   border-color: rgba(99, 102, 241, 0.15) !important;
 }
+
+@media (max-width: 760px) {
+  .workspace-chat-header,
+  .chat-header-left,
+  .chat-header-titles,
+  .chat-channel-name,
+  .chat-workspace-name {
+    min-width: 0;
+  }
+
+  .chat-channel-name,
+  .chat-workspace-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace-chat-composer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+}

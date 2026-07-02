@@ -7,7 +7,10 @@ export const modalState = {
 
 export const showToast = (message, isError = false) => {
   if (!globalThis.els?.toast) return;
-  globalThis.els.toast.textContent = message;
+  const copy = typeof globalThis.friendlyUiMessage === 'function'
+    ? globalThis.friendlyUiMessage(message, { isError })
+    : message;
+  globalThis.els.toast.textContent = copy;
   globalThis.els.toast.classList.toggle('error', isError);
   globalThis.els.toast.classList.remove('hidden');
   window.clearTimeout(showToast.timer);

@@ -3,6 +3,38 @@ export const createApiClient = ({
   getToken,
   onRefresh
 }) => {
+  const friendlyError = (message = '', status = 0) => {
+    const text = String(message || '').trim();
+    const lower = text.toLowerCase();
+
+    if (status === 0 || lower.includes('failed to fetch') || lower.includes('networkerror')) {
+      return "Couldn't connect right now. Check your connection and try again.";
+    }
+    if (status === 401 || lower.includes('invalid or expired') || lower.includes('session expired')) {
+      return 'Your session expired. Please sign in again.';
+    }
+    if (status === 403 || lower.includes('access denied')) {
+      return "You don't have permission to do that in this workspace.";
+    }
+    if (status === 404) {
+      return "We couldn't find that item. It may have been moved or deleted.";
+    }
+    if (status === 409 || lower.includes('already')) {
+      return text || 'That already exists. Try a different name or email.';
+    }
+    if (status === 429 || lower.includes('too many')) {
+      return 'Too many attempts. Please wait a moment and try again.';
+    }
+    if (status === 503 || lower.includes('not configured') || lower.includes('temporarily unavailable')) {
+      return 'This feature is temporarily unavailable. Please try again later.';
+    }
+    if (lower.includes('request failed')) {
+      return "Something didn't go through. Please try again.";
+    }
+
+    return text || "Something didn't go through. Please try again.";
+  };
+
   const request = async (path, options = {}, retry = true) => {
     const headers = {
       'Content-Type': 'application/json',
@@ -12,11 +44,16 @@ export const createApiClient = ({
     const token = getToken?.();
     if (token) headers.Authorization = `Bearer ${token}`;
 
-    const response = await fetch(`${apiBase}${path}`, {
-      ...options,
-      headers,
-      credentials: 'include'
-    });
+    let response;
+    try {
+      response = await fetch(`${apiBase}${path}`, {
+        ...options,
+        headers,
+        credentials: 'include'
+      });
+    } catch (err) {
+      throw new Error(friendlyError(err.message, 0));
+    }
 
     const text = await response.text();
     let data = null;
@@ -40,7 +77,7 @@ export const createApiClient = ({
       if (response.status === 413) {
         throw new Error('This content is too large to save. Try shortening the document or saving smaller study material.');
       }
-      throw new Error(data?.error || `Request failed with ${response.status}`);
+      throw new Error(friendlyError(data?.error || `Request failed with ${response.status}`, response.status));
     }
 
     return data;

@@ -193,3 +193,38 @@ body.feature-screen .app-main,
 body.feature-screen .route-page {
   overflow-y: visible;
 }
+
+@media (max-width: 760px) {
+  button,
+  .icon-button,
+  .chat-header-action,
+  .composer-tool-btn,
+  .send-btn,
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+  }
+
+  .route-page,
+  .app-main,
+  .dashboard-shell,
+  .workspace-chat-shell {
+    min-width: 0;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .tool-panel.open,
+  .members-modal-backdrop {
+    align-items: start;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tool-panel-card,
+  .members-modal-card {
+    max-height: calc(100dvh - 28px);
+    overflow-y: auto;
+  }
+}

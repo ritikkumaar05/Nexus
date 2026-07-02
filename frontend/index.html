@@ -13,60 +13,62 @@
   <body class="app-booting">
     <div id="app">
       <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark">
-            <img class="brand-logo-img" src="./logo.jpg" alt="" />
+        <div class="sidebar-top">
+          <div class="brand">
+            <div class="brand-mark">
+              <img class="brand-logo-img" src="./logo.jpg" alt="" />
+            </div>
+            <div class="brand-text">
+              <h1>Nexus</h1>
+              <p>Workspace</p>
+            </div>
+            <button id="sidebarCollapseBtn" class="sidebar-collapse-btn" type="button" aria-label="Toggle sidebar">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
           </div>
-          <div class="brand-text">
-            <h1>Nexus</h1>
-            <p>Workspace</p>
-          </div>
-          <button id="sidebarCollapseBtn" class="sidebar-collapse-btn" type="button" aria-label="Toggle sidebar">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-          </button>
-        </div>
 
-        <button id="mobileSidebarCloseBtn" class="mobile-sidebar-close" type="button" aria-label="Close sidebar">×</button>
+          <button id="mobileSidebarCloseBtn" class="mobile-sidebar-close" type="button" aria-label="Close sidebar">×</button>
 
-        <section class="auth-panel hidden" id="authPanel">
-          <div class="tabs" role="tablist">
-            <button class="tab active" id="loginTab" type="button">Login</button>
-            <button class="tab" id="registerTab" type="button">Register</button>
-          </div>
-          <form id="authForm" class="stack">
-            <input id="usernameInput" class="hidden" autocomplete="username" placeholder="Username" />
-            <input id="emailInput" autocomplete="email" placeholder="Email" />
-            <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Password" />
-            <button type="submit" class="primary">Continue</button>
-          </form>
-        </section>
-
-        <section class="workspace-card">
-          <button class="workspace-switcher" type="button" data-tool="workspaces" aria-label="Workspace">
-            <span id="workspaceSwitcherAvatar" class="workspace-avatar">W</span>
-            <span>
-              <strong id="workspaceSwitcherName">Select workspace</strong>
-              <small id="workspaceMeta">No workspace selected</small>
-            </span>
-            <span class="chevron">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </span>
-          </button>
-          <button id="workspaceOnlineSummary" class="workspace-online-summary" type="button" data-tool="members">
-            <span id="workspaceOnlineText">Only you online</span>
-            <span id="workspaceOnlineAvatars" class="online-avatar-stack"></span>
-          </button>
-
-          <div class="legacy-sidebar-controls" aria-hidden="true">
-            <form id="workspaceForm" class="create-row">
-              <input id="workspaceNameInput" placeholder="New workspace" />
-              <button id="refreshWorkspacesBtn" class="icon-button" title="Refresh workspaces" type="button">↻</button>
-              <button class="icon-button" title="Create workspace" type="submit">+</button>
+          <section class="auth-panel hidden" id="authPanel">
+            <div class="tabs" role="tablist">
+              <button class="tab active" id="loginTab" type="button">Login</button>
+              <button class="tab" id="registerTab" type="button">Register</button>
+            </div>
+            <form id="authForm" class="stack">
+              <input id="usernameInput" class="hidden" autocomplete="username" placeholder="Username" />
+              <input id="emailInput" autocomplete="email" placeholder="Email" />
+              <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Password" />
+              <button type="submit" class="primary">Continue</button>
             </form>
+          </section>
 
-            <div id="workspaceList" class="workspace-list"></div>
-          </div>
-        </section>
+          <section class="workspace-card">
+            <button class="workspace-switcher" type="button" data-tool="workspaces" aria-label="Workspace">
+              <span id="workspaceSwitcherAvatar" class="workspace-avatar">W</span>
+              <span>
+                <strong id="workspaceSwitcherName">Select workspace</strong>
+                <small id="workspaceMeta">No workspace selected</small>
+              </span>
+              <span class="chevron">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </span>
+            </button>
+            <button id="workspaceOnlineSummary" class="workspace-online-summary" type="button" data-tool="members">
+              <span id="workspaceOnlineText">Only you online</span>
+              <span id="workspaceOnlineAvatars" class="online-avatar-stack"></span>
+            </button>
+
+            <div class="legacy-sidebar-controls" aria-hidden="true">
+              <form id="workspaceForm" class="create-row">
+                <input id="workspaceNameInput" placeholder="New workspace" />
+                <button id="refreshWorkspacesBtn" class="icon-button" title="Refresh workspaces" type="button">↻</button>
+                <button class="icon-button" title="Create workspace" type="submit">+</button>
+              </form>
+
+              <div id="workspaceList" class="workspace-list"></div>
+            </div>
+          </section>
+        </div>
 
         <nav class="sidebar-nav" aria-label="Main navigation">
           <a href="#/home" data-route-link="home" class="nav-item" aria-label="Home">
@@ -119,33 +121,34 @@
             </span>
             <span class="nav-text">Settings</span>
           </a>
+          <section class="sidebar-section channel-section legacy-sidebar-controls" aria-hidden="true">
+            <div class="section-heading">
+              <h2>Discussions</h2>
+            </div>
+            <form id="channelForm" class="create-row compact-create-row">
+              <input id="channelNameInput" placeholder="New channel" />
+              <button class="icon-button" title="Create channel" type="submit">+</button>
+            </form>
+            <div id="channelList" class="channel-list"></div>
+          </section>
         </nav>
 
-        <section class="sidebar-section channel-section legacy-sidebar-controls" aria-hidden="true">
-          <div class="section-heading">
-            <h2>Discussions</h2>
-          </div>
-          <form id="channelForm" class="create-row compact-create-row">
-            <input id="channelNameInput" placeholder="New channel" />
-            <button class="icon-button" title="Create channel" type="submit">+</button>
-          </form>
-          <div id="channelList" class="channel-list"></div>
-        </section>
-
-        <section class="account-card" aria-label="Profile">
-          <span id="sidebarUserAvatar" class="user-avatar" data-tool="profile" style="cursor: pointer;">U</span>
-          <span data-tool="profile" style="cursor: pointer;">
-            <strong id="sessionName">Signed out</strong>
-            <small id="sessionLabel">Sign in to continue</small>
-          </span>
-          <button id="sidebarThemeToggleBtn" class="icon-button" type="button" title="Toggle theme">
-            <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-            <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-          </button>
-          <button id="logoutBtn" class="icon-button logout-button hidden" type="button" title="Logout">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-          </button>
-        </section>
+        <div class="sidebar-bottom">
+          <section class="account-card" aria-label="Profile">
+            <span id="sidebarUserAvatar" class="user-avatar" data-tool="profile" style="cursor: pointer;">U</span>
+            <span data-tool="profile" style="cursor: pointer;">
+              <strong id="sessionName">Signed out</strong>
+              <small id="sessionLabel">Sign in to continue</small>
+            </span>
+            <button id="sidebarThemeToggleBtn" class="icon-button" type="button" title="Toggle theme">
+              <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+              <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+            </button>
+            <button id="logoutBtn" class="icon-button logout-button hidden" type="button" title="Logout">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            </button>
+          </section>
+        </div>
       </aside>
 
       <div id="toolPanel" class="tool-panel"></div>

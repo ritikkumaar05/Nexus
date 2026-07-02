@@ -101,6 +101,14 @@ body.overlay-scroll-locked {
 
 .toast.error { background: #b4233a; }
 
+.toast {
+  line-height: 1.35;
+}
+
+.toast:not(.error) {
+  background: #123524;
+}
+
 @media (max-width: 1100px) {
   .tool-panel.open {
       padding: 18px;
