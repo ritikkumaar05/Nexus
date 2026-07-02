@@ -27,10 +27,24 @@ const createCorsOptions = () => {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  if (isProduction && allowedOrigins.length === 0) {
+    throw new Error('CORS_ORIGIN is required in production');
+  }
 
   return {
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      if (!origin) {
+        if (isProduction) {
+          return callback(new Error('Origin not allowed by CORS'));
+        }
+        return callback(null, true);
+      }
+      if (!isProduction && allowedOrigins.length === 0) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
       return callback(new Error('Origin not allowed by CORS'));

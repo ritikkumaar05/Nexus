@@ -495,19 +495,17 @@ const toggleTheme = () => {
   showToast(`Theme changed to ${newTheme}`);
 };
 
-const saveSession = ({ token, refreshToken, user }) => {
+const saveSession = ({ token, user }) => {
   state.token = token;
-  state.refreshToken = refreshToken || state.refreshToken;
   state.user = user;
   localStorage.setItem('token', token);
-  if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
   localStorage.setItem('user', JSON.stringify(user));
+  localStorage.removeItem('refreshToken');
 };
 
 ({ request } = createApiClient({
   apiBase: API_BASE,
   getToken: () => state.token,
-  getRefreshToken: () => state.refreshToken,
   onRefresh: saveSession
 }));
 
@@ -517,7 +515,6 @@ const clearSession = () => {
   sessionStorage.removeItem('demoMode');
   state.demoMode = false;
   state.token = '';
-  state.refreshToken = '';
   state.user = null;
   state.workspaces = [];
   state.channels = [];
@@ -623,7 +620,6 @@ const enterDemoMode = async ({ route = 'home' } = {}) => {
   sessionStorage.setItem('demoMode', 'true');
   state.demoMode = true;
   state.token = '';
-  state.refreshToken = '';
   localStorage.removeItem('token');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');

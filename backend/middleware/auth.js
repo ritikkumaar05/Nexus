@@ -5,9 +5,7 @@
  * Intercepts incoming HTTP requests to verify the validity of the JWT token.
  */
 
-const jwt = require('jsonwebtoken');
-const { getJwtSecret } = require('../config/env');
-const { Session } = require('../models');
+const { validateAccessToken } = require('../utils/sessionAuth');
 
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -18,18 +16,7 @@ const authenticateToken = async (req, res, next) => {
   }
 
   try {
-    const verified = jwt.verify(token, getJwtSecret());
-
-    if (verified.sessionId) {
-      const session = await Session.findById(verified.sessionId);
-      if (!session || session.revokedAt || session.expiresAt <= new Date()) {
-        return res.status(401).json({ error: 'Session expired or revoked' });
-      }
-      if (session.tokenVersion !== verified.tokenVersion) {
-        return res.status(401).json({ error: 'Session token has been rotated' });
-      }
-    }
-
+    const { verified } = await validateAccessToken(token);
     req.user = verified; // Attach the user payload (id & email) to the request object
     next(); // Pass control to the next route handler
   } catch (err) {

@@ -1,6 +1,5 @@
 export const state = {
   token: localStorage.getItem('token') || '',
-  refreshToken: localStorage.getItem('refreshToken') || '',
   user: JSON.parse(localStorage.getItem('user') || 'null'),
   demoMode: sessionStorage.getItem('demoMode') === 'true',
   authMode: 'login',

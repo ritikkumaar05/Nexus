@@ -12,7 +12,45 @@ const { validateInput, schemas } = require('../middleware/validateInput');
 const { asyncHandler } = require('../utils/AppError');
 const authenticateToken = require('../middleware/auth');
 const AuthService = require('../services/AuthService');
+const { AUTH } = require('../config/constants');
 
+const REFRESH_COOKIE_NAME = 'nexus_refresh_token';
+
+const parseCookies = (cookieHeader = '') => cookieHeader
+  .split(';')
+  .map((cookie) => cookie.trim())
+  .filter(Boolean)
+  .reduce((cookies, cookie) => {
+    const separatorIndex = cookie.indexOf('=');
+    if (separatorIndex === -1) return cookies;
+    const name = cookie.slice(0, separatorIndex);
+    const value = cookie.slice(separatorIndex + 1);
+    cookies[name] = decodeURIComponent(value);
+    return cookies;
+  }, {});
+
+const refreshCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.REFRESH_COOKIE_SAMESITE || 'lax',
+  path: '/api/auth',
+  maxAge: AUTH.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000
+});
+
+const setRefreshCookie = (res, refreshToken) => {
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, refreshCookieOptions());
+};
+
+const clearRefreshCookie = (res) => {
+  res.clearCookie(REFRESH_COOKIE_NAME, {
+    ...refreshCookieOptions(),
+    maxAge: undefined
+  });
+};
+
+const readRefreshCookie = (req) => parseCookies(req.headers.cookie || '')[REFRESH_COOKIE_NAME];
+
+const publicAuthResult = ({ refreshToken, ...result }) => result;
 
 /**
  * POST /api/auth/register
@@ -24,10 +62,11 @@ router.post(
   asyncHandler(async (req, res) => {
     const { email, password, username } = req.body;
     const result = await AuthService.register(email, password, username);
+    setRefreshCookie(res, result.refreshToken);
 
     res.status(201).json({
       message: 'Registration successful',
-      ...result
+      ...publicAuthResult(result)
     });
   })
 );
@@ -42,10 +81,11 @@ router.post(
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
     const result = await AuthService.login(email, password);
+    setRefreshCookie(res, result.refreshToken);
 
     res.json({
       message: 'Logged in successfully',
-      ...result
+      ...publicAuthResult(result)
     });
   })
 );
@@ -70,12 +110,12 @@ router.get(
  */
 router.post(
   '/refresh',
-  validateInput(schemas.refresh),
   asyncHandler(async (req, res) => {
-    const { refreshToken } = req.body;
+    const refreshToken = readRefreshCookie(req);
     const result = await AuthService.refreshToken(refreshToken);
+    setRefreshCookie(res, result.refreshToken);
 
-    res.json(result);
+    res.json(publicAuthResult(result));
   })
 );
 
@@ -90,6 +130,7 @@ router.post(
     if (req.user.sessionId) {
       await AuthService.logout(req.user.sessionId);
     }
+    clearRefreshCookie(res);
 
     res.json({ message: 'Logged out successfully' });
   })

@@ -20,6 +20,15 @@ const UserSchema = new mongoose.Schema({
 const SessionSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   tokenVersion: { type: Number, default: 0 },
+  refreshTokenHash: { type: String, default: '', index: true },
+  previousRefreshTokenHash: { type: String, default: '', index: true },
+  usedRefreshTokenHashes: [{
+    tokenHash: { type: String, required: true },
+    usedAt: { type: Date, default: Date.now }
+  }],
+  refreshTokenUsedAt: { type: Date, default: null },
+  refreshTokenRotatedAt: { type: Date, default: null },
+  reusedAt: { type: Date, default: null },
   revokedAt: { type: Date, default: null },
   expiresAt: { type: Date, required: true }
 }, { timestamps: true });

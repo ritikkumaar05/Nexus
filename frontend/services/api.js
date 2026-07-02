@@ -1,7 +1,6 @@
 export const createApiClient = ({
   apiBase,
   getToken,
-  getRefreshToken,
   onRefresh
 }) => {
   const request = async (path, options = {}, retry = true) => {
@@ -15,7 +14,8 @@ export const createApiClient = ({
 
     const response = await fetch(`${apiBase}${path}`, {
       ...options,
-      headers
+      headers,
+      credentials: 'include'
     });
 
     const text = await response.text();
@@ -28,12 +28,11 @@ export const createApiClient = ({
       }
     }
 
-    const refreshToken = getRefreshToken?.();
     if (!response.ok) {
-      if (response.status === 401 && retry && refreshToken && path !== '/api/auth/refresh') {
+      if (response.status === 401 && retry && path !== '/api/auth/refresh') {
         const refreshed = await request('/api/auth/refresh', {
           method: 'POST',
-          body: JSON.stringify({ refreshToken })
+          body: JSON.stringify({})
         }, false);
         onRefresh?.(refreshed);
         return request(path, options, false);

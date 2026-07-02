@@ -11,6 +11,8 @@ test('createApp returns an Express app without starting the server', () => {
 });
 
 test('createCorsOptions allows requests without an origin header', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'test';
   const corsOptions = createCorsOptions();
 
   const result = await new Promise((resolve, reject) => {
@@ -21,4 +23,57 @@ test('createCorsOptions allows requests without an origin header', async () => {
   });
 
   assert.equal(result, true);
+  process.env.NODE_ENV = previousNodeEnv;
+});
+
+test('createCorsOptions fails closed in production without configured origins', () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousCorsOrigin = process.env.CORS_ORIGIN;
+  process.env.NODE_ENV = 'production';
+  delete process.env.CORS_ORIGIN;
+
+  assert.throws(
+    () => createCorsOptions(),
+    /CORS_ORIGIN is required in production/
+  );
+
+  process.env.NODE_ENV = previousNodeEnv;
+  if (previousCorsOrigin === undefined) {
+    delete process.env.CORS_ORIGIN;
+  } else {
+    process.env.CORS_ORIGIN = previousCorsOrigin;
+  }
+});
+
+test('createCorsOptions allows only configured origins in production', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousCorsOrigin = process.env.CORS_ORIGIN;
+  process.env.NODE_ENV = 'production';
+  process.env.CORS_ORIGIN = 'https://nexus.example';
+
+  const corsOptions = createCorsOptions();
+  const allowed = await new Promise((resolve, reject) => {
+    corsOptions.origin('https://nexus.example', (err, result) => {
+      if (err) return reject(err);
+      return resolve(result);
+    });
+  });
+
+  assert.equal(allowed, true);
+  assert.rejects(
+    () => new Promise((resolve, reject) => {
+      corsOptions.origin(undefined, (err, result) => {
+        if (err) return reject(err);
+        return resolve(result);
+      });
+    }),
+    /Origin not allowed by CORS/
+  );
+
+  process.env.NODE_ENV = previousNodeEnv;
+  if (previousCorsOrigin === undefined) {
+    delete process.env.CORS_ORIGIN;
+  } else {
+    process.env.CORS_ORIGIN = previousCorsOrigin;
+  }
 });

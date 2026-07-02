@@ -5,11 +5,10 @@
  * Directs the bidirectional flows for live typing and fast chat relays.
  */
 
-const jwt = require('jsonwebtoken');
 const Y = require('yjs');
 const { Channel, Message, Workspace, Document, User } = require('../models');
-const { getJwtSecret } = require('../config/env');
 const { isValidObjectId, isNonEmptyString, normalizeString } = require('../utils/validation');
+const { validateAccessToken } = require('../utils/sessionAuth');
 const {
   canChatInWorkspace,
   canEditWorkspaceContent,
@@ -235,8 +234,8 @@ const setupEditorSockets = (io) => {
         return next(new Error('Authentication token required'));
       }
 
-      const decoded = jwt.verify(token, getJwtSecret());
-      const user = await User.findById(decoded.id).select('username email');
+      const { verified } = await validateAccessToken(token);
+      const user = await User.findById(verified.id).select('username email');
       if (!user) {
         return next(new Error('User not found'));
       }

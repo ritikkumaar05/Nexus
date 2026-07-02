@@ -166,16 +166,29 @@ class AuthService {
       throw new ValidationError('Refresh token is required');
     }
 
-    // Find session
-    const session = await Session.findById(refreshTokenId);
+    const refreshTokenHash = this._hashRefreshToken(refreshTokenId);
+    const session = await Session.findOne({
+      $or: [
+        { refreshTokenHash },
+        { previousRefreshTokenHash: refreshTokenHash },
+        { 'usedRefreshTokenHashes.tokenHash': refreshTokenHash }
+      ]
+    });
 
     if (!session || session.revokedAt || new Date() > session.expiresAt) {
       throw new AuthenticationError('Invalid or expired refresh token');
     }
 
-    // Update token version for security
-    session.tokenVersion += 1;
-    await session.save();
+    const usedTokenHashes = session.usedRefreshTokenHashes || [];
+    const tokenWasAlreadyUsed = session.previousRefreshTokenHash === refreshTokenHash
+      || usedTokenHashes.some((entry) => entry?.tokenHash === refreshTokenHash);
+
+    if (tokenWasAlreadyUsed) {
+      session.revokedAt = session.revokedAt || new Date();
+      session.reusedAt = new Date();
+      await session.save();
+      throw new AuthenticationError('Refresh token reuse detected');
+    }
 
     // Get user
     const user = await User.findById(session.user);
@@ -184,12 +197,24 @@ class AuthService {
       throw new NotFoundError('User', session.user);
     }
 
-    // Generate new token
+    const nextRefreshToken = this._generateRefreshToken();
+    const now = new Date();
+    session.tokenVersion += 1;
+    session.previousRefreshTokenHash = session.refreshTokenHash;
+    session.usedRefreshTokenHashes = [
+      ...usedTokenHashes,
+      { tokenHash: session.refreshTokenHash, usedAt: now }
+    ];
+    session.refreshTokenHash = this._hashRefreshToken(nextRefreshToken);
+    session.refreshTokenUsedAt = now;
+    session.refreshTokenRotatedAt = now;
+    await session.save();
+
     const token = this._signToken(user, session);
 
     return {
       token,
-      refreshToken: session._id,
+      refreshToken: nextRefreshToken,
       user: this._formatUser(user)
     };
   }
@@ -282,8 +307,10 @@ class AuthService {
    * @private
    */
   async _createAuthPayload(user) {
+    const refreshToken = this._generateRefreshToken();
     const session = await Session.create({
       user: user._id,
+      refreshTokenHash: this._hashRefreshToken(refreshToken),
       expiresAt: new Date(
         Date.now() + AUTH.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000
       )
@@ -293,7 +320,7 @@ class AuthService {
 
     return {
       token,
-      refreshToken: session._id,
+      refreshToken,
       user: this._formatUser(user)
     };
   }
@@ -316,6 +343,14 @@ class AuthService {
       getJwtSecret(),
       { expiresIn: AUTH.ACCESS_TOKEN_TTL }
     );
+  }
+
+  _generateRefreshToken() {
+    return crypto.randomBytes(64).toString('base64url');
+  }
+
+  _hashRefreshToken(refreshToken) {
+    return crypto.createHash('sha256').update(refreshToken).digest('hex');
   }
 
   /**
