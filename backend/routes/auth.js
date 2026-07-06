@@ -13,8 +13,10 @@ const { asyncHandler } = require('../utils/AppError');
 const authenticateToken = require('../middleware/auth');
 const AuthService = require('../services/AuthService');
 const { AUTH } = require('../config/constants');
+const { validateAccessToken } = require('../utils/sessionAuth');
 
 const REFRESH_COOKIE_NAME = 'nexus_refresh_token';
+const OAUTH_STATE_COOKIE_NAME = 'nexus_oauth_state';
 
 const parseCookies = (cookieHeader = '') => cookieHeader
   .split(';')
@@ -32,7 +34,7 @@ const parseCookies = (cookieHeader = '') => cookieHeader
 const refreshCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.REFRESH_COOKIE_SAMESITE || 'lax',
+  sameSite: process.env.REFRESH_COOKIE_SAMESITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax'),
   path: '/api/auth',
   maxAge: AUTH.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000
 });
@@ -52,6 +54,41 @@ const readRefreshCookie = (req) => parseCookies(req.headers.cookie || '')[REFRES
 
 const publicAuthResult = ({ refreshToken, ...result }) => result;
 
+const optionalAuth = asyncHandler(async (req, _res, next) => {
+  const authHeader = req.headers.authorization || '';
+  const [scheme, token] = authHeader.split(' ');
+  if (scheme === 'Bearer' && token) {
+    try {
+      const { verified } = await validateAccessToken(token);
+      req.user = verified;
+    } catch (err) {
+      req.user = null;
+    }
+  }
+  next();
+});
+
+const appBaseUrl = () => (
+  process.env.FRONTEND_ORIGIN
+  || process.env.APP_BASE_URL
+  || 'http://localhost:5173'
+).replace(/\/$/, '');
+
+const apiBaseUrl = (req) => (
+  process.env.API_BASE_URL
+  || `${req.protocol}://${req.get('host')}`
+).replace(/\/$/, '');
+
+const googleRedirectUri = (req) => (
+  process.env.GOOGLE_OAUTH_REDIRECT_URI
+  || `${apiBaseUrl(req)}/api/auth/google/callback`
+);
+
+const redirectToFrontend = (res, route, params = {}) => {
+  const query = new URLSearchParams(params);
+  res.redirect(`${appBaseUrl()}/#/${route}${query.size ? `?${query.toString()}` : ''}`);
+};
+
 /**
  * POST /api/auth/register
  * Register a new user account
@@ -62,11 +99,10 @@ router.post(
   asyncHandler(async (req, res) => {
     const { email, password, username } = req.body;
     const result = await AuthService.register(email, password, username);
-    setRefreshCookie(res, result.refreshToken);
 
     res.status(201).json({
-      message: 'Registration successful',
-      ...publicAuthResult(result)
+      message: 'Account created. Check your email to verify your account before signing in.',
+      ...result
     });
   })
 );
@@ -91,6 +127,98 @@ router.post(
 );
 
 /**
+ * GET /api/auth/google/start
+ * Redirect to Google's OAuth consent screen.
+ */
+router.get('/google/start', asyncHandler(async (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return redirectToFrontend(res, 'login', { error: 'Google Sign-In is not configured' });
+  }
+
+  const state = AuthService._generateRefreshToken();
+  res.cookie(OAUTH_STATE_COOKIE_NAME, state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.REFRESH_COOKIE_SAMESITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax'),
+    path: '/api/auth/google',
+    maxAge: 10 * 60 * 1000
+  });
+
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  authUrl.searchParams.set('client_id', process.env.GOOGLE_CLIENT_ID);
+  authUrl.searchParams.set('redirect_uri', googleRedirectUri(req));
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', 'openid email profile');
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('prompt', 'select_account');
+
+  res.redirect(authUrl.toString());
+}));
+
+/**
+ * GET /api/auth/google/callback
+ * Handle Google's OAuth callback and redirect with a one-time handoff token.
+ */
+router.get('/google/callback', asyncHandler(async (req, res) => {
+  const cookies = parseCookies(req.headers.cookie || '');
+  const expectedState = cookies[OAUTH_STATE_COOKIE_NAME];
+  res.clearCookie(OAUTH_STATE_COOKIE_NAME, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.REFRESH_COOKIE_SAMESITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax'),
+    path: '/api/auth/google'
+  });
+
+  if (!req.query.state || req.query.state !== expectedState) {
+    return redirectToFrontend(res, 'login', { error: 'Google sign-in could not be verified' });
+  }
+
+  if (req.query.error) {
+    return redirectToFrontend(res, 'login', { error: 'Google sign-in was cancelled' });
+  }
+
+  try {
+    const result = await AuthService.googleSignIn({
+      code: req.query.code,
+      redirectUri: googleRedirectUri(req)
+    });
+    return redirectToFrontend(res, 'oauth-callback', { token: result.handoffToken });
+  } catch (err) {
+    return redirectToFrontend(res, 'login', { error: err.message || 'Google sign-in failed' });
+  }
+}));
+
+router.post('/google/complete', asyncHandler(async (req, res) => {
+  const result = await AuthService.completeOauthHandoff(req.body?.token);
+  setRefreshCookie(res, result.refreshToken);
+
+  res.json({
+    message: 'Signed in with Google',
+    ...publicAuthResult(result)
+  });
+}));
+
+router.post('/verify-email/request', optionalAuth, asyncHandler(async (req, res) => {
+  const result = await AuthService.requestEmailVerification(req.user?.id || req.body?.email);
+  res.json(result);
+}));
+
+router.post('/verify-email', asyncHandler(async (req, res) => {
+  const result = await AuthService.verifyEmail(req.body?.token);
+  res.json(result);
+}));
+
+router.post('/password/forgot', asyncHandler(async (req, res) => {
+  const result = await AuthService.requestPasswordReset(req.body?.email);
+  res.json(result);
+}));
+
+router.post('/password/reset', asyncHandler(async (req, res) => {
+  const result = await AuthService.resetPassword(req.body?.token, req.body?.password);
+  res.json(result);
+}));
+
+/**
  * GET /api/auth/me
  * Get current user profile
  */
@@ -112,7 +240,7 @@ router.post(
   '/refresh',
   asyncHandler(async (req, res) => {
     const refreshToken = readRefreshCookie(req);
-    const result = await AuthService.refreshToken(refreshToken);
+    const result = await AuthService.refreshToken(refreshToken, req.headers['x-csrf-token']);
     setRefreshCookie(res, result.refreshToken);
 
     res.json(publicAuthResult(result));

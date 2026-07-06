@@ -777,8 +777,6 @@ body.reduce-motion *::after {
 .workspace-option:hover {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--line));
   background: color-mix(in srgb, var(--primary-soft) 72%, var(--panel));
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
-  transform: translateY(-1px);
 }
 
 .workspace-option.active {

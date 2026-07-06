@@ -1,6 +1,7 @@
 export const createApiClient = ({
   apiBase,
   getToken,
+  getCsrfToken,
   onRefresh
 }) => {
   const friendlyError = (message = '', status = 0) => {
@@ -9,6 +10,9 @@ export const createApiClient = ({
 
     if (status === 0 || lower.includes('failed to fetch') || lower.includes('networkerror')) {
       return "Couldn't connect right now. Check your connection and try again.";
+    }
+    if (lower.includes('verify your email') || lower.includes('verification link expired')) {
+      return text;
     }
     if (status === 401 || lower.includes('invalid or expired') || lower.includes('session expired')) {
       return 'Your session expired. Please sign in again.';
@@ -43,6 +47,10 @@ export const createApiClient = ({
 
     const token = getToken?.();
     if (token) headers.Authorization = `Bearer ${token}`;
+    const csrfToken = getCsrfToken?.();
+    if (csrfToken && path === '/api/auth/refresh') {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
 
     let response;
     try {
@@ -66,7 +74,16 @@ export const createApiClient = ({
     }
 
     if (!response.ok) {
-      if (response.status === 401 && retry && path !== '/api/auth/refresh') {
+      const canRefresh = ![
+        '/api/auth/login',
+        '/api/auth/register',
+        '/api/auth/verify-email',
+        '/api/auth/verify-email/request',
+        '/api/auth/password/forgot',
+        '/api/auth/password/reset',
+        '/api/auth/google/complete'
+      ].includes(path);
+      if (response.status === 401 && retry && canRefresh && path !== '/api/auth/refresh') {
         const refreshed = await request('/api/auth/refresh', {
           method: 'POST',
           body: JSON.stringify({})

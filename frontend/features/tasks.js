@@ -93,7 +93,7 @@ export const renderTaskCardHtml = (task) => {
   const isMenuOpen = activeTaskMoreMenuId === task._id;
 
   return `
-    <article class="task-page-card task-card-v2 ${isDone ? 'completed' : ''}" data-task-id="${task._id}" data-doc-id="${task.documentId || ''}">
+    <article class="task-page-card task-card-v2 ${isDone ? 'completed' : ''}" draggable="true" data-task-id="${task._id}" data-doc-id="${task.documentId || ''}">
       <div class="task-card-body" style="display: flex; flex-direction: column; gap: 10px; width: 100%; min-width: 0;">
         <div class="card-top-badges" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
           <div class="left-badges" style="display: flex; align-items: center; gap: 6px;">
@@ -272,6 +272,7 @@ export const showAddTaskModal = async () => {
       state.documentTasks.push(task);
       state.dashboardTasks.push(task);
       addActivity({ action: 'created task', target: task.title });
+      markLectureMilestone(docId, 'taskCreated', { message: 'Study task created' });
       showToast('Demo task created locally');
       document.getElementById('chatOverlayModal')?.remove();
       renderTasksPage();
@@ -286,6 +287,7 @@ export const showAddTaskModal = async () => {
       state.documentTasks.push(task);
       state.dashboardTasks.push(task);
       addActivity({ action: 'created task', target: task.title });
+      markLectureMilestone(docId, 'taskCreated', { message: 'Study task created' });
       showToast('Task created successfully!');
       document.getElementById('chatOverlayModal')?.remove();
       renderTasksPage();
@@ -485,7 +487,7 @@ export const renderTasksPage = () => {
   let contentHtml = '';
   if (taskViewMode === 'list') {
     contentHtml = `
-      <section class="tasks-column">
+      <section class="tasks-column" data-task-column-status="open">
         <div class="tasks-column-head">
           <h3>Open Tasks</h3>
           <span>${openTasks.length}</span>
@@ -493,7 +495,7 @@ export const renderTasksPage = () => {
         ${openTasks.map(t => renderTaskCardHtml(t)).join('') || openEmptyHtml}
       </section>
       
-      <section class="tasks-column" style="margin-top: 12px;">
+      <section class="tasks-column" data-task-column-status="completed" style="margin-top: 12px;">
         <div class="tasks-column-head">
           <h3>Completed Tasks</h3>
           <span>${completedTasks.length}</span>
@@ -503,7 +505,7 @@ export const renderTasksPage = () => {
     `;
   } else {
     contentHtml = `
-      <section class="tasks-column">
+      <section class="tasks-column" data-task-column-status="open">
         <div class="tasks-column-head">
           <h3>Open</h3>
           <span>${openTasks.length}</span>
@@ -511,7 +513,7 @@ export const renderTasksPage = () => {
         ${openTasks.map(t => renderTaskCardHtml(t)).join('') || openEmptyHtml}
       </section>
       
-      <section class="tasks-column">
+      <section class="tasks-column" data-task-column-status="completed">
         <div class="tasks-column-head">
           <h3>Completed</h3>
           <span>${completedTasks.length}</span>
@@ -609,5 +611,85 @@ export const renderTasksPage = () => {
       searchInputAfter.focus();
       searchInputAfter.setSelectionRange(searchValLen, searchValLen);
     }
+  }
+
+  // --- Drag and Drop Bindings ---
+  const boardEl = document.querySelector('.tasks-board, .tasks-list');
+  if (boardEl) {
+    const cards = boardEl.querySelectorAll('.task-page-card');
+    cards.forEach(card => {
+      card.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', card.dataset.taskId);
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+      });
+    });
+
+    const columns = boardEl.querySelectorAll('.tasks-column');
+    columns.forEach(column => {
+      column.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        column.classList.add('drag-hover');
+      });
+      column.addEventListener('dragleave', () => {
+        column.classList.remove('drag-hover');
+      });
+      column.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        column.classList.remove('drag-hover');
+        const taskId = e.dataTransfer.getData('text/plain');
+        const targetStatus = column.dataset.taskColumnStatus;
+        if (taskId && targetStatus) {
+          await moveTaskStatus(taskId, targetStatus);
+        }
+      });
+    });
+  }
+};
+
+export const moveTaskStatus = async (taskId, columnStatus) => {
+  const newStatus = columnStatus === 'completed' ? 'done' : 'todo';
+  
+  const allTasks = [...state.dashboardTasks, ...state.documentTasks];
+  const task = allTasks.find(t => t._id === taskId);
+  if (!task) return;
+  
+  if (task.status === newStatus) return; // no change
+  
+  // Optimistic UI update
+  task.status = newStatus;
+  task.completedAt = newStatus === 'done' ? new Date().toISOString() : null;
+  
+  state.dashboardTasks = state.dashboardTasks.map(t => t._id === taskId ? { ...t, status: newStatus, completedAt: task.completedAt } : t);
+  state.documentTasks = state.documentTasks.map(t => t._id === taskId ? { ...t, status: newStatus, completedAt: task.completedAt } : t);
+  refreshLectureProgress(task.documentId || task.document || state.selectedDocumentId, {
+    message: 'All linked tasks completed',
+    show: newStatus === 'done'
+  });
+  
+  renderTasksPage();
+  
+  if (state.demoMode) {
+    showToast('Task updated locally');
+    return;
+  }
+  
+  try {
+    const docId = task.documentId || task.document;
+    await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${docId}/tasks/${task._id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: newStatus })
+    });
+    showToast('Task status updated!');
+  } catch (err) {
+    showToast(err.message, true);
+    // revert
+    task.status = newStatus === 'done' ? 'todo' : 'done';
+    task.completedAt = task.status === 'done' ? new Date().toISOString() : null;
+    state.dashboardTasks = state.dashboardTasks.map(t => t._id === taskId ? { ...t, status: task.status, completedAt: task.completedAt } : t);
+    state.documentTasks = state.documentTasks.map(t => t._id === taskId ? { ...t, status: task.status, completedAt: task.completedAt } : t);
+    renderTasksPage();
   }
 };

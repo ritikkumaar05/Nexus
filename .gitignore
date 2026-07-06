@@ -13,10 +13,9 @@ build
 backend/dist
 
 # Environment files
-.env
-.env.local
-.env.production
-.env.development
+.env*
+!.env.example
+!*/.env.example
 
 # Logs
 *.log
@@ -29,5 +28,4 @@ tmp_chrome_profile
 
 #folder
 tmp
-
 

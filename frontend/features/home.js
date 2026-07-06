@@ -20,16 +20,16 @@ export const getDashboardData = () => {
   const doubts = demo
     ? [
         {
-          title: 'Can someone explain Paxos prepare phase?',
-          documentId: 'demo-doc-ds-lecture',
-          documentTitle: 'Distributed Systems Notes',
-          meta: '3 replies · Unresolved'
+          title: 'Why does circular wait create a deadlock?',
+          documentId: 'demo-doc-os-deadlocks',
+          documentTitle: 'Lecture 5: Deadlocks',
+          meta: '2 replies · Blocking revision'
         },
         {
-          title: 'What is the difference between precision and recall?',
-          documentId: 'demo-doc-ml-guide',
-          documentTitle: 'ML Study Guide',
-          meta: 'Resolved'
+          title: 'Is Banker algorithm prevention or avoidance?',
+          documentId: 'demo-doc-os-deadlocks',
+          documentTitle: 'Lecture 5: Deadlocks',
+          meta: 'Resolved · saved to lecture'
         }
       ]
     : state.workspaceThreads.filter((thread) => thread.status !== 'resolved').slice(0, 4).map((thread) => ({
@@ -49,13 +49,73 @@ export const getDashboardData = () => {
     chatPreview,
     doubts,
     stats: {
-      documents: demo ? 24 : state.documents.length,
+      documents: state.documents.length,
       tasksDue: demo ? 5 : todayTasks.length,
-      collaborators: demo ? 3 : (activeMembers.length || state.presence.length),
-      doubts: demo ? 8 : state.workspaceThreads.filter((thread) => thread.status !== 'resolved').length
+      collaborators: demo ? state.presence.length : (activeMembers.length || state.presence.length),
+      doubts: demo ? 1 : state.workspaceThreads.filter((thread) => thread.status !== 'resolved').length
     }
   };
 };
+
+const learningCoachData = ({ recentDocuments = [], todayTasks = [], doubts = [], stats = {} }) => {
+  const progressSummary = calculateWorkspaceLearningProgress();
+  const docs = progressSummary.lectures || [];
+  const courses = progressSummary.courseProgress || [];
+  // activeLectures = lectures with progress > 5% (have real content)
+  const activeLectures = docs.filter((doc) => Number(doc.progress) > 5);
+  const revisionQueue = activeLectures
+    .filter((doc) => Number(doc.progress) < 90)
+    .sort((a, b) => Number(a.progress) - Number(b.progress))
+    .slice(0, 5);
+  // Prefer in-progress lectures over brand-new ones for the "next lecture" suggestion
+  const nextLecture = revisionQueue[0] || recentDocuments[0] || docs[0] || null;
+  const completedYesterday = state.demoMode ? 2 : Math.min(2, state.activityItems.filter((item) => /completed|generated|edited|revised/i.test(item.action || '')).length);
+
+  return {
+    examLabel: state.demoMode ? 'OS midterm' : selectedWorkspace()?.name || 'Next exam',
+    examInDays: state.demoMode ? 12 : null,
+    courses,
+    progress: progressSummary.overallProgress,
+    lecturesLeft: activeLectures.filter((doc) => Number(doc.progress) < 90).length,
+    activeLectures: activeLectures.length,
+    nextLecture,
+    revisionQueue,
+    masteredLectures: progressSummary.masteredLectures,
+    inProgressLectures: progressSummary.inProgressLectures,
+    notStartedLectures: progressSummary.notStartedLectures,
+    totalLectures: progressSummary.totalLectures,
+    completedTasks: progressSummary.completedTasks,
+    pendingTasks: progressSummary.pendingTasks,
+    studyStreak: progressSummary.studyStreak,
+    longestStreak: progressSummary.longestStreak,
+    streakActiveToday: progressSummary.streakActiveToday,
+    completedYesterday,
+    blockerCount: doubts.filter((doubt) => !/resolved/i.test(doubt.meta || '')).length
+  };
+};
+
+const renderProgressBar = (value = 0) => `
+  <div class="learning-progress-bar" aria-label="Learning progress">
+    <span style="width:${Math.max(4, Math.min(100, Number(value) || 0))}%"></span>
+  </div>
+`;
+
+const renderLectureProgressList = (lectures = []) => lectures.map((lecture) => `
+  <button class="lecture-progress-row" data-open-document="${escapeHtml(lecture._id || '')}" type="button">
+    <span>
+      <strong>${escapeHtml(lecture.title || 'Untitled lecture')}</strong>
+      <small>${escapeHtml(lecture.category || 'Course')} · ${lecture.progress >= 90 ? 'Mastered' : lecture.progress >= 30 ? 'In progress' : 'Not started'}</small>
+    </span>
+    <em>${Number.isFinite(Number(lecture.progress)) ? `${Number(lecture.progress)}%` : '0%'}</em>
+  </button>
+`).join('');
+
+const renderCourseProgress = (courses = []) => courses.map((course) => `
+  <div class="course-progress-row">
+    <strong>${escapeHtml(course.course)}</strong>
+    <span>${course.progress}%</span>
+  </div>
+`).join('');
 
 
 export const renderHomePage = () => {
@@ -111,7 +171,8 @@ export const renderHomePage = () => {
 
   const userName = state.demoMode ? 'Alex' : (state.user?.username || state.user?.email?.split('@')[0] || '');
   const greeting = getTimeGreeting(userName);
-  const primaryDoc = recentDocuments[0];
+  const coach = learningCoachData({ recentDocuments, todayTasks, doubts, stats });
+  const primaryDoc = coach.nextLecture || recentDocuments[0];
   const focusTasks = todayTasks.slice(0, 3);
 
   const activeChannel = activeChatChannel() || { name: 'general', slug: 'general' };
@@ -126,36 +187,80 @@ export const renderHomePage = () => {
       <!-- SECTION 1 — WELCOME HEADER -->
       <header class="home-welcome-header">
         <div class="welcome-copy">
-          <span class="eyebrow">Nexus Workspace</span>
+          <span class="eyebrow">Learning Operating System</span>
           <h2>${escapeHtml(greeting)}</h2>
-          <p>Continue where you left off.</p>
+          <p>${state.demoMode ? 'Your Semester 5 study coach is already organized around lectures, progress, doubts, and revision.' : 'Here is what to study next and what needs attention.'}</p>
         </div>
         <div class="header-stats-row">
-          <span class="stat-pill"><span class="pill-icon">🔥</span> 5-day streak</span>
-          <span class="stat-pill"><span class="pill-icon">📄</span> ${stats.documents} documents</span>
-          <span class="stat-pill"><span class="pill-icon">👥</span> ${stats.collaborators} online</span>
-          <span class="stat-pill"><span class="pill-icon">📋</span> ${stats.tasksDue || 0} pending tasks</span>
+          <span class="stat-pill"><span class="pill-icon">◆</span> ${coach.examInDays ? `${coach.examLabel} in ${coach.examInDays} days` : 'Study plan active'}</span>
+          <span class="stat-pill"><span class="pill-icon">📚</span> ${coach.totalLectures} lectures</span>
+          <span class="stat-pill"><span class="pill-icon">✅</span> ${coach.completedTasks} tasks complete</span>
+          <span class="stat-pill streak-pill ${coach.streakActiveToday ? 'streak-active' : coach.studyStreak > 0 ? 'streak-alive' : 'streak-zero'}">
+            <span class="pill-icon">🔥</span>
+            ${coach.studyStreak === 0
+              ? 'Start your streak today'
+              : coach.streakActiveToday
+                ? `${coach.studyStreak} day streak · studied today!`
+                : `${coach.studyStreak} day streak · study today to keep it`
+            }
+          </span>
         </div>
       </header>
+
+      ${state.demoMode ? `
+        <section class="judge-tour-card" aria-label="Five-minute judge tour">
+          <div>
+            <span class="judge-tour-kicker">Five-minute tour</span>
+            <h3>See the living lecture loop</h3>
+            <p>Open Deadlocks, select the circular wait paragraph, ask AI to explain it, review the attached doubt, then take the quiz. The demo shows Nexus organizing progress instead of files.</p>
+          </div>
+          <div class="judge-tour-actions">
+            <button data-open-document="${escapeHtml(primaryDoc?._id || state.selectedDocumentId || '')}" type="button">Open lecture</button>
+            <button data-dashboard-action="ai" type="button">Try AI</button>
+            <button data-dashboard-target="tasks" type="button">Tasks</button>
+            <button data-dashboard-target="chat" type="button">Chat</button>
+          </div>
+        </section>
+      ` : ''}
 
       <div class="home-grid">
         <!-- LEFT COLUMN (MAIN FLOW) -->
         <div class="home-main-col">
+          <article class="card-v3 learning-coach-card">
+            <div class="learning-coach-main">
+              <span class="doc-badge">Overall Workspace Progress</span>
+              <h3>${coach.progress}% of learning completed</h3>
+              <p>${primaryDoc ? `Next lecture to move forward: ${escapeHtml(primaryDoc.title || 'Untitled lecture')} · ${Number(primaryDoc.progress || 0)}% complete` : 'Add one lecture and Nexus will organize notes, doubts, tasks, quizzes, and revision around it.'}</p>
+              ${renderProgressBar(coach.progress)}
+              <div class="course-progress-list">
+                ${renderCourseProgress(coach.courses)}
+              </div>
+            </div>
+            <div class="learning-coach-metrics">
+              <span><strong>${coach.totalLectures}</strong><small>Total lectures</small></span>
+              <span><strong>${coach.masteredLectures}</strong><small>Mastered ≥90%</small></span>
+              <span><strong>${coach.inProgressLectures}</strong><small>In progress 30–89%</small></span>
+              <span><strong>${coach.notStartedLectures}</strong><small>Not started &lt;30%</small></span>
+              <span><strong>${coach.completedTasks}</strong><small>Completed tasks</small></span>
+              <span><strong>${coach.pendingTasks}</strong><small>Pending tasks</small></span>
+            </div>
+          </article>
+
           <!-- SECTION 2 — CONTINUE WORKING -->
           ${primaryDoc ? `
             <article class="card-v3 continue-working-card" data-open-document="${escapeHtml(primaryDoc._id)}">
               <div class="continue-working-content">
-                <span class="doc-badge">Last Active Document</span>
+                <span class="doc-badge">Living Lecture</span>
                 <div class="continue-working-title-row">
-                  <span class="doc-icon-large">📄</span>
+                  <span class="doc-icon-large">▣</span>
                   <div>
                     <h3>${escapeHtml(primaryDoc.title || 'Untitled Document')}</h3>
-                    <p>Last edited ${formatRelativeTime(primaryDoc.updatedAt || primaryDoc.createdAt)}</p>
+                    <p>${escapeHtml(primaryDoc.category || 'Course')} · ${Number(primaryDoc.progress || 0)}% learning progress</p>
                   </div>
                 </div>
               </div>
               <button class="continue-btn" type="button">
-                Continue Editing <span class="arrow">→</span>
+                Continue Studying <span class="arrow">→</span>
               </button>
             </article>
           ` : `
@@ -176,10 +281,26 @@ export const renderHomePage = () => {
             </article>
           `}
 
+          <article class="card-v3 revision-map-card">
+            <div class="card-header-v3">
+              <h3>Lecture Mastery Map</h3>
+              <span class="chat-channel-badge">${coach.lecturesLeft} left to master</span>
+            </div>
+            <div class="revision-map-list">
+              ${renderLectureProgressList(coach.revisionQueue.length ? coach.revisionQueue : recentDocuments.slice(0, 4)) || `
+                <div class="empty-focus-state">
+                  <span class="empty-icon">✓</span>
+                  <h4>No revision queue yet</h4>
+                  <p>Open a lecture and Nexus will start building revision context.</p>
+                </div>
+              `}
+            </div>
+          </article>
+
           <!-- SECTION 3 — TODAY'S FOCUS -->
           <article class="card-v3 focus-card">
             <div class="card-header-v3">
-              <h3>Today's Focus</h3>
+              <h3>Today's Study Plan</h3>
               <a href="#/tasks" class="view-all-link" data-dashboard-target="tasks">View All →</a>
             </div>
             <div class="focus-tasks-list">
@@ -193,7 +314,7 @@ export const renderHomePage = () => {
                 <div class="empty-focus-state">
                   <span class="empty-icon">✓</span>
                   <h4>No focus tasks yet</h4>
-                  <p>Create a study task or let AI generate a plan for this workspace.</p>
+                  <p>Create a study task or let AI generate a plan from your current lecture.</p>
                   <div class="empty-actions-row">
                     <button class="empty-state-btn primary" data-dashboard-action="new-task">+ Add Study Task</button>
                     <button class="empty-state-btn" data-dashboard-action="ai">🪄 Generate with AI</button>
@@ -219,11 +340,11 @@ export const renderHomePage = () => {
                 </div>
               `).join('') || `
                 <div class="empty-activity-state">
-                  <span class="empty-icon">📈</span>
+                  <span class="empty-icon">↗</span>
                   <h4>No activity yet</h4>
-                  <p>Document edits, task updates, chats, and AI actions will appear here.</p>
+                  <p>Lecture revisions, quiz attempts, doubts, and AI actions will appear here.</p>
                   <div class="empty-actions-row">
-                    <button class="empty-state-btn primary" data-dashboard-action="new-document">+ Create Note</button>
+                    <button class="empty-state-btn primary" data-dashboard-action="new-document">+ Create Lecture</button>
                     <button class="empty-state-btn" data-dashboard-action="invite">👥 Invite Member</button>
                   </div>
                 </div>
@@ -234,15 +355,37 @@ export const renderHomePage = () => {
 
         <!-- RIGHT COLUMN (UTILITIES) -->
         <div class="home-side-col">
+          <article class="card-v3 blockers-card">
+            <div class="card-header-v3">
+              <h3>What Is Blocking You</h3>
+              <a href="#/threads" class="view-all-link" data-dashboard-target="threads">Open Doubts →</a>
+            </div>
+            <div class="doubt-list">
+              ${doubts.slice(0, 3).map((doubt) => `
+                <button class="doubt-card" data-open-document="${escapeHtml(doubt.documentId || '')}" type="button">
+                  <strong>${escapeHtml(doubt.title)}</strong>
+                  <small>${escapeHtml(doubt.documentTitle || 'Lecture')}</small>
+                  <em>${escapeHtml(doubt.meta || '')}</em>
+                </button>
+              `).join('') || `
+                <div class="empty-chat-state">
+                  <span class="empty-icon">✓</span>
+                  <h4>No blockers right now</h4>
+                  <p>Doubts attached to paragraphs will stay here until resolved.</p>
+                </div>
+              `}
+            </div>
+          </article>
+
           <!-- SECTION 5 — QUICK ACTIONS -->
           <article class="card-v3 quick-actions-card">
             <div class="card-header-v3">
-              <h3>Quick Actions</h3>
+              <h3>Study Actions</h3>
             </div>
             <div class="quick-actions-grid">
               <button class="action-btn-large" data-dashboard-action="new-document" type="button">
                 <span class="action-icon">＋</span>
-                <strong>New Note</strong>
+                <strong>New Lecture</strong>
               </button>
               <button class="action-btn-large" data-dashboard-target="chat" type="button">
                 <span class="action-icon">💬</span>
@@ -250,7 +393,7 @@ export const renderHomePage = () => {
               </button>
               <button class="action-btn-large" data-dashboard-action="ai" type="button">
                 <span class="action-icon">🤖</span>
-                <strong>Ask AI</strong>
+                <strong>Ask Tutor</strong>
               </button>
               <button class="action-btn-large" data-dashboard-action="new-task" type="button">
                 <span class="action-icon">✅</span>
@@ -262,26 +405,26 @@ export const renderHomePage = () => {
           <!-- SECTION 7 — AI STUDY COACH -->
           <article class="card-v3 ai-coach-card">
             <div class="card-header-v3">
-              <h3>AI Study Coach</h3>
-              <span class="chat-channel-badge">Gemini AI</span>
+              <h3>AI Tutor</h3>
+              <span class="chat-channel-badge">Lecture-aware</span>
             </div>
             <div class="ai-coach-suggestions">
               <button class="ai-coach-chip" data-dashboard-ai="summarize" type="button">
-                <span>Summarize active note</span>
+                <span>Summarize this lecture</span>
                 <span class="chip-arrow">→</span>
               </button>
               <button class="ai-coach-chip" data-dashboard-ai="quiz" type="button">
-                <span>Quiz me on notes</span>
+                <span>Quiz weak concepts</span>
                 <span class="chip-arrow">→</span>
               </button>
               <button class="ai-coach-chip" data-dashboard-action="ai" type="button">
-                <span>Create a focus plan</span>
+                <span>Create revision questions</span>
                 <span class="chip-arrow">→</span>
               </button>
             </div>
             <div class="ai-coach-actions">
               <button class="ai-coach-btn primary" data-dashboard-action="ai" type="button">
-                <span>Ask AI</span>
+                <span>Ask Tutor</span>
               </button>
               <button class="ai-coach-btn secondary" data-dashboard-target="chat" type="button">
                 <span>Chat</span>

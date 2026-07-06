@@ -1,18 +1,21 @@
 /* components/avatars.css */
 
 .workspace-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
-  font-size: 11px;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5) !important;
+  font-size: 13px;
   font-weight: 700;
+  text-transform: uppercase;
   flex-shrink: 0;
   transition: var(--transition-premium);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
 }
 
 .online-avatar-stack {
@@ -55,9 +58,10 @@
 }
 
 .workspace-option .workspace-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 11px !important;
+  font-size: 15px !important;
 }
 
 .avatar-circle.big {
@@ -94,7 +98,12 @@
   font-size: 16px;
 }
 
-.workspace-avatar {
-  background: linear-gradient(135deg, var(--primary), var(--accent-blue)) !important;
-  box-shadow: 0 10px 26px rgba(99, 102, 241, 0.24) !important;
+.workspace-avatar.big {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 12px !important;
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
 }

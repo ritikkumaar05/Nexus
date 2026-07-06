@@ -2,6 +2,30 @@
 
 const app = () => globalThis;
 
+const renderThreadsLoadingSection = () => `
+  <div class="thread-section-header">
+    <h3>Loading doubts</h3>
+  </div>
+  <div class="threads-loading-list" aria-label="Loading doubts">
+    ${Array.from({ length: 4 }, () => `
+      <article class="thread-list-card thread-list-card-skeleton" aria-hidden="true">
+        <span class="skeleton-row short"></span>
+        <span class="skeleton-row"></span>
+        <span class="skeleton-row medium"></span>
+      </article>
+    `).join('')}
+  </div>
+`;
+
+const renderThreadDetailLoading = () => `
+  <div class="thread-detail-loading" aria-label="Loading selected doubt">
+    <span class="skeleton-row short"></span>
+    <span class="skeleton-row title"></span>
+    <span class="skeleton-row"></span>
+    <span class="skeleton-row medium"></span>
+  </div>
+`;
+
 export const renderThreadListSection = (threadsList, title, isResolvedSection = false) => {
   if (threadsList.length === 0) {
     if (isResolvedSection) {
@@ -207,6 +231,8 @@ export const renderThreadsPage = () => {
   const wasReplyFocused = (document.activeElement === replyInputBefore);
 
   const filteredList = app().getFilteredWorkspaceThreads();
+  const isLoadingThreads = Boolean(app().state.loading.threads);
+  const threadsError = app().state.errors.threads || '';
   let activeThread = filteredList.find(t => t._id === app().state.selectedThreadId) || null;
   if (!activeThread && filteredList.length > 0) {
     activeThread = filteredList[0];
@@ -221,7 +247,11 @@ export const renderThreadsPage = () => {
   const activeFilterTab = app().threadFilterTab;
   const searchQuery = app().threadSearchQuery || '';
 
-  if (activeFilterTab === 'unresolved') {
+  if (isLoadingThreads && !app().state.workspaceThreads.length) {
+    leftListHtml = renderThreadsLoadingSection();
+  } else if (threadsError && !app().state.workspaceThreads.length) {
+    leftListHtml = app().errorState(threadsError);
+  } else if (activeFilterTab === 'unresolved') {
     leftListHtml = renderThreadListSection(unresolvedThreads, 'Unresolved');
   } else if (activeFilterTab === 'resolved') {
     leftListHtml = renderThreadListSection(resolvedThreads, 'Resolved');
@@ -233,14 +263,16 @@ export const renderThreadsPage = () => {
   }
 
   let rightDetailHtml = '';
-  if (activeThread) {
+  if (isLoadingThreads && !app().state.workspaceThreads.length) {
+    rightDetailHtml = renderThreadDetailLoading();
+  } else if (activeThread) {
     rightDetailHtml = renderThreadDetailHtml(activeThread);
   } else {
     rightDetailHtml = app().renderEmptyDetailHtml(app().state.workspaceThreads.length > 0);
   }
 
   app().els.routePage.innerHTML = `
-    <div class="threads-page">
+    <div class="threads-page" aria-busy="${isLoadingThreads ? 'true' : 'false'}">
       <section class="threads-list-pane">
         <div class="threads-pane-header">
           <div class="threads-header-titles">
@@ -307,4 +339,3 @@ export const renderThreadsPage = () => {
     }
   }
 };
-

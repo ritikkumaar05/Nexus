@@ -120,9 +120,12 @@ const AUTH = {
   
   // Account token (password reset, email verification) TTL in hours
   ACCOUNT_TOKEN_TTL_HOURS: 2,
+
+  // OAuth handoff token duration in minutes
+  OAUTH_HANDOFF_TTL_MINUTES: 5,
   
   // Bcrypt salt rounds for password hashing
-  BCRYPT_SALT_ROUNDS: 10
+  BCRYPT_SALT_ROUNDS: Number(process.env.BCRYPT_SALT_ROUNDS || 12)
 };
 
 // ============================================================================

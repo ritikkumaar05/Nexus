@@ -73,6 +73,12 @@
 }
 
 @media (prefers-color-scheme: light) {
+  body[data-theme="system"] .nexus-dashboard .card-v3:hover {
+    box-shadow: var(--shadow, 0 8px 30px rgba(0, 0, 0, 0.04)) !important;
+  }
+}
+
+@media (prefers-color-scheme: light) {
   body[data-theme="system"] .continue-working-card {
     background: linear-gradient(135deg, var(--panel, #ffffff) 0%, rgba(99, 102, 241, 0.03) 100%) !important;
   }
@@ -120,6 +126,7 @@
   body[data-theme="system"] .action-btn-large:hover {
     border-color: rgba(99, 102, 241, 0.35) !important;
     background: rgba(0, 0, 0, 0.02) !important;
+    transform: none !important;
   }
 }
 

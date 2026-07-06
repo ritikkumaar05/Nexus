@@ -59,7 +59,7 @@ import {
   acceptActiveInvite
 } from './services/invites.js';
 
-const API_BASE = localStorage.getItem('apiBase') || 'http://localhost:5000';
+const API_BASE = localStorage.getItem('apiBase') || import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 const Y_TEXT_KEY = 'content';
 let request;
 let demoWorkspacePromise = null;
@@ -73,6 +73,11 @@ let aiGenerationInFlight = false;
 let flashcardProgressSaveTimer = null;
 let documentCreateInFlight = false;
 let activeDocumentOpenProfile = null;
+let savedEditorRange = null;
+let workspaceThreadsLoadSeq = 0;
+let workspaceThreadsRequestKey = '';
+let workspaceThreadsRequestPromise = null;
+let workspaceThreadsLoadedKey = '';
 
 let activeWorkspaceMenuId = '';
 let activeWorkspaceRenameId = '';
@@ -140,6 +145,9 @@ const friendlyUiMessage = (message = '', { isError = false } = {}) => {
   if (!text) return isError ? "Something didn't go through. Please try again." : '';
   if (lower.includes('failed to fetch') || lower.includes('networkerror')) {
     return "Couldn't connect right now. Check your connection and try again.";
+  }
+  if (lower.includes('verify your email') || lower.includes('verification link expired')) {
+    return text;
   }
   if (lower.includes('invalid or expired refresh token') || lower.includes('invalid or expired token') || lower.includes('session expired')) {
     return 'Your session expired. Please sign in again.';
@@ -255,10 +263,21 @@ const els = {
   workspaceBadgeLabel: document.getElementById('workspaceBadgeLabel'),
   workspaceSwitcherAvatar: document.getElementById('workspaceSwitcherAvatar'),
   editorEmptyState: document.getElementById('editorEmptyState'),
+  editorAutosaveIndicator: document.getElementById('editorAutosaveIndicator'),
+  editorAttachmentInput: document.getElementById('editorAttachmentInput'),
   emptyActionBlank: document.getElementById('emptyActionBlank'),
   emptyActionPaste: document.getElementById('emptyActionPaste'),
   documentEditor: document.getElementById('documentEditor'),
   documentBreadcrumb: document.getElementById('documentBreadcrumb'),
+  editorFloatingToolbar: document.getElementById('editorFloatingToolbar'),
+  editorHeadingSelect: document.getElementById('editorHeadingSelect'),
+  editorHighlightInput: document.getElementById('editorHighlightInput'),
+  editorImageInput: document.getElementById('editorImageInput'),
+  editorLastEdited: document.getElementById('editorLastEdited'),
+  editorReadingProgress: document.getElementById('editorReadingProgress'),
+  editorReadingTime: document.getElementById('editorReadingTime'),
+  editorTextColorInput: document.getElementById('editorTextColorInput'),
+  editorWordCount: document.getElementById('editorWordCount'),
   documentList: document.getElementById('documentList'),
   documentNewPageBtn: document.getElementById('documentNewPageBtn'),
   documentTitleInput: document.getElementById('documentTitleInput'),
@@ -346,6 +365,10 @@ const setAutosaveStatus = (message) => {
           ? 'idle'
           : 'saved';
   els.saveStatusChip?.setAttribute('data-save-state', status);
+  if (els.editorAutosaveIndicator) {
+    els.editorAutosaveIndicator.textContent = message || 'Saved';
+    els.editorAutosaveIndicator.dataset.saveState = status;
+  }
 };
 
 const PANEL_RESIZE_CONFIG = {
@@ -364,9 +387,9 @@ const PANEL_RESIZE_CONFIG = {
     panel: () => document.querySelector('.context-panel'),
     cssVar: '--ai-panel-width',
     storageKey: 'nexusAiPanelWidth',
-    min: 260,
-    max: 420,
-    defaultWidth: 320,
+    min: 340,
+    max: 440,
+    defaultWidth: 380,
     direction: -1
   }
 };
@@ -430,6 +453,7 @@ const initResizableWorkspacePanels = () => {
     let startX = 0;
     let startWidth = 0;
     let startLayoutRect = null;
+    let dragMax = config.max;
     let frame = 0;
     let pendingWidth = 0;
 
@@ -443,6 +467,7 @@ const initResizableWorkspacePanels = () => {
       window.cancelAnimationFrame(frame);
       if (pendingWidth) setPanelWidth(config, pendingWidth, { persist: true });
       pendingWidth = 0;
+      dragMax = config.max;
     };
 
     const applyPendingWidth = () => {
@@ -451,13 +476,12 @@ const initResizableWorkspacePanels = () => {
     };
 
     function onPointerMove(event) {
-      const nextMax = safePanelMax(panelKey);
       if (startLayoutRect && panelKey === 'documents') {
-        pendingWidth = clamp(event.clientX - startLayoutRect.left, config.min, nextMax);
+        pendingWidth = clamp(event.clientX - startLayoutRect.left, config.min, dragMax);
       } else if (startLayoutRect && panelKey === 'ai') {
-        pendingWidth = clamp(startLayoutRect.right - event.clientX, config.min, nextMax);
+        pendingWidth = clamp(startLayoutRect.right - event.clientX, config.min, dragMax);
       } else {
-        pendingWidth = clamp(startWidth + ((event.clientX - startX) * config.direction), config.min, nextMax);
+        pendingWidth = clamp(startWidth + ((event.clientX - startX) * config.direction), config.min, dragMax);
       }
       handle.setAttribute('aria-valuenow', String(Math.round(pendingWidth)));
       if (!frame) frame = window.requestAnimationFrame(applyPendingWidth);
@@ -472,11 +496,12 @@ const initResizableWorkspacePanels = () => {
       startX = event.clientX;
       startWidth = panel.getBoundingClientRect().width || readStoredPanelWidth(config);
       startLayoutRect = document.querySelector('.nexus-documents')?.getBoundingClientRect() || null;
+      dragMax = safePanelMax(panelKey);
       pendingWidth = startWidth;
       document.body.classList.add('is-resizing-panels');
       handle.classList.add('active');
       handle.setAttribute('aria-valuemin', String(config.min));
-      handle.setAttribute('aria-valuemax', String(config.max));
+      handle.setAttribute('aria-valuemax', String(dragMax));
       handle.setAttribute('aria-valuenow', String(Math.round(startWidth)));
       window.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerup', finishResize, { once: true });
@@ -512,9 +537,31 @@ const persistPreferences = () => {
 };
 
 const applyPreferences = () => {
-  document.body.dataset.theme = state.preferences.theme || 'light';
-  document.body.dataset.density = state.preferences.density || 'comfortable';
-  document.body.classList.toggle('reduce-motion', Boolean(state.preferences.reduceMotion));
+  const themeSetting = localStorage.getItem('theme') || state.preferences?.theme || 'light';
+  
+  // Apply theme to document element
+  document.documentElement.dataset.theme = themeSetting;
+  document.documentElement.classList.toggle('light', themeSetting === 'light');
+  document.documentElement.classList.toggle('dark', themeSetting === 'dark');
+  if (themeSetting === 'system') {
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('light', !isDark);
+    document.documentElement.classList.toggle('dark', isDark);
+  }
+
+  // Apply to body for legacy CSS support
+  document.body.dataset.theme = themeSetting;
+  document.body.classList.toggle('light', themeSetting === 'light');
+  document.body.classList.toggle('dark', themeSetting === 'dark');
+  if (themeSetting === 'system') {
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.body.classList.toggle('light', !isDark);
+    document.body.classList.toggle('dark', isDark);
+  }
+
+  document.body.dataset.density = state.preferences?.density || 'comfortable';
+  document.body.classList.toggle('reduce-motion', Boolean(state.preferences?.reduceMotion));
+  
   // Don't collapse sidebar if we're on the Documents workspace
   if (!document.body.classList.contains('document-workspace-screen')) {
     const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
@@ -523,7 +570,7 @@ const applyPreferences = () => {
 };
 
 const toggleTheme = () => {
-  const current = state.preferences.theme || 'light';
+  const current = localStorage.getItem('theme') || state.preferences?.theme || 'light';
   let newTheme = 'dark';
   if (current === 'dark') {
     newTheme = 'light';
@@ -534,22 +581,26 @@ const toggleTheme = () => {
     newTheme = isDark ? 'light' : 'dark';
   }
   state.preferences.theme = newTheme;
+  localStorage.setItem('theme', newTheme);
   persistPreferences();
   applyPreferences();
   showToast(`Theme changed to ${newTheme}`);
 };
 
-const saveSession = ({ token, user }) => {
+const saveSession = ({ token, user, csrfToken }) => {
   state.token = token;
   state.user = user;
-  localStorage.setItem('token', token);
+  state.csrfToken = csrfToken || state.csrfToken || '';
   localStorage.setItem('user', JSON.stringify(user));
+  if (state.csrfToken) localStorage.setItem('csrfToken', state.csrfToken);
+  localStorage.removeItem('token');
   localStorage.removeItem('refreshToken');
 };
 
 ({ request } = createApiClient({
   apiBase: API_BASE,
   getToken: () => state.token,
+  getCsrfToken: () => state.csrfToken,
   onRefresh: saveSession
 }));
 
@@ -559,6 +610,7 @@ const clearSession = () => {
   sessionStorage.removeItem('demoMode');
   state.demoMode = false;
   state.token = '';
+  state.csrfToken = '';
   state.user = null;
   state.workspaces = [];
   state.channels = [];
@@ -581,6 +633,7 @@ const clearSession = () => {
   state.selectedChannelId = '';
   state.selectedDocumentId = '';
   localStorage.removeItem('token');
+  localStorage.removeItem('csrfToken');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');
   localStorage.removeItem('workspaceId');
@@ -588,14 +641,352 @@ const clearSession = () => {
   localStorage.removeItem('documentId');
 };
 
-const selectedDocumentTitle = () => selectedDocument()?.title || els.documentTitleInput?.value || 'Untitled document';
+const selectedDocumentTitle = () => selectedDocument()?.title || els.documentTitleInput?.value || 'Untitled lecture';
+
+/* ─────────────────────────────────────────────────────────────────────────
+   LEARNING MILESTONE PERSISTENCE
+   The backend Document schema has no learningMilestones field, so all
+   milestone data lives only in memory and is lost on page refresh.
+   We persist to localStorage keyed by documentId so progress survives
+   browser restarts without any backend changes.
+   ─────────────────────────────────────────────────────────────────────── */
+const MILESTONES_STORE_KEY = 'nexus_learning_milestones';
+
+/** Load the full milestone map from localStorage. Shape: { [docId]: { [key]: true } } */
+const loadAllMilestones = () => {
+  try {
+    const raw = localStorage.getItem(MILESTONES_STORE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+};
+
+/** Persist a single document's milestone flags into the store. */
+const saveMilestonesForDoc = (docId, flags = {}) => {
+  if (!docId) return;
+  try {
+    const all = loadAllMilestones();
+    all[String(docId)] = { ...(all[String(docId)] || {}), ...flags };
+    localStorage.setItem(MILESTONES_STORE_KEY, JSON.stringify(all));
+  } catch { /* quota — ignore */ }
+};
+
+/** Read persisted milestone flags for a single document. */
+const loadMilestonesForDoc = (docId) => {
+  if (!docId) return {};
+  try { return loadAllMilestones()[String(docId)] || {}; } catch { return {}; }
+};
+
+const LECTURE_PROGRESS_MILESTONES = [
+  { key: 'created',           label: 'Lecture created',               weight: 5  },
+  { key: 'notesAdded',        label: 'Notes/content added',           weight: 15 },
+  { key: 'aiExplanation',     label: 'AI explanation used',           weight: 10 },
+  { key: 'summaryGenerated',  label: 'Lecture summary generated',     weight: 10 },
+  { key: 'flashcardsGenerated', label: 'Flashcards generated',        weight: 15 },
+  { key: 'quizGenerated',     label: 'Quiz generated',                weight: 15 },
+  { key: 'doubtResolved',     label: 'Doubt created and resolved',    weight: 10 },
+  { key: 'taskCreated',       label: 'Study task created',            weight: 10 },
+  { key: 'allTasksCompleted', label: 'All linked tasks completed',    weight: 10 }
+];
+
+const taskDocumentId = (task = {}) => String(task.documentId || task.document || task.docId || task.pageId || state.selectedDocumentId || '');
+
+// FIX: removed the state.selectedDocumentId fallback from threadDocumentId.
+// Using it caused threads with no documentId to be attributed to whatever
+// document happened to be open, polluting the wrong lecture's progress.
+const threadDocumentId = (thread = {}) => String(thread.documentId || thread.document || thread.docId || '');
+
+const materialDocumentId = (material = {}) => String(material.documentId || material.document || material.docId || '');
+
+const allKnownTasks = () => {
+  const seen = new Set();
+  return [...state.dashboardTasks, ...state.documentTasks].filter((task) => {
+    const key = String(task._id || task.id || `${taskDocumentId(task)}:${task.title}`);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const allKnownThreads = () => {
+  const seen = new Set();
+  return [...state.workspaceThreads, ...state.documentMessages].filter((thread) => {
+    const key = String(thread._id || thread.id || `${threadDocumentId(thread)}:${thread.body}`);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const allKnownStudyMaterials = () => {
+  const seen = new Set();
+  return [...state.demoStudyMaterials, ...state.studyMaterials].filter((material) => {
+    const key = String(material._id || material.id || `${materialDocumentId(material)}:${material.type}:${material.title}`);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const studyMaterialMatchesAction = (material = {}, actions = []) => {
+  const type = String(material.type || material.materialType || '').toLowerCase();
+  const action = String(material.action || material.aiAction || material.sourceAction || '').toLowerCase();
+  const title = String(material.title || '').toLowerCase();
+  return actions.some((value) => type === value || action === value || title.includes(value.replace(/_/g, ' ')));
+};
+
+const lectureMilestoneFlags = (doc = selectedDocument()) => {
+  const docId = String(doc?._id || '');
+  // Merge in-memory flags with the persisted localStorage flags so progress
+  // survives page refreshes (backend Document schema has no milestones field).
+  const inMemory = doc?.learningMilestones || {};
+  const persisted = loadMilestonesForDoc(docId);
+  const stored = { ...persisted, ...inMemory };
+
+  // Use live editor text only for the currently open document.
+  const text = String(doc?.plainTextContent || (docId === String(state.selectedDocumentId) ? getEditorText() : '') || '').trim();
+  const tasks = allKnownTasks().filter((task) => taskDocumentId(task) === docId);
+  const threads = allKnownThreads().filter((thread) => threadDocumentId(thread) === docId);
+  const materials = allKnownStudyMaterials().filter((material) => materialDocumentId(material) === docId);
+
+  // FIX: raised notesAdded threshold from 40 to 200 characters.
+  // 40 chars is a single sentence; 200 chars represents a real paragraph of notes.
+  const NOTES_THRESHOLD = 200;
+
+  return {
+    created:            Boolean(docId),
+    notesAdded:         Boolean(stored.notesAdded)        || text.length >= NOTES_THRESHOLD,
+    aiExplanation:      Boolean(stored.aiExplanation)     || materials.some((m) => studyMaterialMatchesAction(m, ['explanation', 'simple-explanation'])),
+    summaryGenerated:   Boolean(stored.summaryGenerated)  || materials.some((m) => studyMaterialMatchesAction(m, ['summary', 'summarize'])),
+    flashcardsGenerated:Boolean(stored.flashcardsGenerated)||materials.some((m) => studyMaterialMatchesAction(m, ['flashcards'])),
+    quizGenerated:      Boolean(stored.quizGenerated)     || materials.some((m) => studyMaterialMatchesAction(m, ['quiz'])),
+    doubtResolved:      Boolean(stored.doubtResolved)     || threads.some((thread) => thread.status === 'resolved'),
+    taskCreated:        Boolean(stored.taskCreated)       || tasks.length > 0,
+    allTasksCompleted:  Boolean(stored.allTasksCompleted) || (tasks.length > 0 && tasks.every((task) => task.status === 'done'))
+  };
+};
+
+const calculateLectureLearningProgress = (doc = selectedDocument()) => {
+  const flags = lectureMilestoneFlags(doc);
+  const milestones = LECTURE_PROGRESS_MILESTONES.map((milestone) => ({
+    ...milestone,
+    complete: Boolean(flags[milestone.key])
+  }));
+  const score = milestones.reduce((sum, milestone) => sum + (milestone.complete ? milestone.weight : 0), 0);
+  return { score: Math.min(100, score), milestones };
+};
+
+const setLectureProgressSnapshot = (docId = state.selectedDocumentId) => {
+  const doc = state.documents.find((item) => documentKey(item) === String(docId));
+  if (!doc) return null;
+  const progress = calculateLectureLearningProgress(doc);
+  doc.progress = progress.score;
+  doc.learningProgress = progress;
+  return progress;
+};
+
+const markLectureMilestone = (docId, milestoneKey, { message = '', show = true } = {}) => {
+  const doc = state.documents.find((item) => documentKey(item) === String(docId || state.selectedDocumentId));
+  if (!doc || !milestoneKey) return null;
+  const before = calculateLectureLearningProgress(doc).score;
+  const newFlags = { [milestoneKey]: true };
+  doc.learningMilestones = { ...(doc.learningMilestones || {}), ...newFlags };
+  // Persist so progress survives page refreshes (backend has no milestones field)
+  saveMilestonesForDoc(doc._id, newFlags);
+  const progress = setLectureProgressSnapshot(doc._id);
+  if (show && progress && progress.score > before) {
+    const mastered = progress.score >= 90 && before < 90;
+    showToast(mastered
+      ? `Congratulations! ${doc.category || doc.title || 'This lecture'} is now mastered (${progress.score}%).`
+      : `${message || 'Lecture progress updated'} — Lecture progress increased to ${progress.score}%.`);
+  }
+  return progress;
+};
+
+const refreshLectureProgress = (docId = state.selectedDocumentId, { message = '', show = false } = {}) => {
+  const doc = state.documents.find((item) => documentKey(item) === String(docId));
+  if (!doc) return null;
+  const before = Number(doc.progress || 0);
+  const progress = setLectureProgressSnapshot(doc._id);
+  if (show && progress && progress.score > before) {
+    const mastered = progress.score >= 90 && before < 90;
+    showToast(mastered
+      ? `Congratulations! ${doc.category || doc.title || 'This lecture'} is now mastered (${progress.score}%).`
+      : `${message || 'Lecture progress updated'} — Lecture progress increased to ${progress.score}%.`);
+  }
+  return progress;
+};
+
+/* ─────────────────────────────────────────────────────────────────────────
+   STREAK ENGINE
+   Persists { count, longestStreak, lastActiveDate } in localStorage.
+
+   Rules:
+     • A "study day" = any day the user performs a real learning action
+       (edit, AI, task, doubt, lecture creation).  This is tracked by
+       calling updateStreak() inside addActivity().
+     • On load: if lastActiveDate was TODAY → streak already counted for today.
+     • On load: if lastActiveDate was YESTERDAY → streak is still alive.
+     • On load: if gap > 1 day → streak resets to 0 (broken).
+     • Demo mode always returns a fixed demo streak (5 days).
+   ─────────────────────────────────────────────────────────────────────── */
+const STREAK_KEY = 'nexus_study_streak';
+
+/** Return today's date as a UTC YYYY-MM-DD string (timezone-safe comparison). */
+const todayDateStr = () => new Date().toISOString().slice(0, 10);
+
+/** Diff in whole calendar days between two YYYY-MM-DD strings. */
+const daysBetween = (a, b) => {
+  const msPerDay = 86_400_000;
+  return Math.round((new Date(b) - new Date(a)) / msPerDay);
+};
+
+/**
+ * Read the persisted streak record.
+ * Returns { count, longestStreak, lastActiveDate, activeToday }
+ */
+const readStreakRecord = () => {
+  try {
+    const raw = localStorage.getItem(STREAK_KEY);
+    if (!raw) return { count: 0, longestStreak: 0, lastActiveDate: null, activeToday: false };
+    const rec = JSON.parse(raw);
+    return {
+      count: Number(rec.count) || 0,
+      longestStreak: Number(rec.longestStreak) || 0,
+      lastActiveDate: rec.lastActiveDate || null,
+      activeToday: rec.lastActiveDate === todayDateStr()
+    };
+  } catch {
+    return { count: 0, longestStreak: 0, lastActiveDate: null, activeToday: false };
+  }
+};
+
+/**
+ * Write a streak record to localStorage.
+ */
+const writeStreakRecord = (rec) => {
+  try { localStorage.setItem(STREAK_KEY, JSON.stringify(rec)); } catch { /* quota error — ignore */ }
+};
+
+/**
+ * Call on each real learning action (hooked into addActivity).
+ * Increments streak for today if not yet counted; resets if gap > 1 day.
+ * Returns the updated record.
+ */
+const updateStreak = () => {
+  if (state.demoMode) return; // demo mode uses fixed values
+  const today = todayDateStr();
+  const rec = readStreakRecord();
+
+  if (rec.lastActiveDate === today) {
+    // Already counted today — nothing to change
+    return rec;
+  }
+
+  let newCount;
+  if (!rec.lastActiveDate) {
+    // First ever activity
+    newCount = 1;
+  } else {
+    const gap = daysBetween(rec.lastActiveDate, today);
+    if (gap === 1) {
+      // Consecutive day — extend streak
+      newCount = rec.count + 1;
+    } else {
+      // Gap > 1 day — streak broken, start fresh
+      newCount = 1;
+    }
+  }
+
+  const newRecord = {
+    count: newCount,
+    longestStreak: Math.max(newCount, rec.longestStreak || 0),
+    lastActiveDate: today,
+    activeToday: true
+  };
+  writeStreakRecord(newRecord);
+  return newRecord;
+};
+
+/**
+ * Read current streak, applying expiry logic:
+ *   - If lastActiveDate is today or yesterday → streak is valid.
+ *   - If gap > 1 day → streak is 0 (broken, but we don't overwrite storage
+ *     until the user acts again).
+ * This way the UI always shows the correct live streak on page load.
+ */
+const computeStudyStreak = () => {
+  if (state.demoMode) return { currentStreak: 5, longestStreak: 12, activeToday: true };
+  const today = todayDateStr();
+  const rec = readStreakRecord();
+  if (!rec.lastActiveDate) return { currentStreak: 0, longestStreak: 0, activeToday: false };
+
+  const gap = daysBetween(rec.lastActiveDate, today);
+  if (gap === 0) {
+    // User already did something today
+    return { currentStreak: rec.count, longestStreak: rec.longestStreak, activeToday: true };
+  } else if (gap === 1) {
+    // Yesterday was the last active day — streak still alive, awaiting today's action
+    return { currentStreak: rec.count, longestStreak: rec.longestStreak, activeToday: false };
+  } else {
+    // Gap > 1 day — streak is broken
+    return { currentStreak: 0, longestStreak: rec.longestStreak, activeToday: false };
+  }
+};
+
+const calculateWorkspaceLearningProgress = () => {
+  const lectures = state.documents.map((doc) => {
+    const progress = calculateLectureLearningProgress(doc);
+    doc.progress = progress.score;
+    doc.learningProgress = progress;
+    return { ...doc, learningProgress: progress, progress: progress.score };
+  });
+  const totalLectures = lectures.length;
+
+  // FIX: Only include lectures that have some real content (progress > 5%)
+  // in the workspace average. Newly created empty lectures only have
+  // created=true (5%), so including them drags the overall score down
+  // even though the user hasn't started them yet.
+  const activeLectures = lectures.filter((doc) => doc.progress > 5);
+  const overallProgress = activeLectures.length
+    ? Math.round(activeLectures.reduce((sum, doc) => sum + doc.progress, 0) / activeLectures.length)
+    : 0;
+
+  const tasks = allKnownTasks();
+  const completedTasks = tasks.filter((task) => task.status === 'done').length;
+  const pendingTasks = tasks.filter((task) => task.status !== 'done').length;
+  const courseProgress = Object.entries(lectures.reduce((groups, lecture) => {
+    const course = lecture.category || lecture.title?.split(':')[0]?.trim() || 'Notes';
+    groups[course] = [...(groups[course] || []), lecture.progress];
+    return groups;
+  }, {})).map(([course, values]) => ({
+    course,
+    progress: Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+  }));
+
+  const streak = computeStudyStreak();
+
+  return {
+    overallProgress,
+    totalLectures,
+    masteredLectures: lectures.filter((doc) => doc.progress >= 90).length,
+    inProgressLectures: lectures.filter((doc) => doc.progress >= 30 && doc.progress < 90).length,
+    notStartedLectures: lectures.filter((doc) => doc.progress < 30).length,
+    completedTasks,
+    pendingTasks,
+    studyStreak: streak.currentStreak,
+    longestStreak: streak.longestStreak,
+    streakActiveToday: streak.activeToday,
+    lectures,
+    courseProgress
+  };
+};
 
 const hydrateDemoWorkspace = ({ selectedDocumentId = state.selectedDocumentId } = {}) => {
   const { createDemoState, DEMO_WORKSPACE_ID } = requireDemoWorkspaceModule();
   const demo = createDemoState();
   const documentId = demo.documents.some((doc) => String(doc._id) === String(selectedDocumentId))
     ? selectedDocumentId
-    : 'demo-doc-ds-lecture';
+    : 'demo-doc-os-deadlocks';
 
   state.user = demo.user;
   state.workspaces = demo.workspaces.map((workspace) => ({
@@ -608,7 +999,7 @@ const hydrateDemoWorkspace = ({ selectedDocumentId = state.selectedDocumentId } 
   state.documentMessages = demo.documentMessages.slice(0, 5);
   state.workspaceThreads = state.documentMessages
     .slice(0, 5)
-    .map((thread) => ({ ...thread, documentTitle: 'Distributed Systems - Lecture Notes', documentId: 'demo-doc-ds-lecture' }));
+    .map((thread) => ({ ...thread, documentTitle: 'Lecture 5: Deadlocks', documentId: 'demo-doc-os-deadlocks' }));
   state.documentTasks = demo.documentTasks.slice(0, 5);
   state.dashboardTasks = state.documentTasks;
   state.presence = demo.presence.slice(0, 3);
@@ -636,10 +1027,11 @@ const loadDemoDocument = (documentId = state.selectedDocumentId) => {
   state.pendingDoubtLinkedText = '';
   state.selectedThreadId = '';
   state.contextLoadedFor = { tasks: '', threads: '', library: '' };
-  els.documentTitleInput.value = doc.title || 'Untitled Page';
-  setEditorText(doc.plainTextContent || '');
+  els.documentTitleInput.value = doc.title || 'Untitled Lecture';
+  setEditorHtml(doc.contentHtml || '', doc.plainTextContent || '');
   state.lastSavedTitle = els.documentTitleInput.value;
   state.lastSavedText = doc.plainTextContent || '';
+  state.lastSavedHtml = doc.contentHtml || '';
   state.saveStatus = 'saved';
   state.pendingSavePromise = null;
   state.saveQueued = false;
@@ -664,7 +1056,9 @@ const enterDemoMode = async ({ route = 'home' } = {}) => {
   sessionStorage.setItem('demoMode', 'true');
   state.demoMode = true;
   state.token = '';
+  state.csrfToken = '';
   localStorage.removeItem('token');
+  localStorage.removeItem('csrfToken');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');
   localStorage.removeItem('workspaceId');
@@ -707,14 +1101,24 @@ const exitDemoMode = () => {
 const saveDemoDocument = ({ silent = false } = {}) => {
   const doc = selectedDocument();
   if (!doc) return null;
-  doc.title = els.documentTitleInput.value || 'Untitled document';
+  doc.title = els.documentTitleInput.value || 'Untitled lecture';
   doc.plainTextContent = getEditorText();
+  doc.contentHtml = getEditorHtml();
   doc.updatedAt = new Date().toISOString();
   state.lastSavedTitle = doc.title;
   state.lastSavedText = doc.plainTextContent;
+  state.lastSavedHtml = doc.contentHtml || '';
   state.saveStatus = 'saved';
   setAutosaveStatus(silent ? 'Demo autosaved locally' : 'Demo saved locally');
-  if (!silent) addActivity({ action: 'edited', target: doc.title || 'Untitled document', documentId: doc._id });
+  if (!silent) addActivity({ action: 'studied', target: doc.title || 'Untitled lecture', documentId: doc._id });
+  if (doc.plainTextContent.trim().length >= 40) {
+    markLectureMilestone(doc._id, 'notesAdded', {
+      message: 'Notes added',
+      show: !silent
+    });
+  } else {
+    refreshLectureProgress(doc._id);
+  }
   if (!silent) showToast('Demo changes are temporary. Create an account to save your own workspace.');
   render();
   return doc;
@@ -723,15 +1127,17 @@ const saveDemoDocument = ({ silent = false } = {}) => {
 const createDemoDocument = () => {
   const doc = {
     _id: `demo-doc-${Date.now()}`,
-    title: 'Untitled Page',
-    category: 'Project Work',
+    title: 'Untitled Lecture',
+    category: 'Operating Systems',
+    progress: 0,
+    revisionStatus: 'New lecture',
     plainTextContent: '',
     updatedAt: new Date().toISOString()
   };
   upsertDocument(doc, { prepend: true });
   loadDemoDocument(doc._id);
-  addActivity({ action: 'created document', target: doc.title, documentId: doc._id });
-  showToast('Demo document created locally');
+  addActivity({ action: 'created lecture', target: doc.title, documentId: doc._id });
+  showToast('Demo lecture created locally');
 };
 
 const demoAiResponse = (action) => {
@@ -755,7 +1161,9 @@ const setRouteChrome = (route) => {
 
 const normalizeContextTab = (tab = 'ai') => ({
   discussion: 'threads',
-  thread: 'threads'
+  thread: 'threads',
+  activity: 'ai',
+  progress: 'ai'
 }[tab] || tab);
 
 const activateContextTab = (tab) => {
@@ -816,12 +1224,12 @@ const renderCommandResults = () => {
     .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
 
   const docMatches = sortedDocs
-    .filter((doc) => !query || (doc.title || 'Untitled Page').toLowerCase().includes(query))
+    .filter((doc) => !query || (doc.title || 'Untitled Lecture').toLowerCase().includes(query))
     .slice(0, 5)
     .map((doc) => ({
-      type: 'Document',
-      label: doc.title || 'Untitled Page',
-      subtitle: doc.updatedAt ? `Last edited ${formatRelativeTime(doc.updatedAt)}` : 'Workspace document',
+      type: 'Lecture',
+      label: doc.title || 'Untitled Lecture',
+      subtitle: doc.updatedAt ? `Last studied ${formatRelativeTime(doc.updatedAt)}` : 'Workspace lecture',
       action: 'Open',
       attrs: `data-command-document="${doc._id}"`
     }));
@@ -838,9 +1246,9 @@ const renderCommandResults = () => {
     }));
 
   const actions = [
-    { type: 'Action', label: 'Create new document', subtitle: 'Start a blank note in this workspace', action: 'Run', attrs: 'data-command-action="new-document"' },
+    { type: 'Action', label: 'Create new lecture', subtitle: 'Start a living lecture in this workspace', action: 'Run', attrs: 'data-command-action="new-document"' },
     { type: 'Action', label: 'Toggle focus mode', subtitle: 'Distraction-free learning environment', action: 'Run', attrs: 'data-command-action="focus"' },
-    { type: 'Action', label: 'Open AI panel', subtitle: 'Chat with Nexus Gemini AI helper', action: 'Run', attrs: 'data-command-action="ai"' }
+    { type: 'Action', label: 'Open tutor panel', subtitle: 'Summaries, quizzes, flashcards, and explanations', action: 'Run', attrs: 'data-command-action="ai"' }
   ].filter((item) => !query || item.label.toLowerCase().includes(query));
 
   const items = [...docMatches, ...channelMatches, ...actions];
@@ -857,14 +1265,14 @@ const renderCommandResults = () => {
       <div class="command-empty-state">
         <span class="empty-icon-bubble">⌕</span>
         <h3>No results found</h3>
-        <p>Try searching for a document title, channel name, or action keyword.</p>
+        <p>Try searching for a lecture title, doubt, channel name, or action keyword.</p>
         <div class="command-empty-quick-actions">
           <button class="quick-action-btn" data-command-action="new-document" type="button">
-            <span>Create new document</span>
+            <span>Create new lecture</span>
             <kbd>↵</kbd>
           </button>
           <button class="quick-action-btn" data-command-action="ai" type="button">
-            <span>Ask AI</span>
+            <span>Ask tutor</span>
             <kbd>↵</kbd>
           </button>
         </div>
@@ -877,7 +1285,7 @@ const renderCommandResults = () => {
   let lastGroup = null;
   items.forEach((item, index) => {
     let groupName = '';
-    if (item.type === 'Document') groupName = 'Documents';
+    if (item.type === 'Lecture' || item.type === 'Document') groupName = 'Lectures';
     else if (item.type === 'Discussion') groupName = 'Discussions';
     else if (item.type === 'Action') groupName = 'Actions';
 
@@ -890,7 +1298,7 @@ const renderCommandResults = () => {
     const selectedClass = isSelected ? 'selected' : '';
     
     let iconSvg = '';
-    if (item.type === 'Document') {
+    if (item.type === 'Lecture' || item.type === 'Document') {
       iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`;
     } else if (item.type === 'Discussion') {
       iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line><line x1="10" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="14" y2="21"></line></svg>`;
@@ -933,7 +1341,12 @@ const toggleFocusMode = (force) => {
   const shouldEnable = force ?? !document.body.classList.contains('focus-mode');
   if (shouldEnable && !document.body.classList.contains('document-workspace-screen')) return;
   document.body.classList.toggle('focus-mode', shouldEnable);
-  els.focusModeBtn.textContent = document.body.classList.contains('focus-mode') ? 'Exit focus' : 'Focus';
+  const active = document.body.classList.contains('focus-mode');
+  els.focusModeBtn.textContent = active ? 'Exit focus' : 'Focus';
+  els.focusModeBtn.setAttribute('aria-label', active ? 'Exit focus mode' : 'Focus mode');
+  els.focusModeBtn.title = active ? 'Exit focus mode' : 'Focus mode';
+  const toolbarFocusBtn = document.getElementById('focusModeToolbarBtn');
+  if (toolbarFocusBtn) toolbarFocusBtn.textContent = active ? 'Exit' : 'Focus';
 };
 
 const toggleSidebarCollapse = (force) => {
@@ -978,6 +1391,7 @@ const errorState = (message) => `
 const setLoading = (key, value, { scoped = false } = {}) => {
   state.loading[key] = value;
   if (key === 'document') return renderEditor();
+  if (key === 'threads' && currentRoute() === 'threads' && document.querySelector('.threads-page')) return renderThreadsPage();
   if (scoped && key === 'tasks') return renderTaskList();
   if (scoped && key === 'messages') return renderThreadList();
   if (scoped && key === 'studyMaterials') return renderStudyLibrary();
@@ -990,11 +1404,11 @@ const setError = (key, message = '') => {
   else delete state.errors[key];
 };
 
-const isTextareaEditor = () => els.documentEditor?.tagName === 'TEXTAREA';
+const editorUsesRichContent = () => Boolean(els.documentEditor && els.documentEditor.tagName !== 'TEXTAREA');
 
 const getEditorText = () => {
   if (!els.documentEditor) return '';
-  return isTextareaEditor() ? els.documentEditor.value : (els.documentEditor.innerText || '');
+  return editorUsesRichContent() ? (els.documentEditor.innerText || '') : (els.documentEditor.value || '');
 };
 
 const updateEditorEmptyState = () => {
@@ -1008,9 +1422,74 @@ const updateEditorEmptyState = () => {
   }
 };
 
-// Nexus editor is plain text for this MVP.
-// Do not save or render raw HTML because that can create stored XSS.
-const getEditorHtml = () => '';
+const sanitizeEditorStyle = (style = '') => {
+  const allowed = [];
+  style.split(';').forEach((rule) => {
+    const [rawName, rawValue] = rule.split(':');
+    const name = rawName?.trim().toLowerCase();
+    const value = rawValue?.trim();
+    if (!name || !value) return;
+    if (!['color', 'background-color', 'font-weight', 'font-style', 'text-decoration', 'text-decoration-line'].includes(name)) return;
+    if (/^(#[0-9a-f]{3,8}|rgb(a)?\([^)]+\)|hsl(a)?\([^)]+\)|[a-z-]+)$/i.test(value)) {
+      allowed.push(`${name}: ${value}`);
+    }
+  });
+  return allowed.join('; ');
+};
+
+const normalizeBrowserEditorMarkup = (root) => {
+  root.querySelectorAll('font[color]').forEach((fontNode) => {
+    const color = fontNode.getAttribute('color');
+    const span = document.createElement('span');
+    span.setAttribute('style', `color: ${color}`);
+    while (fontNode.firstChild) span.appendChild(fontNode.firstChild);
+    fontNode.replaceWith(span);
+  });
+};
+
+const sanitizeEditorHtml = (html = '') => {
+  const template = document.createElement('template');
+  template.innerHTML = String(html || '');
+  normalizeBrowserEditorMarkup(template.content);
+  const allowedTags = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'STRIKE', 'SPAN', 'MARK', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'PRE', 'CODE', 'HR', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'A', 'IMG', 'H1', 'H2', 'H3', 'DETAILS', 'SUMMARY', 'FIGURE', 'FIGCAPTION', 'SUP', 'SUB', 'INPUT']);
+  const allowedAttrs = new Set(['href', 'src', 'alt', 'title', 'style', 'class', 'target', 'rel', 'type', 'checked', 'disabled']);
+  template.content.querySelectorAll('*').forEach((node) => {
+    if (!allowedTags.has(node.tagName)) {
+      node.replaceWith(document.createTextNode(node.textContent || ''));
+      return;
+    }
+    [...node.attributes].forEach((attr) => {
+      const name = attr.name.toLowerCase();
+      if (name.startsWith('on') || !allowedAttrs.has(name)) {
+        node.removeAttribute(attr.name);
+        return;
+      }
+      if ((name === 'href' || name === 'src') && /^(javascript|data:text\/html)/i.test(attr.value.trim())) {
+        node.removeAttribute(attr.name);
+        return;
+      }
+      if (name === 'style') {
+        const nextStyle = sanitizeEditorStyle(attr.value);
+        if (nextStyle) node.setAttribute('style', nextStyle);
+        else node.removeAttribute('style');
+      }
+    });
+    if (node.tagName === 'INPUT') {
+      if (node.getAttribute('type') !== 'checkbox') node.remove();
+      else node.setAttribute('disabled', '');
+    }
+    if (node.tagName === 'A') {
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+  return template.innerHTML;
+};
+
+const getEditorHtml = () => {
+  if (!els.documentEditor) return '';
+  return editorUsesRichContent() ? sanitizeEditorHtml(els.documentEditor.innerHTML || '') : '';
+};
 
 const htmlToPlainText = (html = '') => {
   if (!html) return '';
@@ -1021,33 +1500,42 @@ const htmlToPlainText = (html = '') => {
 const setEditorText = (value = '') => {
   if (!els.documentEditor) return;
   const nextValue = String(value);
-  if (isTextareaEditor()) {
-    if (els.documentEditor.value === nextValue) {
-      updateEditorEmptyState();
-      return;
-    }
-    const wasFocused = document.activeElement === els.documentEditor;
-    const selectionStart = els.documentEditor.selectionStart || 0;
-    const selectionEnd = els.documentEditor.selectionEnd || selectionStart;
+  if (!editorUsesRichContent()) {
     els.documentEditor.value = nextValue;
-    if (wasFocused) {
-      const nextStart = Math.min(selectionStart, nextValue.length);
-      const nextEnd = Math.min(selectionEnd, nextValue.length);
-      els.documentEditor.setSelectionRange(nextStart, nextEnd);
-    }
     updateEditorEmptyState();
+    updateEditorStudyStats();
     return;
   }
-  if (els.documentEditor.textContent === nextValue) {
+  if (els.documentEditor.innerText === nextValue) {
     updateEditorEmptyState();
+    updateEditorStudyStats();
     return;
   }
-  els.documentEditor.textContent = nextValue;
+  const escaped = escapeHtml(nextValue)
+    .split(/\n{2,}/)
+    .map((block) => `<p>${block.replace(/\n/g, '<br>') || '<br>'}</p>`)
+    .join('');
+  els.documentEditor.innerHTML = nextValue.trim() ? escaped : '';
   updateEditorEmptyState();
+  updateEditorStudyStats();
 };
 
 const setEditorHtml = (html = '', fallbackText = '') => {
-  setEditorText(fallbackText || htmlToPlainText(html));
+  if (!els.documentEditor || !editorUsesRichContent()) {
+    setEditorText(fallbackText || htmlToPlainText(html));
+    return;
+  }
+  const sanitized = sanitizeEditorHtml(html);
+  if (sanitized.trim()) {
+    els.documentEditor.innerHTML = sanitized;
+  } else if (/<\/?(span|mark|u|strong|em|s|h1|h2|h3|blockquote|pre|table|div|a)\b/i.test(fallbackText || '')) {
+    els.documentEditor.innerHTML = sanitizeEditorHtml(fallbackText);
+  } else {
+    setEditorText(fallbackText || htmlToPlainText(html));
+    return;
+  }
+  updateEditorEmptyState();
+  updateEditorStudyStats();
 };
 
 const insertStarterOutline = () => {
@@ -1076,12 +1564,6 @@ const insertStarterOutline = () => {
 };
 
 const getEditorSelection = () => {
-  if (isTextareaEditor()) {
-    const start = els.documentEditor.selectionStart || 0;
-    const end = els.documentEditor.selectionEnd || start;
-    return { start, end };
-  }
-
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || !els.documentEditor.contains(selection.anchorNode)) {
     const length = getEditorText().length;
@@ -1104,11 +1586,6 @@ const getEditorSelection = () => {
 };
 
 const getSelectedEditorText = () => {
-  if (isTextareaEditor()) {
-    const { start, end } = getEditorSelection();
-    return getEditorText().slice(start, end).trim();
-  }
-
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || !els.documentEditor.contains(selection.anchorNode)) return '';
   return selection.toString().trim();
@@ -1132,7 +1609,296 @@ const updateAiSelectionHint = () => {
 
 const scheduleAiSelectionHintUpdate = () => {
   window.clearTimeout(aiSelectionHintTimer);
-  aiSelectionHintTimer = window.setTimeout(updateAiSelectionHint, 80);
+  aiSelectionHintTimer = window.setTimeout(() => {
+    updateAiSelectionHint();
+    updateFloatingSelectionToolbar();
+  }, 80);
+};
+
+const editorSelectionRange = () => {
+  const { start, end } = getEditorSelection();
+  return {
+    start: Math.min(start, end),
+    end: Math.max(start, end)
+  };
+};
+
+const focusEditorRange = (start, end = start) => {
+  if (!els.documentEditor) return;
+  els.documentEditor.focus();
+  const range = document.createRange();
+  const walker = document.createTreeWalker(els.documentEditor, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  let consumed = 0;
+  let startNode = null;
+  let endNode = null;
+  let startOffset = 0;
+  let endOffset = 0;
+  while (node) {
+    const nextConsumed = consumed + node.textContent.length;
+    if (!startNode && start <= nextConsumed) {
+      startNode = node;
+      startOffset = Math.max(0, start - consumed);
+    }
+    if (!endNode && end <= nextConsumed) {
+      endNode = node;
+      endOffset = Math.max(0, end - consumed);
+      break;
+    }
+    consumed = nextConsumed;
+    node = walker.nextNode();
+  }
+  if (!startNode || !endNode) return;
+  range.setStart(startNode, startOffset);
+  range.setEnd(endNode, endOffset);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
+const replaceEditorRange = (start, end, replacement, { selectInserted = false } = {}) => {
+  const value = getEditorText();
+  const nextValue = `${value.slice(0, start)}${replacement}${value.slice(end)}`;
+  setEditorText(nextValue);
+  const nextStart = start;
+  const nextEnd = start + replacement.length;
+  applyEditorInputToYDoc();
+  publishCursor();
+  scheduleAutosave();
+  updateEditorEmptyState();
+  updateEditorStudyStats();
+  focusEditorRange(selectInserted ? nextStart : nextEnd, selectInserted ? nextEnd : nextEnd);
+};
+
+const selectedOrPlaceholder = (placeholder = 'selected text') => {
+  const selected = getSelectedEditorText();
+  return selected || placeholder;
+};
+
+const saveEditorSelection = () => {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !els.documentEditor?.contains(selection.anchorNode)) return;
+  const newRange = selection.getRangeAt(0);
+  if (document.activeElement !== els.documentEditor) {
+    if (savedEditorRange && !savedEditorRange.collapsed && newRange.collapsed) {
+      return;
+    }
+  }
+  savedEditorRange = newRange.cloneRange();
+};
+
+const restoreEditorSelection = () => {
+  if (!savedEditorRange || !els.documentEditor) return false;
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(savedEditorRange);
+  els.documentEditor.focus();
+  return true;
+};
+
+const commitRichEditorChange = () => {
+  if (!els.documentEditor) return;
+  els.documentEditor.innerHTML = sanitizeEditorHtml(els.documentEditor.innerHTML);
+  applyEditorInputToYDoc();
+  publishCursor();
+  publishTyping();
+  scheduleAutosave();
+  updateEditorEmptyState();
+  updateEditorStudyStats();
+  saveEditorSelection();
+};
+
+const execRichCommand = (command, value = null) => {
+  restoreEditorSelection();
+  els.documentEditor.focus();
+  if (['foreColor', 'hiliteColor', 'backColor'].includes(command)) {
+    document.execCommand('styleWithCSS', false, true);
+  }
+  const applied = document.execCommand(command, false, value);
+  if (command === 'hiliteColor' && !applied) {
+    document.execCommand('backColor', false, value);
+  }
+  commitRichEditorChange();
+};
+
+const insertRichHtml = (html = '') => {
+  restoreEditorSelection();
+  els.documentEditor.focus();
+  document.execCommand('insertHTML', false, sanitizeEditorHtml(html));
+  commitRichEditorChange();
+};
+
+const wrapEditorSelection = (before, after = before, placeholder = 'text') => {
+  const { start, end } = editorSelectionRange();
+  const selected = getEditorText().slice(start, end) || placeholder;
+  replaceEditorRange(start, end, `${before}${selected}${after}`, { selectInserted: !getSelectedEditorText() });
+};
+
+const prefixSelectedLines = (prefixFactory) => {
+  const { start, end } = editorSelectionRange();
+  const value = getEditorText();
+  const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  const lineEndIndex = value.indexOf('\n', end);
+  const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+  const block = value.slice(lineStart, lineEnd) || 'Study point';
+  const lines = block.split('\n');
+  const replacement = lines.map((line, index) => `${prefixFactory(index)}${line.replace(/^(\s*[-*]|\s*\d+\.|\s*>\s?|\s*-\s\[[ x]\])\s*/, '')}`).join('\n');
+  replaceEditorRange(lineStart, lineEnd, replacement);
+};
+
+const insertEditorBlock = (block) => {
+  const { start, end } = editorSelectionRange();
+  const value = getEditorText();
+  const needsBefore = start > 0 && value[start - 1] !== '\n';
+  const needsAfter = end < value.length && value[end] !== '\n';
+  replaceEditorRange(start, end, `${needsBefore ? '\n\n' : ''}${block}${needsAfter ? '\n\n' : ''}`);
+};
+
+const insertEditorInline = (text) => {
+  const { start, end } = editorSelectionRange();
+  replaceEditorRange(start, end, text);
+};
+
+const markdownFileName = (file) => (file?.name || 'uploaded-file').replace(/[\n\r[\]()]/g, ' ').trim() || 'uploaded-file';
+
+const updateEditorStudyStats = () => {
+  const text = getEditorText();
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const readTime = Math.max(1, Math.ceil(words / 220));
+  const scrollContainer = document.querySelector('.editor-pane') || els.documentEditor;
+  const maxScroll = Math.max(1, (scrollContainer?.scrollHeight || 0) - (scrollContainer?.clientHeight || 0));
+  const progress = !text.trim() ? 0 : Math.min(100, Math.max(0, Math.round(((scrollContainer?.scrollTop || 0) / maxScroll) * 100)));
+  if (els.editorWordCount) els.editorWordCount.textContent = `${words} ${words === 1 ? 'word' : 'words'}`;
+  if (els.editorReadingTime) els.editorReadingTime.textContent = `${readTime} min read`;
+  if (els.editorReadingProgress) els.editorReadingProgress.textContent = `${progress}% read`;
+  if (els.editorLastEdited) {
+    const doc = selectedDocument();
+    els.editorLastEdited.textContent = doc?.updatedAt ? `Edited ${formatRelativeTime(doc.updatedAt)}` : 'Not edited';
+  }
+};
+
+const updateFloatingSelectionToolbar = () => {
+  if (!els.editorFloatingToolbar || !els.documentEditor) return;
+  const selectedText = getSelectedEditorText();
+  const selection = window.getSelection();
+  if (!selectedText || !selection?.rangeCount || !els.documentEditor.contains(selection.anchorNode)) {
+    els.editorFloatingToolbar.classList.add('hidden');
+    return;
+  }
+  const selectionRect = selection.getRangeAt(0).getBoundingClientRect();
+  const editorRect = els.documentEditor.getBoundingClientRect();
+  const toolbar = els.editorFloatingToolbar;
+  toolbar.classList.remove('hidden');
+  const top = Math.max(12, (selectionRect.top || editorRect.top) - 48);
+  const left = Math.min(window.innerWidth - 12, Math.max(12, (selectionRect.left || editorRect.left) + ((selectionRect.width || editorRect.width) / 2)));
+  toolbar.style.top = `${top}px`;
+  toolbar.style.left = `${left}px`;
+};
+
+const setAiSourceToSelection = () => {
+  const selectionRadio = document.querySelector('input[name="aiSource"][value="selection"]');
+  if (selectionRadio) selectionRadio.checked = true;
+  updateAiSelectionHint();
+};
+
+const createTaskFromSelection = () => {
+  const selected = selectedOrPlaceholder('selected lecture section');
+  if (!els.taskInput || !els.taskForm) return;
+  els.taskInput.value = `Revise: ${selected.replace(/\s+/g, ' ').slice(0, 90)}`;
+  activateContextTab('tasks');
+  els.taskForm.requestSubmit?.();
+  showToast('Study task created from selected text');
+};
+
+const startDiscussionFromSelection = () => {
+  const selected = selectedOrPlaceholder('selected lecture section');
+  state.pendingDoubtLinkedText = selected;
+  activateContextTab('threads');
+  renderMessageFormContext();
+  if (els.messageInput) {
+    els.messageInput.value = `Discussion: ${selected.replace(/\s+/g, ' ').slice(0, 120)}`;
+    els.messageInput.focus();
+  }
+  showToast('Discussion context attached to the selected text');
+};
+
+const createDoubtFromSelection = () => {
+  state.pendingDoubtLinkedText = selectedOrPlaceholder('selected lecture section');
+  showAskDoubtModal();
+};
+
+const markSelectionImportant = () => {
+  const selected = selectedOrPlaceholder('important concept');
+  restoreEditorSelection();
+  if (getSelectedEditorText()) execRichCommand('hiliteColor', '#fef3c7');
+  else insertRichHtml(`<mark style="background-color:#fef3c7">${escapeHtml(selected)}</mark>`);
+  showToast('Marked as important');
+};
+
+const runSelectionStudyAction = (action) => {
+  if (!getSelectedEditorText()) return showToast('Select lecture text first', true);
+  setAiSourceToSelection();
+  return runStudyAiAction(action);
+};
+
+const handleSelectionToolbarAction = (action) => {
+  const map = {
+    explain: 'simple-explanation',
+    summarize: 'summarize',
+    flashcards: 'flashcards',
+    quiz: 'quiz'
+  };
+  if (map[action]) return runSelectionStudyAction(map[action]);
+  if (action === 'task') return createTaskFromSelection();
+  if (action === 'discussion') return startDiscussionFromSelection();
+  if (action === 'important') return markSelectionImportant();
+  if (action === 'doubt') return createDoubtFromSelection();
+};
+
+const handleEditorCommand = (command) => {
+  if (!selectedDocument() || !els.documentEditor) return showToast('Open a lecture first', true);
+  const selected = selectedOrPlaceholder('study concept');
+  if (command === 'heading-1') return execRichCommand('formatBlock', 'H1');
+  if (command === 'heading-2') return execRichCommand('formatBlock', 'H2');
+  if (command === 'heading-3') return execRichCommand('formatBlock', 'H3');
+  if (command === 'paragraph') return execRichCommand('formatBlock', 'P');
+  if (command === 'bold') return execRichCommand('bold');
+  if (command === 'italic') return execRichCommand('italic');
+  if (command === 'underline') return execRichCommand('underline');
+  if (command === 'strike') return execRichCommand('strikeThrough');
+  if (command === 'text-color') return execRichCommand('foreColor', els.editorTextColorInput?.value || '#4f46e5');
+  if (command === 'highlight') return execRichCommand('hiliteColor', els.editorHighlightInput?.value || '#fef08a');
+  if (command === 'bullet-list') return execRichCommand('insertUnorderedList');
+  if (command === 'numbered-list') return execRichCommand('insertOrderedList');
+  if (command === 'checklist') return insertRichHtml(`<ul class="checklist"><li><input type="checkbox" disabled> ${escapeHtml(selected)}</li></ul>`);
+  if (command === 'quote') return execRichCommand('formatBlock', 'BLOCKQUOTE');
+  if (command === 'code-block') return insertRichHtml(`<pre><code>${escapeHtml(selected)}</code></pre>`);
+  if (command === 'divider') return insertRichHtml('<hr><p><br></p>');
+  if (command === 'table') return insertRichHtml('<table><tbody><tr><th>Concept</th><th>Meaning</th><th>Revision</th></tr><tr><td>Topic</td><td>Notes</td><td>To revise</td></tr></tbody></table><p><br></p>');
+  if (command === 'image') return els.editorImageInput?.click();
+  if (command === 'attachment') return els.editorAttachmentInput?.click();
+  if (command === 'link') {
+    const url = window.prompt('Paste the link URL');
+    if (!url) return;
+    if (getSelectedEditorText()) return execRichCommand('createLink', url);
+    return insertRichHtml(`<a href="${escapeHtml(url)}">${escapeHtml(selected)}</a>`);
+  }
+  if (command === 'equation') return insertRichHtml('<div class="equation-block">E = mc<sup>2</sup></div><p><br></p>');
+  if (command === 'callout') return insertRichHtml(`<div class="lecture-callout"><strong>Important</strong><p>${escapeHtml(selected)}</p></div><p><br></p>`);
+  if (command === 'undo') {
+    els.documentEditor.focus();
+    document.execCommand?.('undo');
+    updateEditorStudyStats();
+    scheduleAutosave();
+    return;
+  }
+  if (command === 'redo') {
+    els.documentEditor.focus();
+    document.execCommand?.('redo');
+    updateEditorStudyStats();
+    scheduleAutosave();
+    return;
+  }
 };
 
 const aiActionLabel = (action = '') => ({
@@ -1174,27 +1940,30 @@ const setAiOutput = (action, output) => {
   state.lastAiOutput = output;
   state.aiStudySession = buildAiStudySession(action, output);
   state.currentAiResultSavedId = '';
+  const milestoneKey = {
+    summarize: 'summaryGenerated',
+    'simple-explanation': 'aiExplanation',
+    explain: 'aiExplanation',
+    flashcards: 'flashcardsGenerated',
+    quiz: 'quizGenerated'
+  }[action];
+  if (milestoneKey && state.selectedDocumentId) {
+    markLectureMilestone(state.selectedDocumentId, milestoneKey, {
+      message: `${aiActionLabel(action)} generated`
+    });
+  }
   renderAiStudyOutput();
 };
 
 const updateLibrarySaveButton = () => {
   if (!els.saveAiToLibraryBtn) return;
-  const action = state.lastAiAction || 'summarize';
   const saved = Boolean(state.currentAiResultSavedId);
   const sessionType = state.aiStudySession?.type;
   els.saveAiToLibraryBtn.disabled = state.studyMaterialSaving || !state.lastAiOutput.trim() || (saved && !['quiz', 'flashcards'].includes(sessionType));
   if (state.studyMaterialSaving) {
     els.saveAiToLibraryBtn.textContent = 'Saving...';
-  } else if (saved && sessionType === 'quiz') {
-    els.saveAiToLibraryBtn.textContent = 'Update Saved Progress';
-  } else if (saved && sessionType === 'flashcards') {
-    els.saveAiToLibraryBtn.textContent = 'Update Saved Progress';
   } else if (saved) {
     els.saveAiToLibraryBtn.textContent = 'Saved';
-  } else if (action === 'quiz') {
-    els.saveAiToLibraryBtn.textContent = 'Save Quiz to Library';
-  } else if (action === 'flashcards') {
-    els.saveAiToLibraryBtn.textContent = 'Save Flashcards to Library';
   } else {
     els.saveAiToLibraryBtn.textContent = 'Save to Library';
   }
@@ -1251,7 +2020,7 @@ const refreshDocumentTitleChrome = ({ deferList = false } = {}) => {
   }
   const activeDocumentRow = els.documentList.querySelector(`[data-document-id="${CSS.escape(String(state.selectedDocumentId || ''))}"]`);
   const activeDocumentTitle = activeDocumentRow?.querySelector('.document-row-title');
-  if (activeDocumentTitle && doc) activeDocumentTitle.textContent = doc.title || 'Untitled Page';
+  if (activeDocumentTitle && doc) activeDocumentTitle.textContent = doc.title || 'Untitled Lecture';
 };
 
 const renderTaskList = () => {
@@ -1421,7 +2190,6 @@ const renderActiveContextPanel = () => {
   if (activeTab === 'tasks') renderTaskList();
   if (activeTab === 'library') renderStudyLibrary();
   if (activeTab === 'threads') renderThreadList();
-  if (activeTab === 'activity') renderActivityList();
   if (activeTab === 'members') renderPresence();
   if (activeTab === 'ai') updateLibrarySaveButton();
 };
@@ -1623,14 +2391,14 @@ const renderChannels = () => {
 };
 
 const renderDocumentRow = (item) => {
-  const title = item.title?.trim() || 'Untitled Page';
+  const title = item.title?.trim() || 'Untitled Lecture';
   const id = documentKey(item);
   const isActive = id === String(state.selectedDocumentId);
   const isDeleting = deletingDocumentIds.has(id);
   return `
-    <div class="document-row ${isActive ? 'active' : ''} ${isDeleting ? 'is-deleting' : ''}" data-document-id="${escapeHtml(id)}" role="button" tabindex="0" aria-label="Open document ${escapeHtml(title)}">
+    <div class="document-row ${isActive ? 'active' : ''} ${isDeleting ? 'is-deleting' : ''}" data-document-id="${escapeHtml(id)}" role="button" tabindex="0" aria-label="Open lecture ${escapeHtml(title)}">
       <span class="document-row-title">${escapeHtml(title)}</span>
-      <button class="document-delete-button" data-delete-document="${escapeHtml(id)}" aria-label="Delete document ${escapeHtml(title)}" title="Delete ${escapeHtml(title)}" type="button" ${isDeleting ? 'disabled' : ''}>
+      <button class="document-delete-button" data-delete-document="${escapeHtml(id)}" aria-label="Delete lecture ${escapeHtml(title)}" title="Delete ${escapeHtml(title)}" type="button" ${isDeleting ? 'disabled' : ''}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M3 6h18"></path>
           <path d="M8 6V4h8v2"></path>
@@ -1644,35 +2412,33 @@ const renderDocumentRow = (item) => {
 };
 
 const renderDocuments = () => {
-  const demo = isDemoMode();
   if (state.loading.documents) {
     els.documentList.innerHTML = loadingRows(5);
   } else if (state.errors.documents) {
     els.documentList.innerHTML = errorState(state.errors.documents);
   } else {
-    if (demo && state.documents.length) {
+    if (state.documents.length) {
       const groupedDocuments = state.documents.reduce((groups, item) => {
-        const category = item.category || 'Documents';
+        const category = item.category || 'Lectures';
         groups[category] = [...(groups[category] || []), item];
         return groups;
       }, {});
-      els.documentList.innerHTML = `${Object.entries(groupedDocuments).map(([category, items]) => `
+      els.documentList.innerHTML = `${Object.entries(groupedDocuments)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([category, items]) => `
         <div class="document-folder-title">${escapeHtml(category)}</div>
         ${items.map(renderDocumentRow).join('')}
       `).join('')}`;
     } else {
-      const documentsMarkup = state.documents.map(renderDocumentRow).join('');
-      els.documentList.innerHTML = documentsMarkup
-        ? documentsMarkup
-        : emptyState({
-        title: 'No documents yet',
-        body: 'Create your first study note or start from a simple template.',
-        action: '+ New Document',
+      els.documentList.innerHTML = emptyState({
+        title: 'No lectures yet',
+        body: 'Create your first living lecture and Nexus will organize notes, doubts, tasks, and revision around it.',
+        action: '+ New Lecture',
         actionId: 'emptyNewDocBtn',
         secondaryAction: 'Use Template',
         secondaryActionId: 'emptyTemplateDocBtn',
         icon: '▤',
-        hint: 'Start with one lecture, topic, or project.'
+        hint: 'Start with one lecture, topic, or exam unit.'
       });
     }
   }
@@ -1687,7 +2453,7 @@ const updateActiveDocumentSelection = () => {
 const renderEditor = () => {
   const renderStartedAt = performance.now();
   const doc = selectedDocument();
-  const documentTitle = doc?.title || els.documentTitleInput.value || 'Current document';
+  const documentTitle = doc?.title || els.documentTitleInput.value || 'Current lecture';
   document.body.classList.toggle('is-loading-document', state.loading.document);
   document.body.classList.toggle('has-no-document', !doc);
   els.saveDocBtn.disabled = !doc || state.loading.document;
@@ -1704,40 +2470,41 @@ const renderEditor = () => {
 
   if (!doc) {
     els.documentTitleInput.value = '';
-    els.documentTitleInput.placeholder = 'Select a document';
-    els.documentEditor.disabled = true;
-    els.documentEditor.placeholder = 'Select a note to start studying';
+    els.documentTitleInput.placeholder = 'Select a lecture';
+    els.documentEditor.setAttribute('contenteditable', 'false');
+    els.documentEditor.dataset.placeholder = 'Select a lecture to start studying';
     setEditorText('');
     state.lastAiAction = '';
     state.lastAiOutput = '';
     state.aiStudySession = null;
     renderAiEmptyState(null);
   } else {
-    els.documentTitleInput.placeholder = 'Untitled document';
-    els.documentEditor.disabled = false;
-    els.documentEditor.placeholder = 'Start writing your notes...';
+    els.documentTitleInput.placeholder = 'Untitled lecture';
+    els.documentEditor.setAttribute('contenteditable', 'true');
+    els.documentEditor.dataset.placeholder = 'Paste lecture notes, mark doubts, or ask the tutor to create a study outline...';
   }
 
-  const contextTitle = doc ? `"${doc.title || 'Untitled document'}"` : 'the current document';
+  const contextTitle = doc ? `"${doc.title || 'Untitled lecture'}"` : 'the current lecture';
   els.aiContextLabel.textContent = doc
-    ? `AI actions will use ${contextTitle}.`
-    : 'Select a document to use AI with document context.';
+    ? `The tutor already knows ${contextTitle}, selected text, saved study material, open doubts, and tasks.`
+    : 'Select a lecture to use the tutor with learning context.';
   els.tasksContextLabel.textContent = doc
-    ? `Tasks are scoped to ${contextTitle}.`
-    : 'Select a document to see document tasks.';
+    ? `Tasks are scoped to ${contextTitle} so revision work stays attached.`
+    : 'Select a lecture to see lecture tasks.';
   els.discussionContextLabel.textContent = doc
-    ? `Doubts are linked to ${contextTitle}.`
-    : 'Select a document to ask and resolve doubts.';
+    ? `Doubts stay linked to paragraphs inside ${contextTitle}.`
+    : 'Select a lecture to ask and resolve doubts.';
   els.membersContextLabel.textContent = doc
-    ? `Presence while editing ${contextTitle}.`
-    : 'Open a document to see live collaborators.';
+    ? `Presence while studying ${contextTitle}.`
+    : 'Open a lecture to see live collaborators.';
   if (els.libraryContextLabel) {
     els.libraryContextLabel.textContent = doc
-      ? `Saved study material for ${contextTitle}.`
-      : 'Open a note to view saved study material.';
+      ? `Saved quizzes, flashcards, explanations, and revision questions for ${contextTitle}.`
+      : 'Open a lecture to view saved study material.';
   }
 
   renderActiveContextPanel();
+  updateEditorStudyStats();
   updateTypingStatus();
   if (aiGenerationInFlight) setAiGenerating(true);
   recordDocumentOpenMeasure('renderEditor', renderStartedAt);
@@ -1772,7 +2539,11 @@ const setMainMode = (mode, options = {}) => {
   document.body.classList.toggle('document-workspace-screen', isDocumentWorkspace);
   if (!isDocumentWorkspace && document.body.classList.contains('focus-mode')) {
     document.body.classList.remove('focus-mode');
-    if (els.focusModeBtn) els.focusModeBtn.textContent = 'Focus';
+    if (els.focusModeBtn) {
+      els.focusModeBtn.textContent = 'Focus';
+      els.focusModeBtn.setAttribute('aria-label', 'Focus mode');
+      els.focusModeBtn.title = 'Focus mode';
+    }
   }
   
   // Restore user's saved preference
@@ -1807,6 +2578,8 @@ const lazyRouteModule = (name) => import(`./features/${name}.js`);
 
 const renderAuthPage = async (...args) => (await lazyRouteModule('auth')).renderAuthPage(...args);
 const renderPasswordRecoveryPage = async (...args) => (await lazyRouteModule('auth')).renderPasswordRecoveryPage(...args);
+const renderEmailVerificationPage = async (...args) => (await lazyRouteModule('auth')).renderEmailVerificationPage(...args);
+const renderOAuthCallbackPage = async (...args) => (await lazyRouteModule('auth')).renderOAuthCallbackPage(...args);
 const getDashboardData = async (...args) => (await lazyRouteModule('home')).getDashboardData(...args);
 const renderHomePage = async (...args) => (await lazyRouteModule('home')).renderHomePage(...args);
 const renderChatPage = async (...args) => (await lazyRouteModule('chat')).renderChatPage(...args);
@@ -1817,6 +2590,8 @@ const highlightSearchInDom = async (...args) => (await lazyRouteModule('chat')).
 const handleChatDropdownAction = async (...args) => (await lazyRouteModule('chat')).handleChatDropdownAction(...args);
 const handleChatAction = async (...args) => (await lazyRouteModule('chat')).handleChatAction(...args);
 const handleChatEmptyAction = async (...args) => (await lazyRouteModule('chat')).handleChatEmptyAction(...args);
+const showEmojiPicker = async (...args) => (await lazyRouteModule('chat')).showEmojiPicker(...args);
+const toggleReaction = async (...args) => (await lazyRouteModule('chat')).toggleReaction(...args);
 const renderThreadListSection = async (...args) => (await lazyRouteModule('threads')).renderThreadListSection(...args);
 const renderThreadDetailHtml = async (...args) => (await lazyRouteModule('threads')).renderThreadDetailHtml(...args);
 const renderThreadsPage = async (...args) => (await lazyRouteModule('threads')).renderThreadsPage(...args);
@@ -1936,7 +2711,7 @@ const closeChatSearch = () => {
   highlightSearchInDom('');
 };
 
-const handleChatMessageAction = (action, msgId, msgArticle) => {
+const handleChatMessageAction = (action, msgId, msgArticle, targetEl) => {
   if (action === 'copy') {
     const textEl = msgArticle?.querySelector('.chat-bubble p');
     const content = textEl?.textContent || '';
@@ -1954,6 +2729,11 @@ const handleChatMessageAction = (action, msgId, msgArticle) => {
       input.focus();
       const event = new Event('input', { bubbles: true });
       input.dispatchEvent(event);
+    }
+  } else if (action === 'react') {
+    const btn = targetEl?.closest('[data-msg-action="react"]');
+    if (btn && msgId) {
+      globalThis.showEmojiPicker(btn, msgId);
     }
   }
 };
@@ -2243,6 +3023,8 @@ const handleMembersMenuAction = async (menuAction) => {
 
 const addActivity = ({ actor = state.user?.username || state.user?.email || 'You', action, target, documentId = state.selectedDocumentId }) => {
   if (!action || !target) return;
+  // Advance the study streak whenever a real learning action happens
+  updateStreak();
   state.activityItems.unshift({
     id: `activity-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     actor,
@@ -2276,20 +3058,39 @@ const renderActivityList = () => {
   });
 };
 
+const currentUserIdentity = () => ({
+  id: String(state.user?.id || state.user?._id || ''),
+  email: String(state.user?.email || '').toLowerCase()
+});
+
+const isCurrentPresenceUser = (user = {}) => {
+  const currentUser = currentUserIdentity();
+  const presenceUserId = String(user.userId || user.id || user._id || '');
+  const presenceEmail = String(user.email || '').toLowerCase();
+  return Boolean(
+    (currentUser.id && presenceUserId && presenceUserId === currentUser.id) ||
+    (currentUser.email && presenceEmail && presenceEmail === currentUser.email)
+  );
+};
+
 const updateTypingStatus = () => {
   if (!els.typingStatus) return;
   const names = state.typingUsers
-    .filter((user) => user.userId !== state.user?.id)
+    .filter((user) => !isCurrentPresenceUser(user))
     .map((user) => user.username || user.email || user.userId || 'Someone');
   if (names.length) {
     els.typingStatus.textContent = `${names.slice(0, 2).join(', ')} ${names.length === 1 ? 'is' : 'are'} typing...`;
     els.typingStatus.classList.add('active');
     return;
   }
-  if (state.presence.length > 0) {
-    els.typingStatus.textContent = `${state.presence.length} ${state.presence.length === 1 ? 'person is' : 'people are'} here with you.`;
+  const otherPeople = state.presence.filter((user) => !isCurrentPresenceUser(user));
+  if (otherPeople.length === 1) {
+    const person = otherPeople[0]?.username || otherPeople[0]?.email?.split('@')[0] || 'Someone';
+    els.typingStatus.textContent = `${person} is also editing.`;
+  } else if (otherPeople.length > 1) {
+    els.typingStatus.textContent = `${otherPeople.length} people are also editing.`;
   } else {
-    els.typingStatus.textContent = 'Only you are editing.';
+    els.typingStatus.textContent = 'You are editing this document.';
   }
   els.typingStatus.classList.remove('active');
 };
@@ -2448,7 +3249,7 @@ const syncSettingsFormState = (workspace) => {
   const preferences = state.preferences;
   settingsWorkspaceName = workspace?.name || '';
   settingsWorkspaceDescription = workspace ? (localStorage.getItem(`nexusWorkspaceDescription_${workspace._id}`) || 'Shared workspace for notes, projects, tasks, and discussions.') : '';
-  settingsTheme = preferences.theme || 'light';
+  settingsTheme = localStorage.getItem('theme') || preferences.theme || 'light';
   settingsDensity = preferences.density || 'comfortable';
   settingsReduceMotion = Boolean(preferences.reduceMotion);
   settingsEmailNotifications = preferences.emailNotifications !== false;
@@ -2652,10 +3453,16 @@ const renderMarkdown = (text = '') => {
 };
 
 
-const cleanAiLine = (value = '') => String(value)
-  .replace(/^[-*•]\s*/, '')
-  .replace(/^#{1,6}\s*/, '')
-  .trim();
+const isAiSeparatorLine = (value = '') => /^[-*_=\s]{2,}$/.test(String(value || '').trim());
+
+const cleanAiLine = (value = '') => {
+  const text = String(value || '').trim();
+  if (isAiSeparatorLine(text)) return '';
+  return text
+    .replace(/^[-*•]\s*/, '')
+    .replace(/^#{1,6}\s*/, '')
+    .trim();
+};
 
 const stripAiLabel = (value = '', label = '') => cleanAiLine(value)
   .replace(new RegExp(`^${label}\\s*[:：-]\\s*`, 'i'), '')
@@ -2770,6 +3577,8 @@ const parseFlashcardsOutput = (output = '') => {
   let current = null;
 
   lines.forEach((line) => {
+    if (isAiSeparatorLine(line)) return;
+
     if (/^Front\s*[:：-]/i.test(line)) {
       if (current?.front && current?.back) cards.push(current);
       current = { front: stripAiLabel(line, 'Front'), back: '', tag: 'Study notes' };
@@ -2789,13 +3598,28 @@ const parseFlashcardsOutput = (output = '') => {
     }
 
     if (current && current.back && !/^Flashcards/i.test(line)) {
-      current.back = `${current.back} ${cleanAiLine(line)}`.trim();
+      const cleanedLine = cleanAiLine(line);
+      if (cleanedLine) current.back = `${current.back} ${cleanedLine}`.trim();
     }
   });
 
   if (current?.front && current?.back) cards.push(current);
-  return cards.map((card, index) => ({ ...card, id: `card-${index}` }));
+  return cards.map((card, index) => ({
+    ...card,
+    front: sanitizeFlashcardText(card.front),
+    back: sanitizeFlashcardText(card.back),
+    tag: sanitizeFlashcardText(card.tag) || 'Study notes',
+    id: `card-${index}`
+  }));
 };
+
+const sanitizeFlashcardText = (value = '') => String(value || '')
+  .split(/\r?\n/)
+  .map((line) => cleanAiLine(line))
+  .filter(Boolean)
+  .join('\n')
+  .replace(/(?:\s*[-*_=]{2,}\s*)+$/g, '')
+  .trim();
 
 const buildAiStudySession = (action = '', output = '') => {
   if (action === 'quiz') {
@@ -2872,8 +3696,8 @@ const renderStructuredAiOutput = (session) => {
         ${sections.map((section) => `
           <article class="study-section-card">
             <h4>${escapeHtml(section.title)}</h4>
-            ${section.text ? `<div>${renderMarkdown(section.text)}</div>` : ''}
-            ${section.items?.length ? `<ul>${section.items.map((item) => `<li>${renderMarkdown(item)}</li>`).join('')}</ul>` : ''}
+            ${section.text ? `<div class="study-section-body">${renderMarkdown(section.text)}</div>` : ''}
+            ${section.items?.length ? `<ul class="study-section-list">${section.items.map((item) => `<li>${renderMarkdown(item)}</li>`).join('')}</ul>` : ''}
           </article>
         `).join('')}
       </div>
@@ -3113,14 +3937,14 @@ const setCollabStatus = (message) => {
 const renderPresence = () => {
   const presenceStartedAt = performance.now();
   els.presenceList.innerHTML = state.presence.map((user) => {
-    const label = user.email || user.userId || 'Collaborator';
+    const label = isCurrentPresenceUser(user) ? 'You' : (user.email || user.userId || 'Collaborator');
     const status = user.cursor ? 'Editing' : 'Online';
     return `<span class="presence-pill" title="${escapeHtml(`${label} · ${status}`)}"><strong>${escapeHtml(getInitials(label))}</strong><span>${escapeHtml(status)}</span></span>`;
   }).join('');
 
   const peopleFallback = collaborationPeople().slice(0, 8);
   els.memberPresenceList.innerHTML = (state.presence.length ? state.presence.map((user) => {
-    const label = user.email || user.userId || 'Collaborator';
+    const label = isCurrentPresenceUser(user) ? 'You' : (user.email || user.userId || 'Collaborator');
     const status = user.cursor ? 'Editing now' : 'Online';
     return `
       <article class="member-row">
@@ -3148,7 +3972,7 @@ const renderPresence = () => {
   });
 
   els.remoteCursorLayer.innerHTML = state.presence
-    .filter((user) => user.userId !== state.user?.id && user.cursor)
+    .filter((user) => !isCurrentPresenceUser(user) && user.cursor)
     .map((user) => {
       const label = user.email || 'Collaborator';
       return `<span class="remote-cursor">${escapeHtml(label)} @ ${user.cursor.start}</span>`;
@@ -3314,44 +4138,120 @@ const sendWorkspaceChatMessage = async () => {
   const input = document.getElementById('workspaceChatInput');
   const content = input?.value.trim() || '';
   const channel = activeChatChannel();
-  if (!state.selectedWorkspaceId || !channel.slug || !content) return;
+  if (!state.selectedWorkspaceId || !channel.slug || (!content && !state.attachedFile)) return;
+
+  const fileInput = document.getElementById('chatFileInput');
+  const previewContainer = document.getElementById('chatAttachmentPreview');
+  const sendBtn = document.getElementById('workspaceChatSendBtn');
+
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.setAttribute('aria-busy', 'true');
+  }
 
   window.chatForceScrollBottom = true;
   publishChatTyping(false);
-  if (state.demoMode) {
-    const message = {
-      _id: `demo-chat-${Date.now()}`,
-      workspace: state.selectedWorkspaceId,
-      channelId: channel.slug,
-      sender: { _id: state.user?.id, username: state.user?.username || 'You' },
-      content,
-      createdAt: new Date().toISOString()
-    };
+
+  let messageContent = content;
+
+  try {
+    if (state.attachedFile) {
+      const file = state.attachedFile;
+      if (state.demoMode) {
+        const mockAttachmentId = `demo-attach-${Date.now()}-${Math.random()}`;
+        state.demoAttachments = state.demoAttachments || [];
+        state.demoAttachments.push({
+          _id: mockAttachmentId,
+          filename: file.name,
+          mimeType: file.type,
+          size: file.size,
+          dataUrl: file.dataUrl
+        });
+        
+        const formatBytes = (bytes) => {
+          if (bytes === 0) return '0 Bytes';
+          const k = 1024;
+          const sizes = ['Bytes', 'KB', 'MB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        };
+
+        const fileLink = `[📎 ${file.name} (${file.type}, ${formatBytes(file.size)})](${file.dataUrl})`;
+        messageContent = messageContent ? `${messageContent}\n\n${fileLink}` : fileLink;
+      } else {
+        const attachment = await request(`/api/attachments/${state.selectedWorkspaceId}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            filename: file.name,
+            mimeType: file.type,
+            dataBase64: file.base64
+          })
+        });
+        
+        const formatBytes = (bytes) => {
+          if (bytes === 0) return '0 Bytes';
+          const k = 1024;
+          const sizes = ['Bytes', 'KB', 'MB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        };
+
+        const downloadUrl = `/api/attachments/${state.selectedWorkspaceId}/${attachment._id}/download`;
+        const fileLink = `[📎 ${file.name} (${file.type}, ${formatBytes(file.size)})](${downloadUrl})`;
+        messageContent = messageContent ? `${messageContent}\n\n${fileLink}` : fileLink;
+      }
+      
+      // Clear attachment state
+      state.attachedFile = null;
+      if (fileInput) fileInput.value = '';
+      if (previewContainer) {
+        previewContainer.innerHTML = '';
+        previewContainer.classList.add('hidden');
+      }
+    }
+
+    if (state.demoMode) {
+      const message = {
+        _id: `demo-chat-${Date.now()}`,
+        workspace: state.selectedWorkspaceId,
+        channelId: channel.slug,
+        sender: { _id: state.user?.id, username: state.user?.username || 'You' },
+        content: messageContent,
+        createdAt: new Date().toISOString()
+      };
+      state.messages.push(message);
+      state.chatMessages.push(message);
+      if (input) input.value = '';
+      renderChatPage();
+      return;
+    }
+
+    if (collab.socket?.connected) {
+      collab.socket.emit('send-chat-message', {
+        workspaceId: state.selectedWorkspaceId,
+        channelId: channel.slug,
+        content: messageContent
+      });
+      if (input) input.value = '';
+      return;
+    }
+
+    const message = await request(`/api/messages/${state.selectedWorkspaceId}/${channel.slug}`, {
+      method: 'POST',
+      body: JSON.stringify({ content: messageContent })
+    });
     state.messages.push(message);
     state.chatMessages.push(message);
-    input.value = '';
+    if (input) input.value = '';
     renderChatPage();
-    return;
+  } catch (err) {
+    showToast(err.message || 'File upload failed', true);
+  } finally {
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.removeAttribute('aria-busy');
+    }
   }
-
-  if (collab.socket?.connected) {
-    collab.socket.emit('send-chat-message', {
-      workspaceId: state.selectedWorkspaceId,
-      channelId: channel.slug,
-      content
-    });
-    input.value = '';
-    return;
-  }
-
-  const message = await request(`/api/messages/${state.selectedWorkspaceId}/${channel.slug}`, {
-    method: 'POST',
-    body: JSON.stringify({ content })
-  });
-  state.messages.push(message);
-  state.chatMessages.push(message);
-  input.value = '';
-  renderChatPage();
 };
 
 const getDocumentContextPath = () => {
@@ -3665,32 +4565,93 @@ const loadDashboardTasks = async ({ limit = 8, clear = false } = {}) => {
     .flatMap((result) => result.value || []);
 };
 
-const loadWorkspaceThreads = async ({ limit = 8, clear = false } = {}) => {
-  if (clear) state.workspaceThreads = [];
+const fetchWorkspaceThreadsForDocuments = async (docs = [], { limitPerDocument = 80 } = {}) => {
+  const documentIds = docs.map((doc) => documentKey(doc)).filter(Boolean);
+  if (!documentIds.length) return [];
+
+  const query = new URLSearchParams({
+    documentIds: documentIds.join(','),
+    limit: String(limitPerDocument)
+  });
+
+  try {
+    return await request(`/api/workspaces/${state.selectedWorkspaceId}/thread-summaries?${query.toString()}`);
+  } catch (err) {
+    const threadResults = await Promise.allSettled(docs.map(async (doc) => {
+      const threads = await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${doc._id}/messages`);
+      return threads.map((thread) => ({
+        ...thread,
+        documentId: doc._id,
+        documentTitle: doc.title || 'Untitled Lecture'
+      }));
+    }));
+    if (!threadResults.some((result) => result.status === 'fulfilled')) {
+      throw threadResults.find((result) => result.status === 'rejected')?.reason || err;
+    }
+    return threadResults
+      .filter((result) => result.status === 'fulfilled')
+      .flatMap((result) => result.value || []);
+  }
+};
+
+const loadWorkspaceThreads = async ({ limit = 8, clear = false, force = false } = {}) => {
+  if (clear) {
+    state.workspaceThreads = [];
+    workspaceThreadsLoadedKey = '';
+  }
   if (state.demoMode) {
     state.workspaceThreads = state.documentMessages.map((thread) => ({
       ...thread,
       documentId: state.selectedDocumentId,
       documentTitle: selectedDocumentTitle()
     }));
+    state.loading.threads = false;
+    setError('threads');
     return;
   }
   if (!state.selectedWorkspaceId || state.documents.length === 0) return;
 
   const docs = backgroundDocumentBatch(limit);
-  const threadResults = await Promise.allSettled(docs.map(async (doc) => {
-    const threads = await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${doc._id}/messages`);
-    return threads.map((thread) => ({
-      ...thread,
-      documentId: doc._id,
-      documentTitle: doc.title || 'Untitled Page'
-    }));
-  }));
+  const docIds = docs.map((doc) => documentKey(doc)).filter(Boolean);
+  const requestKey = `${state.selectedWorkspaceId}:${docIds.join(',')}:${limit}`;
+  if (!force && state.workspaceThreads.length && workspaceThreadsLoadedKey === requestKey) {
+    return state.workspaceThreads;
+  }
+  if (workspaceThreadsRequestPromise && workspaceThreadsRequestKey === requestKey) {
+    return workspaceThreadsRequestPromise;
+  }
 
-  state.workspaceThreads = threadResults
-    .filter((result) => result.status === 'fulfilled')
-    .flatMap((result) => result.value || [])
-    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+  const loadSeq = ++workspaceThreadsLoadSeq;
+  const workspaceId = state.selectedWorkspaceId;
+  workspaceThreadsRequestKey = requestKey;
+  setError('threads');
+  setLoading('threads', true);
+
+  workspaceThreadsRequestPromise = fetchWorkspaceThreadsForDocuments(docs)
+    .then((threads) => {
+      if (loadSeq !== workspaceThreadsLoadSeq || workspaceId !== state.selectedWorkspaceId) {
+        return state.workspaceThreads;
+      }
+      state.workspaceThreads = threads
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+      workspaceThreadsLoadedKey = requestKey;
+      return state.workspaceThreads;
+    })
+    .catch((err) => {
+      if (loadSeq === workspaceThreadsLoadSeq) setError('threads', err.message);
+      throw err;
+    })
+    .finally(() => {
+      if (workspaceThreadsRequestKey === requestKey) {
+        workspaceThreadsRequestKey = '';
+        workspaceThreadsRequestPromise = null;
+      }
+      if (loadSeq === workspaceThreadsLoadSeq) {
+        setLoading('threads', false);
+      }
+    });
+
+  return workspaceThreadsRequestPromise;
 };
 
 const scheduleDashboardDataLoad = () => {
@@ -3703,10 +4664,10 @@ const scheduleDashboardDataLoad = () => {
   }
 
   const workspaceId = state.selectedWorkspaceId;
-  const route = currentRoute();
   dashboardHydrationTimer = window.setTimeout(async () => {
     if (workspaceId !== state.selectedWorkspaceId) return;
     try {
+      const route = currentRoute();
       await Promise.allSettled([
         loadDashboardTasks({ limit: route === 'tasks' ? state.documents.length : 8 }),
         loadWorkspaceThreads({ limit: route === 'threads' ? state.documents.length : 8 })
@@ -3733,12 +4694,14 @@ const loadDocuments = async () => {
   setLoading('documents', true);
   try {
     setDocuments(await request(`/api/documents/workspace/${state.selectedWorkspaceId}`));
+    renderDocuments();
     setError('documents');
   } catch (err) {
     setError('documents', err.message);
     throw err;
   } finally {
     state.loading.documents = false;
+    renderDocuments();
   }
   const savedDocumentId = localStorage.getItem('documentId') || '';
   state.selectedDocumentId = state.documents.some((document) => String(document._id) === String(savedDocumentId))
@@ -3749,6 +4712,8 @@ const loadDocuments = async () => {
     localStorage.setItem('documentId', state.selectedDocumentId);
     state.dashboardTasks = [];
     state.workspaceThreads = [];
+    workspaceThreadsLoadedKey = '';
+    workspaceThreadsLoadSeq += 1;
     scheduleDashboardDataLoad();
     await loadDocument(state.selectedDocumentId);
   } else {
@@ -3803,10 +4768,12 @@ const loadDocument = async (documentId) => {
   state.studyMaterials = [];
   localStorage.setItem('documentId', doc._id);
   upsertDocument(doc, { prepend: true });
-  els.documentTitleInput.value = doc.title || 'Untitled Page';
+  renderDocuments();
+  els.documentTitleInput.value = doc.title || 'Untitled Lecture';
   setEditorHtml(doc.contentHtml || '', doc.plainTextContent || '');
   state.lastSavedTitle = els.documentTitleInput.value;
   state.lastSavedText = doc.plainTextContent || '';
+  state.lastSavedHtml = doc.contentHtml || '';
   state.saveStatus = 'saved';
   state.pendingSavePromise = null;
   state.saveQueued = false;
@@ -3829,8 +4796,9 @@ const saveCurrentDocument = async ({ silent = false } = {}) => {
   if (!state.selectedDocumentId) return null;
   if (state.demoMode) return saveDemoDocument({ silent });
 
-  const title = els.documentTitleInput.value || 'Untitled document';
+  const title = els.documentTitleInput.value || 'Untitled lecture';
   const plainTextContent = getEditorText();
+  const contentHtml = getEditorHtml();
   const plainTextBytes = new TextEncoder().encode(plainTextContent).byteLength;
   if (plainTextContent.length > MAX_DOCUMENT_TEXT_CHARS || plainTextBytes > MAX_DOCUMENT_TEXT_BYTES) {
     const err = new Error('This document is too large to save. Shorten it before switching documents or leaving the page.');
@@ -3840,7 +4808,7 @@ const saveCurrentDocument = async ({ silent = false } = {}) => {
     if (!silent) showToast(err.message, true);
     throw err;
   }
-  if (title === state.lastSavedTitle && plainTextContent === state.lastSavedText) {
+  if (title === state.lastSavedTitle && plainTextContent === state.lastSavedText && contentHtml === (state.lastSavedHtml || '')) {
     state.saveStatus = 'saved';
     setAutosaveStatus('Saved');
     return selectedDocument();
@@ -3855,17 +4823,26 @@ const saveCurrentDocument = async ({ silent = false } = {}) => {
   setAutosaveStatus(silent ? 'Autosaving...' : 'Saving...');
   state.pendingSavePromise = request(`/api/documents/${state.selectedDocumentId}`, {
     method: 'PUT',
-    body: JSON.stringify({ title, plainTextContent })
+    body: JSON.stringify({ title, plainTextContent, contentHtml })
   });
 
   try {
     const doc = await state.pendingSavePromise;
     state.lastSavedTitle = title;
     state.lastSavedText = plainTextContent;
+    state.lastSavedHtml = contentHtml;
     state.saveStatus = 'saved';
     upsertDocument(doc, { prepend: true });
+    if (plainTextContent.trim().length >= 40) {
+      markLectureMilestone(doc._id, 'notesAdded', {
+        message: 'Notes added',
+        show: !silent
+      });
+    } else {
+      refreshLectureProgress(doc._id);
+    }
     setAutosaveStatus(silent ? 'Saved just now' : 'Saved');
-    if (!silent) addActivity({ action: 'edited', target: doc.title || 'Untitled document', documentId: doc._id });
+    if (!silent) addActivity({ action: 'edited', target: doc.title || 'Untitled lecture', documentId: doc._id });
     if (silent) {
       refreshDocumentTitleChrome();
     } else {
@@ -3879,9 +4856,10 @@ const saveCurrentDocument = async ({ silent = false } = {}) => {
     state.pendingSavePromise = null;
     if (state.saveQueued) {
       state.saveQueued = false;
-      const latestTitle = els.documentTitleInput.value || 'Untitled document';
+      const latestTitle = els.documentTitleInput.value || 'Untitled lecture';
       const latestText = getEditorText();
-      if (latestTitle !== state.lastSavedTitle || latestText !== state.lastSavedText) {
+      const latestHtml = getEditorHtml();
+      if (latestTitle !== state.lastSavedTitle || latestText !== state.lastSavedText || latestHtml !== (state.lastSavedHtml || '')) {
         scheduleAutosave();
       }
     }
@@ -3891,20 +4869,22 @@ const saveCurrentDocument = async ({ silent = false } = {}) => {
 const saveCurrentDocumentIfDirty = async () => {
   const saveStartedAt = performance.now();
   if (!state.selectedDocumentId) return null;
-  const title = els.documentTitleInput.value || 'Untitled document';
+  const title = els.documentTitleInput.value || 'Untitled lecture';
   const plainTextContent = getEditorText();
+  const contentHtml = getEditorHtml();
   try {
     const titleChanged = title !== state.lastSavedTitle;
     const contentChanged = plainTextContent !== state.lastSavedText;
+    const htmlChanged = contentHtml !== (state.lastSavedHtml || '');
     console.log('[dirty-check]', {
       documentId: state.selectedDocumentId,
       titleChanged,
       contentChanged,
       editorLength: plainTextContent.length,
       lastSavedLength: state.lastSavedText.length,
-      action: titleChanged || contentChanged ? 'save' : 'skip'
+      action: titleChanged || contentChanged || htmlChanged ? 'save' : 'skip'
     });
-    if (!titleChanged && !contentChanged) return selectedDocument();
+    if (!titleChanged && !contentChanged && !htmlChanged) return selectedDocument();
     return await saveCurrentDocument({ silent: true });
   } finally {
     recordDocumentOpenMeasure('saveCurrentDocumentIfDirty', saveStartedAt);
@@ -3924,6 +4904,7 @@ const clearActiveDocumentAfterDelete = () => {
   state.studyMaterials = [];
   state.lastSavedTitle = '';
   state.lastSavedText = '';
+  state.lastSavedHtml = '';
   state.saveStatus = 'saved';
   state.pendingSavePromise = null;
   state.saveQueued = false;
@@ -3943,8 +4924,8 @@ const deleteDocumentById = async (documentId) => {
   const doc = state.documents[index];
   if (!doc) return;
 
-  const title = doc.title?.trim() || 'Untitled Page';
-  const confirmed = window.confirm(`Are you sure you want to delete "${title}" page?`);
+  const title = doc.title?.trim() || 'Untitled Lecture';
+  const confirmed = window.confirm(`Are you sure you want to delete "${title}" lecture?`);
   if (!confirmed) return;
 
   deletingDocumentIds.add(id);
@@ -3974,7 +4955,7 @@ const deleteDocumentById = async (documentId) => {
     } else {
       renderDocuments();
     }
-    showToast('Document deleted');
+    showToast('Lecture deleted');
   } catch (err) {
     showToast(err.message || 'Document delete failed', true);
   } finally {
@@ -3983,7 +4964,7 @@ const deleteDocumentById = async (documentId) => {
   }
 };
 
-const createDocumentAndOpen = async (title = 'Untitled Page') => {
+const createDocumentAndOpen = async (title = 'Untitled Lecture') => {
   if (!state.selectedWorkspaceId) {
     showToast('Select a workspace first', true);
     return null;
@@ -4001,6 +4982,7 @@ const createDocumentAndOpen = async (title = 'Untitled Page') => {
     });
     upsertDocument(doc, { prepend: true });
     await loadDocument(doc._id);
+    renderDocuments();
     return doc;
   } finally {
     documentCreateInFlight = false;
@@ -4120,9 +5102,10 @@ const createAiOutputDocument = async () => {
 
 const scheduleAutosave = () => {
   if (!state.selectedDocumentId) return;
-  const title = els.documentTitleInput.value || 'Untitled document';
+  const title = els.documentTitleInput.value || 'Untitled lecture';
   const plainTextContent = getEditorText();
-  if (title === state.lastSavedTitle && plainTextContent === state.lastSavedText) {
+  const contentHtml = getEditorHtml();
+  if (title === state.lastSavedTitle && plainTextContent === state.lastSavedText && contentHtml === (state.lastSavedHtml || '')) {
     state.saveStatus = 'saved';
     setAutosaveStatus('Saved');
     return;
@@ -4211,7 +5194,7 @@ const renderWorkspacesTool = () => {
     : emptyState({
       title: 'No workspaces yet',
       body: 'Create your first study workspace, join a teammate invite, or try the demo workspace.',
-      action: 'Try Demo',
+      action: 'Try Demo Workspace',
       actionId: 'emptyToolTryDemoBtn',
       secondaryAction: 'Join Workspace',
       secondaryActionId: 'emptyToolJoinWorkspaceBtn',
@@ -4262,7 +5245,7 @@ const renderDashboardDocumentTool = () => {
       </div>
       <label class="dashboard-document-field" for="dashboardDocumentTitleInput">
         <span>Note title</span>
-        <input id="dashboardDocumentTitleInput" placeholder="Untitled Page" />
+        <input id="dashboardDocumentTitleInput" placeholder="Untitled Lecture" />
       </label>
       <button class="primary" id="dashboardCreateDocumentBtn" type="button">Create document</button>
     </div>
@@ -4830,7 +5813,7 @@ els.commandInput.addEventListener('keydown', async (event) => {
     .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
 
   const docMatches = sortedDocs
-    .filter((doc) => !query || (doc.title || 'Untitled Page').toLowerCase().includes(query))
+    .filter((doc) => !query || (doc.title || 'Untitled Lecture').toLowerCase().includes(query))
     .slice(0, 5);
 
   const channelMatches = state.channels
@@ -5232,7 +6215,7 @@ const handleToolPanelClick = async (event) => {
     }
 
     if (target.id === 'dashboardCreateDocumentBtn') {
-      const title = document.getElementById('dashboardDocumentTitleInput').value.trim() || 'Untitled Page';
+      const title = document.getElementById('dashboardDocumentTitleInput').value.trim() || 'Untitled Lecture';
       if (!state.selectedWorkspaceId) return showToast('Select a workspace first', true);
       if (state.demoMode) {
         const doc = {
@@ -5246,7 +6229,7 @@ const handleToolPanelClick = async (event) => {
         closeToolPanel();
         loadDemoDocument(doc._id);
         navigate('workspace');
-        addActivity({ action: 'created document', target: title, documentId: doc._id });
+        addActivity({ action: 'created lecture', target: title, documentId: doc._id });
         return showToast('Demo document created locally');
       }
 
@@ -5254,14 +6237,14 @@ const handleToolPanelClick = async (event) => {
       if (!doc) return;
       closeToolPanel();
       navigate('workspace');
-      addActivity({ action: 'created document', target: title, documentId: doc._id });
-      return showToast('Document created');
+      addActivity({ action: 'created lecture', target: title, documentId: doc._id });
+      return showToast('Lecture created');
     }
 
     if (target.id === 'dashboardCreateTaskBtn') {
       if (!state.selectedWorkspaceId) return showToast('Select a workspace first', true);
       const doc = selectedDocument() || state.documents[0];
-      if (!doc) return showToast('Create a document before adding tasks', true);
+      if (!doc) return showToast('Create a lecture before adding tasks', true);
       const title = document.getElementById('dashboardTaskTitleInput').value.trim();
       if (!title) return showToast('Task title is required', true);
       const priority = document.getElementById('dashboardTaskPriorityInput').value;
@@ -5274,12 +6257,14 @@ const handleToolPanelClick = async (event) => {
           status: 'todo',
           priority,
           dueDate,
+          documentId: doc._id,
           assignee: { username: state.user?.username || 'Alex Rivera' }
         };
         state.documentTasks.push(task);
         state.dashboardTasks.push(task);
         closeToolPanel();
-        addActivity({ action: 'created task', target: title });
+        addActivity({ action: 'created task', target: title, documentId: doc._id });
+        markLectureMilestone(doc._id, 'taskCreated', { message: 'Study task created' });
         renderHomePage();
         return showToast('Demo task added locally');
       }
@@ -5291,14 +6276,15 @@ const handleToolPanelClick = async (event) => {
       state.dashboardTasks.push(task);
       if (String(doc._id) === String(state.selectedDocumentId)) state.documentTasks.push(task);
       closeToolPanel();
-      addActivity({ action: 'created task', target: title });
+      addActivity({ action: 'created task', target: title, documentId: doc._id });
+      markLectureMilestone(doc._id, 'taskCreated', { message: 'Study task created' });
       renderHomePage();
       return showToast('Task created');
     }
 
     if (target.id === 'requestVerifyBtn') {
       const result = await request('/api/auth/verify-email/request', { method: 'POST', body: JSON.stringify({}) });
-      return showToast(result.verificationToken ? `Verification token: ${result.verificationToken}` : result.message);
+      return showToast(result.verificationUrl ? `Verification link: ${result.verificationUrl}` : result.message);
     }
 
     if (target.id === 'verifyEmailBtn') {
@@ -5325,7 +6311,7 @@ const handleToolPanelClick = async (event) => {
         method: 'POST',
         body: JSON.stringify({ email: document.getElementById('forgotEmailInput').value })
       });
-      return showToast(result.resetToken ? `Reset token: ${result.resetToken}` : result.message);
+      return showToast(result.resetUrl ? `Reset link: ${result.resetUrl}` : result.message);
     }
 
     if (target.id === 'resetPasswordBtn') {
@@ -5382,6 +6368,7 @@ const handleToolPanelClick = async (event) => {
           state.preferences.theme = settingsTheme;
           state.preferences.density = settingsDensity;
           state.preferences.reduceMotion = settingsReduceMotion;
+          localStorage.setItem('theme', settingsTheme);
           persistPreferences();
           applyPreferences();
           showToast('Appearance preferences saved');
@@ -5496,7 +6483,7 @@ const handleToolPanelClick = async (event) => {
     if (integrationCard) {
       event.preventDefault();
       const name = integrationCard.querySelector('.integration-card-title')?.textContent || 'Integration';
-      showToast(`${name} integration is coming soon in a future update!`);
+      showToast(`${name} can be connected from the deployment environment.`);
       return;
     }
 
@@ -5671,6 +6658,10 @@ els.routePage.addEventListener('change', async (event) => {
       task.status = checked ? 'done' : 'todo';
       task.completedAt = checked ? new Date().toISOString() : null;
       if (checked) addActivity({ action: 'completed task', target: task.title });
+      refreshLectureProgress(taskDocumentId(task), {
+        message: 'All linked tasks completed',
+        show: checked
+      });
       showToast(checked ? 'Task marked complete' : 'Task reopened');
       renderTasksPage();
       return;
@@ -5685,6 +6676,10 @@ els.routePage.addEventListener('change', async (event) => {
       state.dashboardTasks = state.dashboardTasks.map(t => t._id === taskId ? updated : t);
       state.documentTasks = state.documentTasks.map(t => t._id === taskId ? updated : t);
       if (updated.status === 'done') addActivity({ action: 'completed task', target: updated.title });
+      refreshLectureProgress(taskDocumentId(updated), {
+        message: 'All linked tasks completed',
+        show: updated.status === 'done'
+      });
       showToast(checked ? 'Task marked complete' : 'Task reopened');
       renderTasksPage();
     } catch (err) {
@@ -5730,6 +6725,15 @@ els.routePage.addEventListener('click', async (event) => {
   const demoButton = event.target.closest('[data-try-demo]');
   if (demoButton) {
     await enterDemoMode();
+    return;
+  }
+
+  const googleButton = event.target.closest('[data-google-auth]');
+  if (googleButton) {
+    googleButton.disabled = true;
+    googleButton.setAttribute('aria-busy', 'true');
+    showToast('Opening Google Sign-In...');
+    window.location.href = `${API_BASE}/api/auth/google/start`;
     return;
   }
 
@@ -5806,6 +6810,10 @@ els.routePage.addEventListener('click', async (event) => {
     if (state.demoMode) {
       task.status = checked ? 'done' : 'todo';
       task.completedAt = checked ? new Date().toISOString() : null;
+      refreshLectureProgress(taskDocumentId(task), {
+        message: 'All linked tasks completed',
+        show: checked
+      });
       renderHomePage();
       return;
     }
@@ -5817,6 +6825,10 @@ els.routePage.addEventListener('click', async (event) => {
       });
       state.dashboardTasks = state.dashboardTasks.map((item) => item._id === updatedTask._id ? updatedTask : item);
       state.documentTasks = state.documentTasks.map((item) => item._id === updatedTask._id ? updatedTask : item);
+      refreshLectureProgress(taskDocumentId(updatedTask), {
+        message: 'All linked tasks completed',
+        show: updatedTask.status === 'done'
+      });
       renderHomePage();
     } catch (err) {
       event.target.checked = !checked;
@@ -5978,6 +6990,56 @@ const completeAuthenticatedSession = (result) => {
   void bootstrapAuthenticatedSession();
 };
 
+const restoreSessionFromRefresh = async () => {
+  if (state.token || !state.csrfToken) return false;
+
+  try {
+    const result = await request('/api/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({})
+    }, false);
+    saveSession(result);
+    return true;
+  } catch (err) {
+    state.csrfToken = '';
+    localStorage.removeItem('csrfToken');
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    return false;
+  }
+};
+
+const completeOAuthCallback = async () => {
+  const handoffToken = routeQuery().get('token') || '';
+  const error = routeQuery().get('error') || '';
+
+  if (error) {
+    showToast(error, true);
+    navigate('login');
+    return false;
+  }
+
+  if (!handoffToken) {
+    showToast('Google sign-in could not be completed.', true);
+    navigate('login');
+    return false;
+  }
+
+  try {
+    const result = await request('/api/auth/google/complete', {
+      method: 'POST',
+      body: JSON.stringify({ token: handoffToken })
+    }, false);
+    completeAuthenticatedSession(result);
+    return true;
+  } catch (err) {
+    showToast(friendlyUiMessage(err.message, { isError: true }), true);
+    navigate('login');
+    return false;
+  }
+};
+
 const handleAuthRouteSubmit = async (event) => {
   if (event.target.id === 'pageForgotPasswordForm') {
     event.preventDefault();
@@ -5987,7 +7049,7 @@ const handleAuthRouteSubmit = async (event) => {
     try {
       submitButton.disabled = true;
       submitButton.setAttribute('aria-busy', 'true');
-      submitButton.querySelector('span').textContent = 'Creating token...';
+      submitButton.querySelector('span').textContent = 'Sending...';
 
       const result = await request('/api/auth/password/forgot', {
         method: 'POST',
@@ -5997,20 +7059,19 @@ const handleAuthRouteSubmit = async (event) => {
       resultBox.classList.remove('hidden');
       resultBox.innerHTML = `
         <strong>${escapeHtml(result.message || 'Password reset requested')}</strong>
-        ${result.resetToken ? `
-          <p>Development reset token:</p>
-          <code>${escapeHtml(result.resetToken)}</code>
-          <a class="primary" href="#/reset-password?token=${encodeURIComponent(result.resetToken)}">Use this token</a>
+        ${result.resetUrl ? `
+          <p>Development reset link:</p>
+          <a class="primary" href="${escapeHtml(result.resetUrl)}">Open reset link</a>
         ` : '<p>Check your email for reset instructions.</p>'}
       `;
-      showToast('Password reset token created');
+      showToast('Password reset email sent');
     } catch (err) {
       showToast(err.message, true);
     } finally {
       if (submitButton) {
         submitButton.disabled = false;
         submitButton.removeAttribute('aria-busy');
-        submitButton.querySelector('span').textContent = 'Create reset token';
+        submitButton.querySelector('span').textContent = 'Send reset email';
       }
     }
     return true;
@@ -6053,6 +7114,71 @@ const handleAuthRouteSubmit = async (event) => {
     return true;
   }
 
+  if (event.target.id === 'pageVerifyEmailForm') {
+    event.preventDefault();
+    const submitButton = document.getElementById('pageVerifyEmailSubmit');
+    const resultBox = document.getElementById('emailVerificationResult');
+
+    try {
+      submitButton.disabled = true;
+      submitButton.setAttribute('aria-busy', 'true');
+      submitButton.querySelector('span').textContent = 'Verifying...';
+      await request('/api/auth/verify-email', {
+        method: 'POST',
+        body: JSON.stringify({ token: document.getElementById('pageVerifyTokenInput').value.trim() })
+      }, false);
+
+      resultBox.classList.remove('hidden');
+      resultBox.innerHTML = `
+        <strong>Email verified successfully</strong>
+        <p>You can now sign in to Nexus.</p>
+        <a class="primary" href="#/login">Back to login</a>
+      `;
+      showToast('Email verified successfully');
+    } catch (err) {
+      showToast(friendlyUiMessage(err.message, { isError: true }), true);
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.removeAttribute('aria-busy');
+        submitButton.querySelector('span').textContent = 'Verify email';
+      }
+    }
+    return true;
+  }
+
+  if (event.target.id === 'pageResendVerificationForm') {
+    event.preventDefault();
+    const submitButton = document.getElementById('pageResendVerificationSubmit');
+    const resultBox = document.getElementById('emailVerificationResult');
+
+    try {
+      submitButton.disabled = true;
+      submitButton.setAttribute('aria-busy', 'true');
+      submitButton.querySelector('span').textContent = 'Sending...';
+      const result = await request('/api/auth/verify-email/request', {
+        method: 'POST',
+        body: JSON.stringify({ email: document.getElementById('pageResendEmailInput').value.trim() })
+      }, false);
+
+      resultBox.classList.remove('hidden');
+      resultBox.innerHTML = `
+        <strong>${escapeHtml(result.message || 'Verification email sent.')}</strong>
+        ${result.verificationUrl ? `<p>Development verification link:</p><a class="primary" href="${escapeHtml(result.verificationUrl)}">Open verification link</a>` : '<p>Check your email for the latest link.</p>'}
+      `;
+      showToast('Verification email sent');
+    } catch (err) {
+      showToast(friendlyUiMessage(err.message, { isError: true }), true);
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.removeAttribute('aria-busy');
+        submitButton.querySelector('span').textContent = 'Resend verification email';
+      }
+    }
+    return true;
+  }
+
   if (event.target.id !== 'pageAuthForm') return false;
   event.preventDefault();
   if (state.demoMode) exitDemoMode();
@@ -6080,8 +7206,8 @@ const handleAuthRouteSubmit = async (event) => {
     if (!payload.password) {
       showInlineError(passwordInput, 'Enter your password.');
       hasError = true;
-    } else if (mode === 'register' && payload.password.length < 6) {
-      showInlineError(passwordInput, 'Use at least 6 characters.');
+    } else if (mode === 'register' && payload.password.length < 8) {
+      showInlineError(passwordInput, 'Use at least 8 characters.');
       hasError = true;
     }
     if (mode === 'register') {
@@ -6112,6 +7238,17 @@ const handleAuthRouteSubmit = async (event) => {
       method: 'POST',
       body: JSON.stringify(payload)
     });
+    if (mode === 'register') {
+      showToast('Account created. Check your email to verify your account.');
+      const resultBox = document.createElement('div');
+      resultBox.className = 'password-recovery-result';
+      resultBox.innerHTML = `
+        <strong>${escapeHtml(result.message || 'Account created.')}</strong>
+        ${result.verificationUrl ? `<p>Development verification link:</p><a class="primary" href="${escapeHtml(result.verificationUrl)}">Open verification link</a>` : '<p>Check your email for the verification link.</p>'}
+      `;
+      form.appendChild(resultBox);
+      return true;
+    }
     completeAuthenticatedSession(result);
   } catch (err) {
     const message = friendlyUiMessage(err.message, { isError: true });
@@ -6403,6 +7540,11 @@ els.routePage.addEventListener('click', async (event) => {
       thread.resolvedBy = nextStatus === 'resolved' ? { username: state.user?.username || 'Alex Rivera' } : null;
       state.documentMessages = state.documentMessages.map(item => item._id === threadId ? { ...item, ...thread } : item);
       addActivity({ action: nextStatus === 'resolved' ? 'resolved doubt on' : 'reopened doubt on', target: thread.documentTitle || 'Document' });
+      if (nextStatus === 'resolved') {
+        markLectureMilestone(thread.documentId || state.selectedDocumentId, 'doubtResolved', { message: 'Doubt resolved' });
+      } else {
+        refreshLectureProgress(thread.documentId || state.selectedDocumentId);
+      }
       showToast(nextStatus === 'resolved' ? 'Doubt resolved' : 'Doubt reopened');
       renderThreadsPage();
     } else {
@@ -6414,6 +7556,11 @@ els.routePage.addEventListener('click', async (event) => {
         state.workspaceThreads = state.workspaceThreads.map(item => item._id === threadId ? { ...item, ...updated } : item);
         state.documentMessages = state.documentMessages.map(item => item._id === threadId ? { ...item, ...updated } : item);
         addActivity({ action: nextStatus === 'resolved' ? 'resolved doubt on' : 'reopened doubt on', target: thread.documentTitle || 'Document' });
+        if (nextStatus === 'resolved') {
+          markLectureMilestone(thread.documentId || state.selectedDocumentId, 'doubtResolved', { message: 'Doubt resolved' });
+        } else {
+          refreshLectureProgress(thread.documentId || state.selectedDocumentId);
+        }
         showToast(nextStatus === 'resolved' ? 'Doubt resolved' : 'Doubt reopened');
         renderThreadsPage();
       } catch (err) {
@@ -6551,153 +7698,23 @@ els.routePage.addEventListener('click', async (event) => {
     const action = msgAction.dataset.msgAction;
     const msgArticle = event.target.closest('.workspace-chat-message');
     const msgId = msgArticle?.dataset.messageId;
-    handleChatMessageAction(action, msgId, msgArticle);
+    handleChatMessageAction(action, msgId, msgArticle, event.target);
     return;
   }
 
-  if (event.target.id === 'pageForgotPasswordForm') {
+  // --- Emoji Reaction Chips Click ---
+  const reactionChip = event.target.closest('.chat-reaction-chip:not(.add-reaction-chip-btn)');
+  if (reactionChip) {
     event.preventDefault();
-    const submitButton = document.getElementById('pageForgotPasswordSubmit');
-    const resultBox = document.getElementById('passwordRecoveryResult');
-
-    try {
-      submitButton.disabled = true;
-      submitButton.setAttribute('aria-busy', 'true');
-      submitButton.querySelector('span').textContent = 'Creating token...';
-
-      const result = await request('/api/auth/password/forgot', {
-        method: 'POST',
-        body: JSON.stringify({ email: document.getElementById('pageForgotEmailInput').value.trim() })
-      }, false);
-
-      resultBox.classList.remove('hidden');
-      resultBox.innerHTML = `
-        <strong>${escapeHtml(result.message || 'Password reset requested')}</strong>
-        ${result.resetToken ? `
-          <p>Development reset token:</p>
-          <code>${escapeHtml(result.resetToken)}</code>
-          <a class="primary" href="#/reset-password?token=${encodeURIComponent(result.resetToken)}">Use this token</a>
-        ` : '<p>Check your email for reset instructions.</p>'}
-      `;
-      showToast('Password reset token created');
-    } catch (err) {
-      showToast(err.message, true);
-    } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.removeAttribute('aria-busy');
-        submitButton.querySelector('span').textContent = 'Create reset token';
-      }
+    const emoji = reactionChip.dataset.emoji;
+    const msgArticle = reactionChip.closest('.workspace-chat-message');
+    const msgId = msgArticle?.dataset.messageId;
+    if (msgId && emoji) {
+      globalThis.toggleReaction(msgId, emoji);
     }
     return;
   }
 
-  if (event.target.id === 'pageResetPasswordForm') {
-    event.preventDefault();
-    const submitButton = document.getElementById('pageResetPasswordSubmit');
-    const resultBox = document.getElementById('passwordRecoveryResult');
-
-    try {
-      submitButton.disabled = true;
-      submitButton.setAttribute('aria-busy', 'true');
-      submitButton.querySelector('span').textContent = 'Resetting...';
-
-      await request('/api/auth/password/reset', {
-        method: 'POST',
-        body: JSON.stringify({
-          token: document.getElementById('pageResetTokenInput').value.trim(),
-          password: document.getElementById('pageNewPasswordInput').value
-        })
-      }, false);
-
-      resultBox.classList.remove('hidden');
-      resultBox.innerHTML = `
-        <strong>Password reset successful</strong>
-        <p>You can now sign in with your new password.</p>
-        <a class="primary" href="#/login">Back to login</a>
-      `;
-      showToast('Password reset successful');
-    } catch (err) {
-      showToast(err.message, true);
-    } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.removeAttribute('aria-busy');
-        submitButton.querySelector('span').textContent = 'Reset password';
-      }
-    }
-    return;
-  }
-
-  if (event.target.id !== 'pageAuthForm') return;
-  event.preventDefault();
-  if (state.demoMode) exitDemoMode();
-
-  const submitButton = document.getElementById('pageAuthSubmit');
-  const form = event.target;
-  clearInlineErrors(form);
-
-  try {
-    const mode = currentRoute() === 'signup' ? 'register' : 'login';
-    const emailInput = document.getElementById('pageEmailInput');
-    const passwordInput = document.getElementById('pagePasswordInput');
-    const payload = {
-      email: emailInput.value.trim(),
-      password: passwordInput.value
-    };
-    let hasError = false;
-    if (!payload.email) {
-      showInlineError(emailInput, 'Enter the email address for your Nexus account.');
-      hasError = true;
-    } else if (!emailInput.validity.valid) {
-      showInlineError(emailInput, 'Enter a valid email address.');
-      hasError = true;
-    }
-    if (!payload.password) {
-      showInlineError(passwordInput, 'Enter your password.');
-      hasError = true;
-    } else if (mode === 'register' && payload.password.length < 6) {
-      showInlineError(passwordInput, 'Use at least 6 characters.');
-      hasError = true;
-    }
-    if (mode === 'register') {
-      const usernameInput = document.getElementById('pageUsernameInput');
-      const confirmPasswordInput = document.getElementById('pageConfirmPasswordInput');
-      const confirmPassword = confirmPasswordInput.value;
-      payload.username = usernameInput.value.trim();
-      if (!payload.username) {
-        showInlineError(usernameInput, 'Choose a username for your profile.');
-        hasError = true;
-      }
-      if (payload.password !== confirmPassword) {
-        showInlineError(confirmPasswordInput, 'Passwords do not match.');
-        hasError = true;
-      }
-    }
-    if (hasError) {
-      focusFirstInvalid(form);
-      showToast('Please fix the highlighted fields.', true);
-      return;
-    }
-
-    submitButton.disabled = true;
-    submitButton.setAttribute('aria-busy', 'true');
-    submitButton.querySelector('span').textContent = mode === 'register' ? 'Creating account...' : 'Signing in...';
-
-    const result = await request(`/api/auth/${mode}`, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    completeAuthenticatedSession(result);
-  } catch (err) {
-    showToast(friendlyUiMessage(err.message, { isError: true }), true);
-  } finally {
-    if (submitButton) {
-      submitButton.disabled = false;
-      submitButton.removeAttribute('aria-busy');
-      submitButton.querySelector('span').textContent = currentRoute() === 'signup' ? 'Create account' : 'Continue';
-    }
-  }
 });
 
 els.loginTab.addEventListener('click', () => {
@@ -6723,6 +7740,9 @@ els.authForm.addEventListener('submit', async (event) => {
     if (!payload.email) {
       showInlineError(els.emailInput, 'Enter your email address.');
       hasError = true;
+    } else if (!els.emailInput.validity.valid) {
+      showInlineError(els.emailInput, 'Enter a valid email address.');
+      hasError = true;
     }
     if (!payload.password) {
       showInlineError(els.passwordInput, 'Enter your password.');
@@ -6740,13 +7760,29 @@ els.authForm.addEventListener('submit', async (event) => {
       return showToast('Please fix the highlighted fields.', true);
     }
 
-    const result = await request(`/api/auth/${state.authMode === 'register' ? 'register' : 'login'}`, {
+    const authButton = event.target.querySelector('button[type="submit"]');
+    authButton.disabled = true;
+    authButton.setAttribute('aria-busy', 'true');
+
+    const mode = state.authMode === 'register' ? 'register' : 'login';
+    const result = await request(`/api/auth/${mode}`, {
       method: 'POST',
       body: JSON.stringify(payload)
     });
+    if (mode === 'register') {
+      showToast('Account created. Check your email to verify your account.');
+      navigate('login');
+      return;
+    }
     completeAuthenticatedSession(result);
   } catch (err) {
     showToast(friendlyUiMessage(err.message, { isError: true }), true);
+  } finally {
+    const authButton = event.target.querySelector('button[type="submit"]');
+    if (authButton) {
+      authButton.disabled = false;
+      authButton.removeAttribute('aria-busy');
+    }
   }
 });
 
@@ -6773,6 +7809,65 @@ els.logoutBtn.addEventListener('click', async () => {
 document.querySelector('.editor-toolbar')?.addEventListener('click', (event) => {
   event.preventDefault();
   els.documentEditor.focus();
+});
+
+document.querySelector('.premium-editor-toolbar')?.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-editor-command], #focusModeToolbarBtn');
+  if (!button) return;
+  event.preventDefault();
+  if (button.id === 'focusModeToolbarBtn') return toggleFocusMode();
+  handleEditorCommand(button.dataset.editorCommand);
+});
+
+document.querySelector('.premium-editor-toolbar')?.addEventListener('mousedown', (event) => {
+  saveEditorSelection();
+  if (event.target.closest('button')) event.preventDefault();
+});
+
+els.editorHeadingSelect?.addEventListener('change', (event) => {
+  const command = event.target.value;
+  if (command) handleEditorCommand(command);
+  event.target.value = 'paragraph';
+});
+
+els.editorTextColorInput?.addEventListener('input', () => {
+  restoreEditorSelection();
+  handleEditorCommand('text-color');
+});
+els.editorTextColorInput?.addEventListener('change', () => {
+  restoreEditorSelection();
+  handleEditorCommand('text-color');
+});
+els.editorHighlightInput?.addEventListener('input', () => handleEditorCommand('highlight'));
+els.editorHighlightInput?.addEventListener('change', () => handleEditorCommand('highlight'));
+
+els.editorFloatingToolbar?.addEventListener('mousedown', (event) => {
+  event.preventDefault();
+});
+
+els.editorFloatingToolbar?.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-selection-action]');
+  if (!button) return;
+  event.preventDefault();
+  handleSelectionToolbarAction(button.dataset.selectionAction);
+});
+
+els.editorImageInput?.addEventListener('change', (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const name = markdownFileName(file);
+  insertRichHtml(`<figure class="lecture-image-placeholder"><div>Image</div><figcaption>${escapeHtml(name)}</figcaption></figure><p><br></p>`);
+  event.target.value = '';
+  showToast('Image reference added to lecture');
+});
+
+els.editorAttachmentInput?.addEventListener('change', (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const name = markdownFileName(file);
+  insertRichHtml(`<a class="lecture-attachment" href="attachment:${escapeHtml(name)}">${escapeHtml(name)}</a><p><br></p>`);
+  event.target.value = '';
+  showToast('Attachment reference added to lecture');
 });
 
 els.workspaceForm.addEventListener('submit', async (event) => {
@@ -6942,6 +8037,11 @@ els.messageList.addEventListener('click', async (event) => {
     thread.resolvedBy = nextStatus === 'resolved' ? { username: state.user?.username || 'Alex Rivera' } : null;
     state.workspaceThreads = state.workspaceThreads.map((item) => item._id === thread._id ? { ...item, ...thread } : item);
     addActivity({ action: nextStatus === 'resolved' ? 'resolved doubt on' : 'reopened doubt on', target: selectedDocumentTitle() });
+    if (nextStatus === 'resolved') {
+      markLectureMilestone(state.selectedDocumentId, 'doubtResolved', { message: 'Doubt resolved' });
+    } else {
+      refreshLectureProgress(state.selectedDocumentId);
+    }
     renderThreadList();
     return;
   }
@@ -6954,6 +8054,11 @@ els.messageList.addEventListener('click', async (event) => {
     state.documentMessages = state.documentMessages.map((item) => item._id === updatedThread._id ? { ...item, ...updatedThread } : item);
     state.workspaceThreads = state.workspaceThreads.map((item) => item._id === updatedThread._id ? { ...item, ...updatedThread, documentTitle: selectedDocumentTitle(), documentId: state.selectedDocumentId } : item);
     addActivity({ action: nextStatus === 'resolved' ? 'resolved doubt on' : 'reopened doubt on', target: selectedDocumentTitle() });
+    if (nextStatus === 'resolved') {
+      markLectureMilestone(state.selectedDocumentId, 'doubtResolved', { message: 'Doubt resolved' });
+    } else {
+      refreshLectureProgress(state.selectedDocumentId);
+    }
     renderThreadList();
   } catch (err) {
     showToast(err.message, true);
@@ -6992,6 +8097,7 @@ els.messageForm.addEventListener('submit', async (event) => {
         body: els.messageInput.value.trim(),
         linkedText,
         status: 'open',
+        documentId: state.selectedDocumentId,
         replies: [],
         createdAt: new Date().toISOString()
       };
@@ -7002,6 +8108,7 @@ els.messageForm.addEventListener('submit', async (event) => {
     els.messageInput.value = '';
     state.pendingDoubtLinkedText = '';
     addActivity({ action: parentMessageId ? 'replied to doubt on' : 'asked a doubt on', target: selectedDocumentTitle() });
+    refreshLectureProgress(state.selectedDocumentId);
     renderThreadList();
     return showToast(parentMessageId ? 'Demo reply added locally' : 'Demo doubt added locally');
   }
@@ -7030,6 +8137,7 @@ els.messageForm.addEventListener('submit', async (event) => {
       state.selectedThreadId = message._id;
     }
     addActivity({ action: parentMessageId ? 'replied to doubt on' : 'asked a doubt on', target: selectedDocumentTitle() });
+    refreshLectureProgress(state.selectedDocumentId);
     renderThreadList();
   } catch (err) {
     showToast(err.message, true);
@@ -7038,21 +8146,9 @@ els.messageForm.addEventListener('submit', async (event) => {
 
 const insertPlainTextAtCursor = (text = '') => {
   if (!text) return;
-
-  if (isTextareaEditor()) {
-    const value = getEditorText();
-    const start = els.documentEditor.selectionStart || 0;
-    const end = els.documentEditor.selectionEnd || start;
-    const nextValue = `${value.slice(0, start)}${text}${value.slice(end)}`;
-    els.documentEditor.value = nextValue;
-    const cursor = start + text.length;
-    els.documentEditor.setSelectionRange(cursor, cursor);
-    return;
-  }
-
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || !els.documentEditor.contains(selection.anchorNode)) {
-    els.documentEditor.textContent += text;
+    els.documentEditor.append(document.createTextNode(text));
     return;
   }
 
@@ -7071,8 +8167,17 @@ const insertPlainTextAtCursor = (text = '') => {
 els.documentEditor.addEventListener('paste', (event) => {
   event.preventDefault();
 
+  const html = event.clipboardData?.getData('text/html') || '';
   const text = event.clipboardData?.getData('text/plain') || '';
-  insertPlainTextAtCursor(text);
+  if (editorUsesRichContent() && html) {
+    insertRichHtml(html);
+    return;
+  }
+  if (editorUsesRichContent()) {
+    insertRichHtml(escapeHtml(text).replace(/\n/g, '<br>'));
+  } else {
+    insertPlainTextAtCursor(text);
+  }
   applyEditorInputToYDoc();
   publishCursor();
   scheduleAutosave();
@@ -7085,26 +8190,73 @@ els.documentEditor.addEventListener('input', () => {
   publishTyping();
   scheduleAutosave();
   updateEditorEmptyState();
+  updateEditorStudyStats();
+  saveEditorSelection();
+  updateFloatingSelectionToolbar();
 });
 
 els.documentTitleInput.addEventListener('input', () => {
   const doc = selectedDocument();
   if (!doc) return;
-  doc.title = els.documentTitleInput.value || 'Untitled document';
+  doc.title = els.documentTitleInput.value || 'Untitled lecture';
   refreshDocumentTitleChrome({ deferList: true });
   scheduleAutosave();
 });
 
 els.documentEditor.addEventListener('keyup', publishCursor);
-els.documentEditor.addEventListener('click', () => {
+els.documentEditor.addEventListener('keyup', () => {
+  saveEditorSelection();
+  updateEditorStudyStats();
+  scheduleAiSelectionHintUpdate();
+});
+els.documentEditor.addEventListener('scroll', updateEditorStudyStats);
+document.querySelector('.editor-pane')?.addEventListener('scroll', updateEditorStudyStats);
+els.documentEditor.addEventListener('click', (event) => {
   publishCursor();
+  saveEditorSelection();
+  scheduleAiSelectionHintUpdate();
+
+  const checkbox = event.target.closest('.checklist input[type="checkbox"]');
+  const li = event.target.closest('.checklist li');
+  if (checkbox) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (checkbox.hasAttribute('checked')) {
+      checkbox.removeAttribute('checked');
+      checkbox.checked = false;
+    } else {
+      checkbox.setAttribute('checked', 'checked');
+      checkbox.checked = true;
+    }
+    commitRichEditorChange();
+  } else if (li && event.target === li) {
+    const cb = li.querySelector('input[type="checkbox"]');
+    if (cb) {
+      if (cb.hasAttribute('checked')) {
+        cb.removeAttribute('checked');
+        cb.checked = false;
+      } else {
+        cb.setAttribute('checked', 'checked');
+        cb.checked = true;
+      }
+      commitRichEditorChange();
+    }
+  }
+});
+els.documentEditor.addEventListener('mouseup', () => {
+  saveEditorSelection();
   scheduleAiSelectionHintUpdate();
 });
 els.documentEditor.addEventListener('select', () => {
   publishCursor();
+  saveEditorSelection();
   scheduleAiSelectionHintUpdate();
 });
-document.addEventListener('selectionchange', scheduleAiSelectionHintUpdate);
+document.addEventListener('selectionchange', () => {
+  saveEditorSelection();
+  scheduleAiSelectionHintUpdate();
+});
+window.addEventListener('resize', updateFloatingSelectionToolbar);
 
 els.refreshMessagesBtn.addEventListener('click', () => loadDocumentMessages().catch((err) => showToast(err.message, true)));
 
@@ -7116,9 +8268,9 @@ els.newDocBtn.addEventListener('click', async () => {
   }
 
   try {
-    const doc = await createDocumentAndOpen('Untitled Page');
+    const doc = await createDocumentAndOpen('Untitled Lecture');
     if (!doc) return;
-    showToast('Document created');
+    showToast('Lecture created');
   } catch (err) {
     showToast(err.message, true);
   }
@@ -7181,7 +8333,7 @@ els.saveDocBtn.addEventListener('click', async () => {
   try {
     window.clearTimeout(autosaveTimer);
     await saveCurrentDocument();
-    showToast('Document saved');
+    showToast('Lecture saved');
   } catch (err) {
     showToast(err.message, true);
   }
@@ -7198,11 +8350,13 @@ els.taskForm.addEventListener('submit', (event) => {
       status: 'todo',
       priority: 'medium',
       dueDate: new Date().toISOString(),
+      documentId: state.selectedDocumentId,
       assignee: { username: state.user?.username || 'Alex Rivera' }
     });
     state.dashboardTasks = state.documentTasks;
     els.taskInput.value = '';
     addActivity({ action: 'created task', target: state.documentTasks.at(-1)?.title || 'Untitled task' });
+    markLectureMilestone(state.selectedDocumentId, 'taskCreated', { message: 'Study task created' });
     renderTaskList();
     return showToast('Demo task added locally');
   }
@@ -7216,6 +8370,7 @@ els.taskForm.addEventListener('submit', (event) => {
       state.dashboardTasks.push(task);
       els.taskInput.value = '';
       addActivity({ action: 'created task', target: task.title || 'Untitled task' });
+      markLectureMilestone(state.selectedDocumentId, 'taskCreated', { message: 'Study task created' });
       renderTaskList();
     })
     .catch((err) => showToast(err.message, true));
@@ -7233,6 +8388,17 @@ els.taskList.addEventListener('change', (event) => {
     task.completedAt = checkbox.checked ? new Date().toISOString() : null;
     state.dashboardTasks = state.dashboardTasks.map((item) => item._id === task._id ? task : item);
     if (checkbox.checked) addActivity({ action: 'completed task', target: task.title || 'Untitled task' });
+    refreshLectureProgress(state.selectedDocumentId, {
+      message: 'All linked tasks completed',
+      show: checkbox.checked
+    });
+    // FIX: explicitly persist allTasksCompleted when the last task is done
+    if (checkbox.checked) {
+      const docTasks = allKnownTasks().filter((t) => taskDocumentId(t) === state.selectedDocumentId);
+      if (docTasks.length > 0 && docTasks.every((t) => t.status === 'done')) {
+        markLectureMilestone(state.selectedDocumentId, 'allTasksCompleted', { message: 'All study tasks completed' });
+      }
+    }
     renderTaskList();
     return;
   }
@@ -7244,6 +8410,17 @@ els.taskList.addEventListener('change', (event) => {
       state.documentTasks = state.documentTasks.map((item) => item._id === updatedTask._id ? updatedTask : item);
       state.dashboardTasks = state.dashboardTasks.map((item) => item._id === updatedTask._id ? updatedTask : item);
       if (updatedTask.status === 'done') addActivity({ action: 'completed task', target: updatedTask.title || 'Untitled task' });
+      refreshLectureProgress(state.selectedDocumentId, {
+        message: 'All linked tasks completed',
+        show: updatedTask.status === 'done'
+      });
+      // FIX: explicitly persist allTasksCompleted when the last task is done
+      if (updatedTask.status === 'done') {
+        const docTasks = allKnownTasks().filter((t) => taskDocumentId(t) === state.selectedDocumentId);
+        if (docTasks.length > 0 && docTasks.every((t) => t.status === 'done')) {
+          markLectureMilestone(state.selectedDocumentId, 'allTasksCompleted', { message: 'All study tasks completed' });
+        }
+      }
       renderTaskList();
     })
     .catch((err) => {
@@ -7274,6 +8451,26 @@ els.taskList.addEventListener('click', (event) => {
 
 els.runAiBtn.addEventListener('click', async () => {
   await runStudyAiAction(els.aiActionSelect.value || 'summarize');
+});
+
+document.getElementById('aiPromptForm')?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const input = document.getElementById('aiPromptInput');
+  const prompt = input?.value.trim() || '';
+  if (!prompt) return;
+  const lowerPrompt = prompt.toLowerCase();
+  const action = lowerPrompt.includes('quiz') || lowerPrompt.includes('test')
+    ? 'quiz'
+    : lowerPrompt.includes('flashcard') || lowerPrompt.includes('card')
+      ? 'flashcards'
+      : lowerPrompt.includes('question') || lowerPrompt.includes('exam')
+        ? 'important-questions'
+        : lowerPrompt.includes('explain') || lowerPrompt.includes('why') || lowerPrompt.includes('how')
+          ? 'simple-explanation'
+          : 'summarize';
+  input.value = '';
+  showToast(`Tutor prompt received: ${prompt.slice(0, 72)}${prompt.length > 72 ? '...' : ''}`);
+  await runStudyAiAction(action);
 });
 
 els.aiOutput?.addEventListener('click', handleAiStudyOutputClick);
@@ -7308,11 +8505,17 @@ const init = async () => {
   initResizableWorkspacePanels();
   applyPreferences();
   hydrateJoinRouteFromPath();
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
 
   if (state.demoMode) {
     await loadDemoWorkspaceModule();
     hydrateDemoWorkspace();
     loadDemoDocument(state.selectedDocumentId);
+  }
+
+  if (!state.demoMode && !state.token && state.csrfToken) {
+    await restoreSessionFromRefresh();
   }
 
   if (!location.hash) {
@@ -7729,17 +8932,16 @@ els.routePage.addEventListener('click', (event) => {
     event.preventDefault();
     const val = themeCard.dataset.themeVal;
     settingsTheme = val;
+    state.preferences.theme = val;
+    localStorage.setItem('theme', val);
+    persistPreferences();
+    applyPreferences();
     
     // Update theme card active styles in DOM
     themeCard.parentNode.querySelectorAll('.theme-select-card').forEach(card => {
       card.classList.toggle('active', card.dataset.themeVal === val);
     });
     
-    // Preview theme instantly
-    document.body.dataset.theme = val === 'system' 
-      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') 
-      : val;
-      
     updateSaveButtonState();
   }
 });
@@ -7859,6 +9061,11 @@ const exposeLazyRouteShellBindings = () => {
     saveSession: { configurable: true, get: () => saveSession },
     clearSession: { configurable: true, get: () => clearSession },
     selectedDocumentTitle: { configurable: true, get: () => selectedDocumentTitle },
+    LECTURE_PROGRESS_MILESTONES: { configurable: true, get: () => LECTURE_PROGRESS_MILESTONES },
+    calculateLectureLearningProgress: { configurable: true, get: () => calculateLectureLearningProgress },
+    calculateWorkspaceLearningProgress: { configurable: true, get: () => calculateWorkspaceLearningProgress },
+    markLectureMilestone: { configurable: true, get: () => markLectureMilestone },
+    refreshLectureProgress: { configurable: true, get: () => refreshLectureProgress },
     currentRoute: { configurable: true, get: () => currentRoute },
     routeQuery: { configurable: true, get: () => routeQuery },
     navigate: { configurable: true, get: () => navigate },
@@ -7884,7 +9091,7 @@ const exposeLazyRouteShellBindings = () => {
     errorState: { configurable: true, get: () => errorState },
     setLoading: { configurable: true, get: () => setLoading },
     setError: { configurable: true, get: () => setError },
-    isTextareaEditor: { configurable: true, get: () => isTextareaEditor },
+    editorUsesRichContent: { configurable: true, get: () => editorUsesRichContent },
     getEditorText: { configurable: true, get: () => getEditorText },
     updateEditorEmptyState: { configurable: true, get: () => updateEditorEmptyState },
     getEditorHtml: { configurable: true, get: () => getEditorHtml },
@@ -7935,6 +9142,9 @@ const exposeLazyRouteShellBindings = () => {
     lazyRouteModule: { configurable: true, get: () => lazyRouteModule },
     renderAuthPage: { configurable: true, get: () => renderAuthPage },
     renderPasswordRecoveryPage: { configurable: true, get: () => renderPasswordRecoveryPage },
+    renderEmailVerificationPage: { configurable: true, get: () => renderEmailVerificationPage },
+    renderOAuthCallbackPage: { configurable: true, get: () => renderOAuthCallbackPage },
+    completeOAuthCallback: { configurable: true, get: () => completeOAuthCallback },
     getDashboardData: { configurable: true, get: () => getDashboardData },
     renderHomePage: { configurable: true, get: () => renderHomePage },
     renderChatPage: { configurable: true, get: () => renderChatPage },
@@ -7945,6 +9155,8 @@ const exposeLazyRouteShellBindings = () => {
     handleChatDropdownAction: { configurable: true, get: () => handleChatDropdownAction },
     handleChatAction: { configurable: true, get: () => handleChatAction },
     handleChatEmptyAction: { configurable: true, get: () => handleChatEmptyAction },
+    showEmojiPicker: { configurable: true, get: () => showEmojiPicker },
+    toggleReaction: { configurable: true, get: () => toggleReaction },
     renderThreadListSection: { configurable: true, get: () => renderThreadListSection },
     renderThreadDetailHtml: { configurable: true, get: () => renderThreadDetailHtml },
     renderThreadsPage: { configurable: true, get: () => renderThreadsPage },

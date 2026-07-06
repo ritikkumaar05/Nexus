@@ -18,7 +18,7 @@ export const renderSettingsContent = (tab, workspace) => {
           <p>Identity details for the workspace.</p>
           
           <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 20px;">
-            <span class="workspace-avatar big" style="width: 56px; height: 56px; font-size: 20px; display: flex; align-items: center; justify-content: center; background: var(--primary-soft); color: var(--primary); border-radius: 12px; font-weight: 700;">
+            <span class="workspace-avatar big">
               ${escapeHtml(getInitials(settingsWorkspaceName || 'S'))}
             </span>
             <div style="flex: 1;">

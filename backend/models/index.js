@@ -10,17 +10,22 @@ const mongoose = require('mongoose');
 // --- USER SCHEMA ---
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true, minlength: 3 },
+  fullName: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  passwordHash: { type: String, required: true },
+  passwordHash: { type: String, default: null },
+  authProvider: { type: String, enum: ['email', 'google'], default: 'email', required: true },
+  googleId: { type: String, default: undefined, unique: true, sparse: true },
+  profileImage: { type: String, default: '' },
   emailVerifiedAt: { type: Date, default: null },
-  createdAt: { type: Date, default: Date.now }
-});
+  lastLogin: { type: Date, default: null }
+}, { timestamps: true });
 
 // --- SESSION SCHEMA ---
 const SessionSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   tokenVersion: { type: Number, default: 0 },
   refreshTokenHash: { type: String, default: '', index: true },
+  csrfTokenHash: { type: String, default: '' },
   previousRefreshTokenHash: { type: String, default: '', index: true },
   usedRefreshTokenHashes: [{
     tokenHash: { type: String, required: true },
@@ -33,16 +38,18 @@ const SessionSchema = new mongoose.Schema({
   expiresAt: { type: Date, required: true }
 }, { timestamps: true });
 SessionSchema.index({ user: 1, revokedAt: 1 });
+SessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // --- ACCOUNT TOKEN SCHEMA ---
 const AccountTokenSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  type: { type: String, enum: ['email-verification', 'password-reset'], required: true },
+  type: { type: String, enum: ['email-verification', 'password-reset', 'oauth-handoff'], required: true },
   tokenHash: { type: String, required: true, unique: true },
   usedAt: { type: Date, default: null },
   expiresAt: { type: Date, required: true }
 }, { timestamps: true });
 AccountTokenSchema.index({ user: 1, type: 1, usedAt: 1 });
+AccountTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // --- WORKSPACE SCHEMA ---
 const WorkspaceSchema = new mongoose.Schema({
@@ -189,6 +196,10 @@ const MessageSchema = new mongoose.Schema({
   sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   content: { type: String, required: true, trim: true },
   deletedAt: { type: Date, default: null },
+  reactions: [{
+    emoji: { type: String, required: true },
+    users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+  }]
 }, { timestamps: true });
 MessageSchema.index({ workspace: 1, channelId: 1, createdAt: -1 }); // Multi-key index for fast history retrieval
 MessageSchema.index({ content: 'text' });

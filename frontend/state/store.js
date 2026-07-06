@@ -1,5 +1,6 @@
 export const state = {
-  token: localStorage.getItem('token') || '',
+  token: '',
+  csrfToken: localStorage.getItem('csrfToken') || '',
   user: JSON.parse(localStorage.getItem('user') || 'null'),
   demoMode: sessionStorage.getItem('demoMode') === 'true',
   authMode: 'login',
@@ -35,7 +36,14 @@ export const state = {
     library: ''
   },
   activeSettingsTab: localStorage.getItem('settingsTab') || 'general',
-  preferences: JSON.parse(localStorage.getItem('nexusPreferences') || '{"theme":"light","density":"comfortable","reduceMotion":false,"emailNotifications":true,"taskNotifications":true,"discussionNotifications":true}'),
+  preferences: (() => {
+    const prefs = JSON.parse(localStorage.getItem('nexusPreferences') || '{"theme":"light","density":"comfortable","reduceMotion":false,"emailNotifications":true,"taskNotifications":true,"discussionNotifications":true}');
+    const theme = localStorage.getItem('theme');
+    if (theme) {
+      prefs.theme = theme;
+    }
+    return prefs;
+  })(),
   selectedWorkspaceId: localStorage.getItem('workspaceId') || '',
   selectedChannelId: localStorage.getItem('channelId') || '',
   selectedDocumentId: localStorage.getItem('documentId') || '',
@@ -52,6 +60,7 @@ export const state = {
     channels: false,
     chat: false,
     messages: false,
+    threads: false,
     tasks: false,
     studyMaterials: false,
     document: false

@@ -93,9 +93,9 @@ export const connectSocket = async () => {
       }
 
       const syncedText = collab.ytext.toString();
-      globalThis.setEditorText(syncedText);
-      state.lastSavedText = syncedText;
       const doc = selectedDocument();
+      if (!doc?.contentHtml) globalThis.setEditorText(syncedText);
+      state.lastSavedText = syncedText;
       if (doc) doc.plainTextContent = syncedText;
       state.presence = users || [];
       globalThis.renderPresence();
@@ -185,6 +185,20 @@ export const connectSocket = async () => {
       if (globalThis.currentRoute() === 'home') globalThis.renderHomePage();
     }
   });
+
+  collab.socket.on('chat-message-reaction-updated', ({ messageId, reactions }) => {
+    const updateInArr = (arr) => {
+      const idx = arr.findIndex(m => String(m._id) === String(messageId));
+      if (idx > -1) {
+        arr[idx].reactions = reactions;
+      }
+    };
+    updateInArr(state.messages);
+    updateInArr(state.chatMessages);
+    if (globalThis.currentRoute() === 'chat') {
+      globalThis.renderChatPage();
+    }
+  });
 };
 
 export const disconnectSocket = () => {
@@ -225,6 +239,7 @@ export const setupYDoc = async (documentId) => {
     if (collab.localInput) return;
     const nextValue = collab.ytext.toString();
     if (globalThis.getEditorText() === nextValue) return;
+    if (selectedDocument()?.contentHtml) return;
     collab.applyingRemote = true;
     try {
       globalThis.setEditorText(nextValue);

@@ -21,6 +21,49 @@ const {
 } = require('../utils/AppError');
 const { DOCUMENT_LIMITS } = require('../config/constants');
 
+const sanitizeContentHtml = (html = '') => {
+  if (!html) return '';
+  const allowedTags = new Set(['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'span', 'mark', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'a', 'img', 'h1', 'h2', 'h3', 'details', 'summary', 'figure', 'figcaption', 'sup', 'sub', 'input']);
+  const allowedAttrs = new Set(['href', 'src', 'alt', 'title', 'style', 'class', 'target', 'rel', 'type', 'checked', 'disabled']);
+  return String(html)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(script|style|iframe|object|embed|svg|math)[\s\S]*?<\/\1>/gi, '')
+    .replace(/\s(on\w+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/<\/?([a-z0-9-]+)([^>]*)>/gi, (match, rawTag, rawAttrs = '') => {
+      const tag = rawTag.toLowerCase();
+      if (!allowedTags.has(tag)) return '';
+      if (match.startsWith('</')) return `</${tag}>`;
+      const attrs = [];
+      rawAttrs.replace(/([a-zA-Z0-9-:]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g, (_, rawName, rawValue = '') => {
+        const name = rawName.toLowerCase();
+        if (!allowedAttrs.has(name)) return '';
+        let value = String(rawValue || '').replace(/^['"]|['"]$/g, '').trim();
+        if ((name === 'href' || name === 'src') && /^(javascript|data:text\/html)/i.test(value)) return '';
+        if (name === 'style') {
+          const safeStyles = value.split(';').map((rule) => {
+            const [prop, val] = rule.split(':');
+            const property = prop?.trim().toLowerCase();
+            const nextValue = val?.trim();
+            if (!['color', 'background-color'].includes(property) || !nextValue) return '';
+            if (!/^(#[0-9a-f]{3,8}|rgb(a)?\([^)]+\)|hsl(a)?\([^)]+\)|[a-z]+)$/i.test(nextValue)) return '';
+            return `${property}: ${nextValue}`;
+          }).filter(Boolean).join('; ');
+          if (!safeStyles) return '';
+          value = safeStyles;
+        }
+        if (tag === 'input') {
+          if (name === 'type' && value !== 'checkbox') return '';
+          if (!['type', 'checked', 'disabled', 'class'].includes(name)) return '';
+        }
+        attrs.push(value ? `${name}="${value.replace(/"/g, '&quot;')}"` : name);
+        return '';
+      });
+      if (tag === 'a') attrs.push('target="_blank"', 'rel="noopener noreferrer"');
+      if (tag === 'input' && !attrs.some((attr) => attr.startsWith('disabled'))) attrs.push('disabled');
+      return `<${tag}${attrs.length ? ` ${attrs.join(' ')}` : ''}>`;
+    });
+};
+
 class DocumentService {
   /**
    * Create a new document, optionally as a child of a parent document
@@ -234,9 +277,15 @@ class DocumentService {
 
     // Update HTML content
     if (updates.contentHtml !== undefined) {
-      // Security: Never store raw HTML to prevent XSS
-      updateData.contentHtml = '';
-      changes.htmlCleared = true;
+      if (typeof updates.contentHtml !== 'string') {
+        throw new ValidationError('HTML content must be a string');
+      }
+      const htmlSize = Buffer.byteLength(updates.contentHtml, 'utf8');
+      if (htmlSize > 5_000_000) {
+        throw new ValidationError('HTML content is too large');
+      }
+      updateData.contentHtml = sanitizeContentHtml(updates.contentHtml);
+      changes.htmlSize = Buffer.byteLength(updateData.contentHtml, 'utf8');
     }
 
     // Update binary Yjs content

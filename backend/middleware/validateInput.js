@@ -57,7 +57,7 @@ const usernameSchema = z
 const passwordSchema = z
   .string()
   .min(VALIDATION.PASSWORD_MIN_LENGTH, `Password must be at least ${VALIDATION.PASSWORD_MIN_LENGTH} characters`)
-  .transform((val) => val.trim());
+  .max(128, 'Password must not exceed 128 characters');
 
 /**
  * Workspace name validation

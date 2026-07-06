@@ -146,14 +146,6 @@ export const renderChatPage = async ({ skipEnsure = false } = {}) => {
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><polyline points="20 6 9 17 4 12"/></svg>
             Mark all as Read
           </button>
-          <button class="chat-dropdown-item" data-dropdown-action="clear-local" type="button">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-            Clear Local View
-          </button>
-          <button class="chat-dropdown-item" data-dropdown-action="export" type="button">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Export Chat History
-          </button>
           <button class="chat-dropdown-item" data-dropdown-action="mute" type="button">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M23 9l-6 6M17 9l6 6"/></svg>
             <span id="chatMuteDropdownLabel">${isMuted ? 'Unmute Notifications' : 'Mute Notifications'}</span>
@@ -173,17 +165,29 @@ export const renderChatPage = async ({ skipEnsure = false } = {}) => {
       </div>
 
       <div class="workspace-chat-typing" id="workspaceChatTyping">
-        ${typingNames.length ? `${escapeHtml(typingNames.slice(0, 2).join(', '))} ${typingNames.length === 1 ? 'is' : 'are'} typing...` : ''}
+        ${typingNames.length ? `<span class="typing-dots"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></span><span>${escapeHtml(typingNames.slice(0, 2).join(', '))} ${typingNames.length === 1 ? 'is' : 'are'} typing…</span>` : ''}
       </div>
 
       <form id="workspaceChatForm" class="workspace-chat-composer">
         <div class="composer-input-wrapper">
+          <div id="chatAttachmentPreview" class="chat-attachment-preview hidden"></div>
           <textarea id="workspaceChatInput" rows="1" placeholder="Message #${escapeHtml(channel.name || 'general')}"></textarea>
+          <input type="file" id="chatFileInput" class="hidden" style="display: none;" />
           <div class="composer-toolbar">
             <div class="composer-toolbar-left">
-              <button class="composer-tool-btn" data-composer-format="bold" type="button" title="Bold"><strong>B</strong></button>
-              <button class="composer-tool-btn" data-composer-format="italic" type="button" title="Italic"><em>I</em></button>
-              <button class="composer-tool-btn" data-composer-format="strike" type="button" title="Strikethrough"><del>S</del></button>
+              <button class="composer-tool-btn" id="chatUploadFileBtn" type="button" title="Attach File">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <span class="composer-tool-divider"></span>
+              <button class="composer-tool-btn" data-composer-format="bold" type="button" title="Bold">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg>
+              </button>
+              <button class="composer-tool-btn" data-composer-format="italic" type="button" title="Italic">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>
+              </button>
+              <button class="composer-tool-btn" data-composer-format="strike" type="button" title="Strikethrough">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" y1="12" x2="20" y2="12"/></svg>
+              </button>
               <span class="composer-tool-divider"></span>
               <button class="composer-tool-btn" data-composer-format="code" type="button" title="Code Block">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -237,7 +241,7 @@ export const renderChatPage = async ({ skipEnsure = false } = {}) => {
   const sendBtn = document.getElementById('workspaceChatSendBtn');
   if (input && sendBtn) {
     const handleInput = () => {
-      const hasText = input.value.trim().length > 0;
+      const hasText = input.value.trim().length > 0 || !!state.attachedFile;
       sendBtn.disabled = !hasText;
       input.style.height = 'auto';
       input.style.height = Math.min(input.scrollHeight, 180) + 'px';
@@ -245,6 +249,138 @@ export const renderChatPage = async ({ skipEnsure = false } = {}) => {
     input.addEventListener('input', handleInput);
     handleInput();
   }
+
+  // --- Attach File Listener ---
+  const uploadBtn = document.getElementById('chatUploadFileBtn');
+  const fileInput = document.getElementById('chatFileInput');
+  if (uploadBtn && fileInput) {
+    uploadBtn.onclick = () => fileInput.click();
+    
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      if (file.size > 2 * 1024 * 1024) {
+        showToast('Files must be under 2MB', true);
+        fileInput.value = '';
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64Data = reader.result.split(',')[1];
+        state.attachedFile = {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          base64: base64Data,
+          dataUrl: reader.result
+        };
+        
+        const formatBytes = (bytes) => {
+          if (bytes === 0) return '0 Bytes';
+          const k = 1024;
+          const sizes = ['Bytes', 'KB', 'MB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        };
+
+        const previewContainer = document.getElementById('chatAttachmentPreview');
+        if (previewContainer) {
+          previewContainer.innerHTML = `
+            <div class="attachment-preview-card">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              <div class="attachment-preview-info">
+                <span class="attachment-preview-name">${escapeHtml(file.name)}</span>
+                <span class="attachment-preview-size">${formatBytes(file.size)}</span>
+              </div>
+              <button id="cancelChatAttachmentBtn" class="attachment-cancel-btn" type="button" title="Remove attachment">&times;</button>
+            </div>
+          `;
+          previewContainer.classList.remove('hidden');
+        }
+        if (sendBtn) sendBtn.disabled = false;
+      };
+      reader.readAsDataURL(file);
+    };
+  }
+
+  // Cancel Attachment Action
+  const previewContainer = document.getElementById('chatAttachmentPreview');
+  if (previewContainer) {
+    previewContainer.onclick = (e) => {
+      const cancelBtn = e.target.closest('#cancelChatAttachmentBtn');
+      if (cancelBtn) {
+        state.attachedFile = null;
+        if (fileInput) fileInput.value = '';
+        previewContainer.innerHTML = '';
+        previewContainer.classList.add('hidden');
+        if (input && sendBtn) {
+          sendBtn.disabled = input.value.trim().length === 0;
+        }
+      }
+    };
+  }
+};
+
+
+
+
+export const renderAttachmentInBubble = (content) => {
+  if (!content) return '';
+  // Find markdown links pointing to attachments
+  const regex = /\[📎 (.*?)\((.*?),\s*(.*?)\)\]\((.*?)\)/g;
+  return content.replace(regex, (match, filename, mimeType, size, url) => {
+    const isImage = mimeType.trim().toLowerCase().startsWith('image/');
+    
+    if (isImage) {
+      return `
+        <div class="chat-attachment-block image-attachment" style="margin-top: 8px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); max-width: 320px;">
+          <a href="${url}" target="_blank" rel="noopener noreferrer" style="display: block;">
+            <img src="${url}" alt="${escapeHtml(filename)}" style="width: 100%; height: auto; max-height: 240px; object-fit: cover; display: block;" />
+          </a>
+          <div class="attachment-meta" style="padding: 8px 12px; background: var(--panel-soft); display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted);">
+            <span style="font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 180px;">${escapeHtml(filename)}</span>
+            <span>${escapeHtml(size)}</span>
+          </div>
+        </div>
+      `;
+    }
+    
+    return `
+      <div class="chat-attachment-block file-attachment" style="margin-top: 8px; border-radius: var(--radius); border: 1px solid var(--line); padding: 10px 14px; background: var(--panel-soft); display: flex; align-items: center; gap: 12px; max-width: 380px;">
+        <span style="font-size: 20px;">📎</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(filename)}</span>
+          <span style="font-size: 11px; color: var(--muted);">${escapeHtml(size)}</span>
+        </div>
+        <a href="${url}" target="_blank" rel="noopener noreferrer" class="soft-button" style="padding: 6px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; height: 32px; width: 32px; flex-shrink: 0;" title="Download File">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+      </div>
+    `;
+  });
+};
+
+export const renderReactions = (reactions) => {
+  if (!reactions || !reactions.length) return '';
+  const currentUserId = String(state.user?.id || state.user?._id || 'me');
+  return `
+    <div class="chat-message-reactions">
+      ${reactions.map(r => {
+        const hasReacted = r.users && r.users.some(uid => String(uid) === currentUserId);
+        return `
+          <button class="chat-reaction-chip ${hasReacted ? 'active' : ''}" data-emoji="${escapeHtml(r.emoji)}" type="button">
+            <span>${escapeHtml(r.emoji)}</span>
+            <span>${r.users ? r.users.length : 0}</span>
+          </button>
+        `;
+      }).join('')}
+      <button class="chat-reaction-chip add-reaction-chip-btn" data-msg-action="react" type="button" title="Add reaction">
+        <span>+</span>
+      </button>
+    </div>
+  `;
 };
 
 
@@ -321,14 +457,18 @@ export const renderChatMessages = () => {
           <div class="chat-avatar-placeholder"></div>
           <div class="chat-message-content">
             <div class="chat-bubble">
-              <p>${parseMarkdownToHtml(message.content || '')}</p>
+              <p>${renderAttachmentInBubble(parseMarkdownToHtml(message.content || ''))}</p>
+              ${renderReactions(message.reactions || [])}
             </div>
           </div>
           <div class="chat-message-actions">
             <button class="chat-action-btn" data-msg-action="copy" type="button" title="Copy text">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
-            <button class="chat-action-btn" data-msg-action="reply" type="button" title="Reply (Mock)">
+            <button class="chat-action-btn chat-action-react-trigger" data-msg-action="react" type="button" title="Add reaction">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+            </button>
+            <button class="chat-action-btn" data-msg-action="reply" type="button" title="Reply">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
             </button>
           </div>
@@ -345,14 +485,18 @@ export const renderChatMessages = () => {
               <time class="chat-timestamp">${escapeHtml(formatChatTime(message.createdAt))}</time>
             </div>
             <div class="chat-bubble">
-              <p>${parseMarkdownToHtml(message.content || '')}</p>
+              <p>${renderAttachmentInBubble(parseMarkdownToHtml(message.content || ''))}</p>
+              ${renderReactions(message.reactions || [])}
             </div>
           </div>
           <div class="chat-message-actions">
             <button class="chat-action-btn" data-msg-action="copy" type="button" title="Copy text">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
-            <button class="chat-action-btn" data-msg-action="reply" type="button" title="Reply (Mock)">
+            <button class="chat-action-btn chat-action-react-trigger" data-msg-action="react" type="button" title="Add reaction">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+            </button>
+            <button class="chat-action-btn" data-msg-action="reply" type="button" title="Reply">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
             </button>
           </div>
@@ -561,7 +705,7 @@ export const handleChatDropdownAction = (action) => {
 
   if (action === 'info') {
     const onlineCount = chatOnlineCount();
-    const totalCount = state.demoMode ? 8 : (state.chatOnlineUsers.length || 1);
+    const totalCount = collaborationPeople().length || state.chatOnlineUsers.length || 1;
     const infoHtml = `
       <div class="channel-info-modal-content">
         <div class="channel-info-row">
@@ -726,7 +870,7 @@ export const handleChatAction = async (action) => {
         <div class="ai-loading-card">
           <span>✦</span>
           <strong>Summarizing chat history...</strong>
-          <small>Nexus is reading your messages using Gemini AI.</small>
+          <small>Nexus is finding topics, decisions, and action items.</small>
         </div>
       </div>
     `;
@@ -796,7 +940,7 @@ export const handleChatAction = async (action) => {
     } catch (err) {
       document.getElementById('aiChatSummaryOverlay')?.remove();
       if (err.message.includes('GEMINI_API_KEY') || err.message.includes('503') || err.message.includes('not configured')) {
-        showToast('Chat summary is not connected yet.', true);
+        showToast('AI summary needs the AI key in this environment.', true);
       } else {
         showToast(err.message, true);
       }
@@ -833,3 +977,90 @@ export const handleChatEmptyAction = (action) => {
   }
 };
 
+export const showEmojiPicker = (buttonEl, messageId) => {
+  const existing = document.getElementById('chatEmojiPicker');
+  if (existing) existing.remove();
+
+  const picker = document.createElement('div');
+  picker.id = 'chatEmojiPicker';
+  picker.className = 'chat-emoji-picker';
+  picker.style.cssText = `
+    position: absolute;
+    z-index: 1000;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-elevated);
+    padding: 6px;
+    display: flex;
+    gap: 4px;
+  `;
+  
+  const emojis = ['👍', '❤️', '🔥', '😂', '😮', '😢', '🙌', '🎉'];
+  picker.innerHTML = emojis.map(emoji => `
+    <button class="emoji-picker-btn" data-emoji="${emoji}" type="button" style="border: none; background: transparent; font-size: 16px; padding: 4px 6px; cursor: pointer; border-radius: 4px; transition: var(--transition-fast);">${emoji}</button>
+  `).join('');
+
+  document.body.appendChild(picker);
+
+  const rect = buttonEl.getBoundingClientRect();
+  picker.style.top = `${rect.top + window.scrollY - 38}px`;
+  picker.style.left = `${Math.max(8, rect.left + window.scrollX - 90)}px`;
+
+  setTimeout(() => {
+    const handleOutsideClick = (e) => {
+      if (!picker.contains(e.target) && e.target !== buttonEl) {
+        picker.remove();
+        document.removeEventListener('click', handleOutsideClick);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+  }, 50);
+
+  picker.addEventListener('click', (e) => {
+    const btn = e.target.closest('.emoji-picker-btn');
+    if (btn) {
+      const emoji = btn.dataset.emoji;
+      toggleReaction(messageId, emoji);
+      picker.remove();
+    }
+  });
+};
+
+export const toggleReaction = async (messageId, emoji) => {
+  const currentUserId = String(state.user?.id || state.user?._id || 'me');
+  
+  const toggleLocal = (msg) => {
+    if (msg) {
+      if (!msg.reactions) msg.reactions = [];
+      let react = msg.reactions.find(r => r.emoji === emoji);
+      if (react) {
+        const userIndex = react.users.findIndex(uid => String(uid) === currentUserId);
+        if (userIndex > -1) {
+          react.users.splice(userIndex, 1);
+        } else {
+          react.users.push(currentUserId);
+        }
+      } else {
+        msg.reactions.push({ emoji, users: [currentUserId] });
+      }
+      msg.reactions = msg.reactions.filter(r => r.users && r.users.length > 0);
+    }
+  };
+
+  toggleLocal(state.messages.find(m => String(m._id) === String(messageId)));
+  toggleLocal(state.chatMessages.find(m => String(m._id) === String(messageId)));
+  
+  if (currentRoute() === 'chat') {
+    renderChatPage({ skipEnsure: true });
+  }
+
+  if (!state.demoMode && collab.socket?.connected) {
+    collab.socket.emit('react-chat-message', {
+      workspaceId: state.selectedWorkspaceId,
+      channelId: activeChatChannel().slug,
+      messageId,
+      emoji
+    });
+  }
+};

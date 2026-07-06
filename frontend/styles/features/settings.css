@@ -3,29 +3,65 @@
 .settings-layout {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
-  gap: 44px;
+  gap: 32px;
+  height: calc(100% - 70px);
+  min-height: 0;
+  margin-top: 16px;
 }
 
 .settings-tabs {
-  display: grid;
-  align-content: start;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: none;
+  margin-bottom: 0;
 }
 
-.settings-tabs button {
-  height: 44px;
-  border: 0;
-  border-radius: 10px;
-  padding: 0 14px;
-  color: var(--text);
+.settings-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
   background: transparent;
+  border: none;
+  border-radius: var(--radius-md, 10px);
+  color: var(--muted);
+  font-size: 14.5px;
+  font-weight: 600;
   text-align: left;
-  font-weight: 750;
+  cursor: pointer;
+  transition: var(--transition, all 0.2s ease);
+  box-sizing: border-box;
+  width: 100%;
 }
 
-.settings-tabs button.active {
-  color: #fff;
-  background: var(--primary);
+.settings-nav-btn:hover {
+  background: var(--panel-soft) !important;
+  color: var(--text) !important;
+}
+
+.settings-nav-btn:hover .settings-nav-btn-icon {
+  transform: scale(1.1);
+}
+
+.settings-nav-btn.active {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.22) !important;
+}
+
+.settings-nav-btn.active .settings-nav-btn-icon {
+  filter: brightness(1.2);
+}
+
+.settings-nav-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-soft) !important;
+}
+
+.settings-nav-btn-icon {
+  font-size: 16px;
+  transition: transform 0.2s ease;
 }
 
 .settings-content-card {
@@ -204,27 +240,7 @@
 
 /* 5. Settings Page Redesign */
 
-.settings-layout {
-  display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  gap: 40px;
-}
-
-.settings-tabs button {
-  text-align: left;
-  border: 0;
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-weight: 600;
-  color: var(--muted);
-  background: transparent;
-  transition: var(--transition);
-}
-
-.settings-tabs button:hover {
-  color: var(--text);
-  background: var(--panel-soft);
-}
+/* Settings categories button styles consolidated to top */
 
 .settings-content-card {
   display: flex;
@@ -295,54 +311,7 @@
 
 /* 7. Settings Page Redesign */
 
-.settings-layout {
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 32px;
-  height: calc(100% - 70px);
-  min-height: 0;
-  margin-top: 16px;
-}
-
-.settings-tabs {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-bottom: none;
-  margin-bottom: 0;
-}
-
-.settings-nav-btn {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-md);
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-  transition: var(--transition);
-  box-sizing: border-box;
-  width: 100%;
-}
-
-.settings-nav-btn:hover {
-  background: var(--panel-soft);
-  color: var(--text);
-}
-
-.settings-nav-btn.active {
-  background: var(--primary-soft);
-  color: var(--primary);
-}
-
-.settings-nav-btn-icon {
-  font-size: 16px;
-}
+/* Settings category list styles consolidated to top */
 
 .settings-content-wrapper {
   max-width: 800px;

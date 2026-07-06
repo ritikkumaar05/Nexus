@@ -4,6 +4,10 @@ body.overlay-scroll-locked #app {
   min-height: 100vh;
 }
 
+body.app-booting #app {
+  visibility: hidden;
+}
+
 body.app-booting .route-page,
 body.app-booting .workspace-layout {
   display: none !important;

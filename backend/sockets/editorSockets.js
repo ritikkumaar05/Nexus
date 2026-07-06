@@ -414,6 +414,49 @@ const setupEditorSockets = (io) => {
       }
     });
 
+    // Handle emoji reactions
+    socket.on('react-chat-message', async ({ workspaceId, channelId, messageId, emoji } = {}) => {
+      try {
+        if (!isValidObjectId(workspaceId) || !isNonEmptyString(channelId) || !isValidObjectId(messageId)) {
+          return socket.emit('operation-error', { message: 'Invalid reaction parameters' });
+        }
+
+        const message = await Message.findOne({ _id: messageId, workspace: workspaceId });
+        if (!message) return;
+
+        const userId = socket.data.user.id;
+
+        if (!message.reactions) {
+          message.reactions = [];
+        }
+
+        let reaction = message.reactions.find(r => r.emoji === emoji);
+        if (reaction) {
+          const userIndex = reaction.users.indexOf(userId);
+          if (userIndex > -1) {
+            reaction.users.splice(userIndex, 1);
+          } else {
+            reaction.users.push(userId);
+          }
+        } else {
+          message.reactions.push({ emoji, users: [userId] });
+        }
+
+        // Filter out empty reactions
+        message.reactions = message.reactions.filter(r => r.users && r.users.length > 0);
+
+        await message.save();
+
+        // Broadcast the update to the workspace channel room
+        io.to(getChannelRoom(workspaceId, channelId)).emit('chat-message-reaction-updated', {
+          messageId,
+          reactions: message.reactions
+        });
+      } catch (err) {
+        console.error('Socket Reaction Error:', err);
+      }
+    });
+
     // Handle collaborative real-time writing (Yjs diff broadcasts)
     socket.on('join-document', async ({ documentId } = {}) => {
       try {

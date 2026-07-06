@@ -90,7 +90,7 @@ router.put(
       }
       updates.plainTextContent = plainTextContent;
     }
-    if (contentHtml !== undefined) updates.contentHtml = '';
+    if (contentHtml !== undefined) updates.contentHtml = contentHtml;
     if (binaryUpdateBase64 !== undefined) updates.binaryUpdateBase64 = binaryUpdateBase64;
     if (parentDocumentId !== undefined) updates.parentDocumentId = parentDocumentId;
 

@@ -24,3 +24,134 @@
 @import './features/settings.css';
 @import './themes/light.css';
 @import './themes/dark.css';
+
+/* Home dashboard hover states: keep targets still, animate the feedback. */
+
+.nexus-dashboard .card-v3 {
+  --home-card-border: rgba(255, 255, 255, 0.06);
+  --home-card-border-hover: rgba(99, 102, 241, 0.3);
+  --home-card-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  --home-card-shadow-hover: 0 14px 32px rgba(0, 0, 0, 0.28);
+  border-color: var(--home-card-border) !important;
+  box-shadow: var(--home-card-shadow) !important;
+  transform: none !important;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease !important;
+  will-change: box-shadow, border-color;
+}
+
+body:not([data-theme="dark"]):not([data-theme="system"]) .nexus-dashboard .card-v3 {
+  --home-card-border: var(--line, #e2e8f0);
+  --home-card-border-hover: rgba(99, 102, 241, 0.24);
+  --home-card-shadow: var(--shadow, 0 4px 16px rgba(0, 0, 0, 0.04));
+  --home-card-shadow-hover: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+@media (prefers-color-scheme: light) {
+  body[data-theme="system"] .nexus-dashboard .card-v3 {
+    --home-card-border: var(--line, #e2e8f0);
+    --home-card-border-hover: rgba(99, 102, 241, 0.24);
+    --home-card-shadow: var(--shadow, 0 4px 16px rgba(0, 0, 0, 0.04));
+    --home-card-shadow-hover: 0 8px 24px rgba(15, 23, 42, 0.08);
+  }
+}
+
+/* Keep dashboard card paints cheap. */
+.nexus-dashboard .card-v3,
+.nexus-dashboard .card-v3:hover,
+.nexus-dashboard .card-v3::before,
+.nexus-dashboard .card-v3::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+
+.nexus-dashboard .card-v3:hover,
+body:not([data-theme="dark"]):not([data-theme="system"]) .nexus-dashboard .card-v3:hover,
+body[data-theme="system"] .nexus-dashboard .card-v3:hover {
+  transform: none !important;
+  border-color: var(--home-card-border-hover) !important;
+  box-shadow: var(--home-card-shadow-hover) !important;
+}
+
+.nexus-dashboard button,
+.nexus-dashboard a,
+.nexus-dashboard label,
+.nexus-dashboard .focus-task-item,
+.nexus-dashboard .activity-feed-item,
+.nexus-dashboard .lecture-progress-row,
+.nexus-dashboard .doubt-card {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.nexus-dashboard .action-btn-large > *,
+.nexus-dashboard .continue-btn .arrow,
+.nexus-dashboard .chat-preview-link-btn .arrow,
+.nexus-dashboard .ai-coach-chip > *,
+.nexus-dashboard .ai-coach-btn > *,
+.nexus-dashboard .empty-state-btn > * {
+  pointer-events: none;
+}
+
+.nexus-dashboard .action-btn-large:hover,
+.nexus-dashboard .ai-coach-chip:hover,
+.nexus-dashboard .ai-coach-btn:hover,
+.nexus-dashboard .continue-btn:hover,
+.nexus-dashboard .chat-preview-link-btn:hover,
+.nexus-dashboard .empty-state-btn:hover,
+.nexus-dashboard .focus-task-item:hover,
+.nexus-dashboard .activity-feed-item:hover,
+.nexus-dashboard .lecture-progress-row:hover,
+.nexus-dashboard .doubt-card:hover {
+  transform: none !important;
+}
+
+.nexus-dashboard .action-btn-large:hover,
+.nexus-dashboard .ai-coach-chip:hover,
+.nexus-dashboard .focus-task-item:hover,
+.nexus-dashboard .activity-feed-item:hover,
+.nexus-dashboard .lecture-progress-row:hover,
+.nexus-dashboard .doubt-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--line)) !important;
+  background: color-mix(in srgb, var(--primary) 8%, var(--panel)) !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08) !important;
+}
+
+.nexus-dashboard .continue-btn:hover,
+.nexus-dashboard .chat-preview-link-btn:hover,
+.nexus-dashboard .ai-coach-btn:hover,
+.nexus-dashboard .empty-state-btn:hover {
+  box-shadow: 0 8px 18px rgba(99, 102, 241, 0.16) !important;
+}
+
+.nexus-dashboard .action-btn-large:hover .action-icon {
+  color: #fff !important;
+  background: var(--primary, #6366f1) !important;
+  border-color: transparent !important;
+  box-shadow: 0 6px 14px rgba(99, 102, 241, 0.22) !important;
+  transform: scale(1.04) !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease !important;
+}
+
+.nexus-dashboard .action-btn-large:hover,
+.nexus-dashboard .ai-coach-chip:hover,
+.nexus-dashboard .ai-coach-btn:hover,
+.nexus-dashboard .continue-btn:hover,
+.nexus-dashboard .chat-preview-link-btn:hover,
+.nexus-dashboard .empty-state-btn:hover,
+.nexus-dashboard .focus-task-item:hover,
+.nexus-dashboard .activity-feed-item:hover,
+.nexus-dashboard .lecture-progress-row:hover,
+.nexus-dashboard .doubt-card:hover {
+  transform: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Arrow nudges are safe because they move child glyphs, not hit targets. */
+.nexus-dashboard .continue-btn:hover .arrow,
+.nexus-dashboard .chat-preview-link-btn:hover .arrow,
+.nexus-dashboard .ai-coach-chip:hover .chip-arrow {
+  transform: translateX(3px) !important;
+  transition: transform 0.15s ease !important;
+}

@@ -84,12 +84,14 @@ test('auth payload creates a high-entropy refresh token and stores only its hash
 
 test('refresh rotates refresh token and rejects immediate reuse', async () => {
   const oldRefreshToken = 'old-refresh-token';
+  const csrfToken = 'csrf-token';
   const oldHash = AuthService._hashRefreshToken(oldRefreshToken);
   const session = {
     _id: '507f1f77bcf86cd799439011',
     user: '507f1f77bcf86cd799439012',
     tokenVersion: 0,
     refreshTokenHash: oldHash,
+    csrfTokenHash: AuthService._hashAccountToken(csrfToken),
     previousRefreshTokenHash: '',
     usedRefreshTokenHashes: [],
     revokedAt: null,
@@ -125,8 +127,9 @@ test('refresh rotates refresh token and rejects immediate reuse', async () => {
       })
     }]
   ], async () => {
-    const refreshed = await AuthService.refreshToken(oldRefreshToken);
+    const refreshed = await AuthService.refreshToken(oldRefreshToken, csrfToken);
     assert.equal(refreshed.refreshToken === oldRefreshToken, false);
+    assert.equal(typeof refreshed.csrfToken, 'string');
     assert.equal(session.tokenVersion, 1);
     assert.equal(session.previousRefreshTokenHash, oldHash);
     assert.equal(session.usedRefreshTokenHashes[0].tokenHash, oldHash);
@@ -143,11 +146,13 @@ test('refresh rotates refresh token and rejects immediate reuse', async () => {
 
 test('refresh rejects revoked and expired sessions', async () => {
   const token = 'refresh-token';
+  const csrfToken = 'csrf-token';
   const baseSession = {
     _id: '507f1f77bcf86cd799439011',
     user: '507f1f77bcf86cd799439012',
     tokenVersion: 0,
     refreshTokenHash: AuthService._hashRefreshToken(token),
+    csrfTokenHash: AuthService._hashAccountToken(csrfToken),
     previousRefreshTokenHash: '',
     usedRefreshTokenHashes: [],
     async save() {}
@@ -163,6 +168,55 @@ test('refresh rejects revoked and expired sessions', async () => {
         /Invalid or expired refresh token/
       );
     });
+  }
+});
+
+test('refresh rejects valid refresh token without matching CSRF token', async () => {
+  const token = 'refresh-token';
+  const session = {
+    _id: '507f1f77bcf86cd799439011',
+    user: '507f1f77bcf86cd799439012',
+    tokenVersion: 0,
+    refreshTokenHash: AuthService._hashRefreshToken(token),
+    csrfTokenHash: AuthService._hashAccountToken('csrf-token'),
+    previousRefreshTokenHash: '',
+    usedRefreshTokenHashes: [],
+    revokedAt: null,
+    expiresAt: new Date(Date.now() + 60_000),
+    async save() {}
+  };
+
+  await withPatchedModel([[Session, { findOne: async () => session }]], async () => {
+    await assert.rejects(
+      () => AuthService.refreshToken(token, 'wrong-csrf-token'),
+      /CSRF token is invalid/
+    );
+  });
+});
+
+test('Google token verification rejects malformed verified email addresses', async () => {
+  const originalFetch = global.fetch;
+  const originalClientId = process.env.GOOGLE_CLIENT_ID;
+  process.env.GOOGLE_CLIENT_ID = 'google-client-id';
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      aud: 'google-client-id',
+      sub: 'google-user-id',
+      email: '@email.com',
+      email_verified: true
+    })
+  });
+
+  try {
+    await assert.rejects(
+      () => AuthService._verifyGoogleIdToken('id-token'),
+      /Google account did not provide an email address/
+    );
+  } finally {
+    global.fetch = originalFetch;
+    if (originalClientId === undefined) delete process.env.GOOGLE_CLIENT_ID;
+    else process.env.GOOGLE_CLIENT_ID = originalClientId;
   }
 });
 

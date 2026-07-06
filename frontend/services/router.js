@@ -11,6 +11,16 @@ export const navigate = (route) => {
   location.hash = `/${route}`;
 };
 
+// Native View Transitions can keep a non-interactive snapshot over visible routes in Chrome.
+// Keep app route transitions opt-in so newly visible pages are clickable immediately.
+const ROUTE_VIEW_TRANSITION_OPT_IN = new Set();
+
+const shouldUseRouteViewTransition = (route) => (
+  Boolean(document.startViewTransition) &&
+  ROUTE_VIEW_TRANSITION_OPT_IN.has(route) &&
+  !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+);
+
 export const renderRoute = async () => {
   let routeAtStart = currentRoute();
 
@@ -26,12 +36,12 @@ export const renderRoute = async () => {
       globalThis.exitDemoMode();
     }
 
-    if (!state.token && !state.demoMode && !['login', 'signup', 'forgot-password', 'reset-password'].includes(route)) {
+    if (!state.token && !state.demoMode && !['login', 'signup', 'forgot-password', 'reset-password', 'verify-email', 'resend-verification', 'oauth-callback'].includes(route)) {
       navigate('login');
       return false;
     }
 
-    if (state.token && ['login', 'signup', 'forgot-password', 'reset-password'].includes(route)) {
+    if (state.token && ['login', 'signup', 'forgot-password', 'reset-password', 'verify-email', 'resend-verification', 'oauth-callback'].includes(route)) {
       navigate('home');
       return false;
     }
@@ -46,6 +56,15 @@ export const renderRoute = async () => {
       return globalThis.renderPasswordRecoveryPage(route);
     }
 
+    if (route === 'verify-email' || route === 'resend-verification') {
+      return globalThis.renderEmailVerificationPage(route);
+    }
+
+    if (route === 'oauth-callback') {
+      globalThis.renderOAuthCallbackPage();
+      return globalThis.completeOAuthCallback();
+    }
+
     if (route === 'home') {
       return globalThis.renderHomePage();
     }
@@ -55,7 +74,7 @@ export const renderRoute = async () => {
     }
 
     if (route === 'threads') {
-      await globalThis.loadWorkspaceThreads({
+      globalThis.loadWorkspaceThreads({
         limit: state.documents.length || 8,
         clear: !state.workspaceThreads.length
       }).catch((err) => globalThis.showToast(err.message, true));
@@ -101,7 +120,7 @@ export const renderRoute = async () => {
     return result;
   };
 
-  if (document.startViewTransition) {
+  if (shouldUseRouteViewTransition(routeAtStart)) {
     let result;
     const transition = document.startViewTransition(async () => {
       result = await runRouteUpdate();

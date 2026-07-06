@@ -1,185 +1,186 @@
-const DEMO_WORKSPACE_ID = 'demo-workspace-cs-final-year';
+const DEMO_WORKSPACE_ID = 'demo-workspace-learning-os';
 const DEMO_DOC_CONTENT = {
-  'demo-doc-ds-lecture': `Distributed Systems - Lecture Notes
+  'demo-doc-os-deadlocks': `Operating Systems - Lecture 5: Deadlocks
 
-CAP Theorem
-The CAP theorem states that a distributed system can only guarantee two out of three: consistency, availability, and partition tolerance.
+Learning Goal
+Understand when a system enters deadlock, how to detect it, and how prevention differs from avoidance.
 
-Key insight:
-In real systems, network partitions are unavoidable, so teams usually choose between CP and AP design.
+Key Concepts
+- Mutual exclusion: at least one resource cannot be shared.
+- Hold and wait: a process holds one resource while waiting for another.
+- No preemption: resources cannot be forcibly taken away.
+- Circular wait: processes form a cycle of resource dependencies.
 
-Consensus Algorithms
-Paxos and Raft help a collection of machines agree on one value even when some machines fail. Raft is easier to understand because it separates leader election, log replication, and safety.`,
-  'demo-doc-ds-problems': `Distributed Systems - Problem Sets
+Exam Lens
+Deadlock questions usually ask for the four necessary conditions, a resource allocation graph, or a Banker algorithm safety sequence.
 
-1. Explain why partition tolerance is unavoidable in distributed systems.
-2. Compare CP and AP system designs with examples.
-3. Trace the prepare and accept phases in Paxos.
-4. Design a simple key-value store and explain its consistency tradeoffs.`,
-  'demo-doc-ds-exam': `Distributed Systems - Exam Prep
+Revision Status
+Notes complete. Quiz accuracy: 60%. Needs one more revision before the OS midterm.`,
+  'demo-doc-os-scheduling': `Operating Systems - Lecture 4: CPU Scheduling
 
-High-priority topics:
-- CAP theorem
-- Paxos prepare phase
-- Raft leader election
-- Replication logs
-- Fault tolerance
+Learning Goal
+Compare FCFS, SJF, priority scheduling, and round robin using waiting time, turnaround time, and response time.
 
-Remember: exam answers should explain tradeoffs, not just definitions.`,
-  'demo-doc-ml-guide': `ML Study Guide
+Key Concepts
+- Waiting time: total time spent in ready queue.
+- Turnaround time: completion time minus arrival time.
+- Response time: first response minus arrival time.
+- Round robin improves responsiveness but depends on time quantum.
 
-Model evaluation tells us whether a machine learning model generalizes beyond training data.
+Common Mistake
+Students often confuse turnaround time with waiting time. Turnaround includes execution time; waiting time does not.`,
+  'demo-doc-dbms-normalization': `DBMS - Lecture 3: Normalization
 
-Important metrics:
-- Accuracy
-- Precision
-- Recall
-- F1 score
-- ROC-AUC
+Learning Goal
+Use functional dependencies to decompose relations and reduce update, insert, and delete anomalies.
 
-For imbalanced datasets, accuracy can be misleading. Prefer precision, recall, and F1 depending on the cost of false positives and false negatives.`,
-  'demo-doc-ml-eval': `Model Evaluation Notes
+Key Concepts
+- 1NF removes repeating groups.
+- 2NF removes partial dependency on a composite key.
+- 3NF removes transitive dependency.
+- BCNF is stricter: every determinant must be a candidate key.
 
-Validation split: used during model selection.
-Test split: used once at the end.
+Revision Status
+Flashcards created. Assignment due tomorrow: normalize Library(issue_id, book_id, member_id, member_name, return_date).`,
+  'demo-doc-dbms-transactions': `DBMS - Lecture 4: Transactions and ACID
 
-Cross-validation reduces variance in evaluation by training and testing across multiple folds.
+Learning Goal
+Explain atomicity, consistency, isolation, and durability, then connect them to concurrency control.
 
-Confusion matrix:
-TP = predicted positive and actually positive.
-FP = predicted positive but actually negative.
-FN = predicted negative but actually positive.`,
-  'demo-doc-project-plan': `Final Year Project Plan
+Key Concepts
+- Atomicity: all operations commit or none do.
+- Consistency: constraints remain valid before and after transaction.
+- Isolation: concurrent transactions behave like serial execution.
+- Durability: committed changes survive failure.`,
+  'demo-doc-cn-tcp': `Computer Networks - Lecture 6: TCP Congestion Control
 
-Project: Nexus collaborative learning workspace.
+Learning Goal
+Understand how TCP detects congestion and changes the congestion window using slow start, congestion avoidance, and fast recovery.
 
-Goals:
-- Real-time document collaboration
-- Document-scoped tasks
-- Discussion threads beside notes
-- AI summaries and quizzes
-- Workspace member management
+Key Concepts
+- cwnd controls how many bytes can be in flight.
+- Slow start grows cwnd exponentially until threshold.
+- Congestion avoidance grows cwnd linearly.
+- Packet loss usually signals congestion.
 
-Milestone this week: polish demo workspace and onboarding flow.`,
-  'demo-doc-meeting-notes': `Meeting Notes
+Revision Status
+Not revised this week. Related topic: sliding window protocol.`,
+  'demo-doc-cn-routing': `Computer Networks - Lecture 5: Routing Algorithms
 
-Attendees: Alex, Priya, Rohan, Sam
+Learning Goal
+Compare distance vector and link state routing.
 
-Decisions:
-- Keep Nexus document-first.
-- Right panel should contain AI, Tasks, Discussion, and Members.
-- Demo mode should feel alive without requiring signup.
-
-Next actions:
-- Priya: prepare ML quiz prompts.
-- Rohan: review Paxos notes.
-- Sam: polish project proposal.`
+Key Concepts
+- Distance vector shares route cost with neighbors.
+- Link state floods topology information.
+- Dijkstra computes shortest paths from global topology.
+- Bellman-Ford updates distance estimates from neighbors.`
 };
 
 const DEMO_AI_OUTPUTS = {
   summarize: `Short Summary:
-The CAP theorem says a distributed system cannot perfectly guarantee consistency, availability, and partition tolerance at the same time.
+Deadlock happens when processes wait forever because each process holds a resource and waits for another resource in a cycle.
 
 Detailed Summary:
-In real distributed systems, network partitions can happen. When machines cannot communicate, the system must choose between staying available or keeping every read perfectly consistent.
+Deadlock requires four conditions: mutual exclusion, hold and wait, no preemption, and circular wait. If even one condition is removed, deadlock cannot occur.
 
 Key Points:
-- CAP says distributed systems can only fully provide two of consistency, availability, and partition tolerance.
-- Network partitions are unavoidable in real systems.
-- Teams usually choose between CP and AP behavior depending on product needs.
-- Paxos and Raft help distributed systems agree safely despite failures.
+- Prevention breaks one necessary condition.
+- Avoidance checks whether a request keeps the system in a safe state.
+- Detection lets deadlocks happen, then recovers.
+- Resource allocation graphs make circular wait visible.
 
 Things to Remember:
-CP favors correctness. AP favors continued access.`,
-  quiz: `Quiz from your notes
+Banker's Algorithm is about safe sequences, not just available resources.`,
+  quiz: `Quiz from your lecture
 
-Question 1: What does CAP stand for?
-A) Consistency, Availability, Partition Tolerance
-B) Cache, API, Protocol
-C) Connection, Access, Process
-D) Consistency, Algorithm, Partition
+Question 1: Which condition means a process holds one resource while waiting for another?
+A) Hold and wait
+B) Durability
+C) Fragmentation
+D) Polling
 Answer: A
-Explanation: CAP stands for Consistency, Availability, and Partition Tolerance.
-Topic: CAP theorem
+Explanation: Hold and wait is one of the four necessary deadlock conditions.
+Topic: Deadlock conditions
 
-Question 2: Why is partition tolerance unavoidable?
-A) Because networks can fail or become unreachable
-B) Because every database uses SQL
-C) Because caching is always disabled
-D) Because servers never restart
+Question 2: What does circular wait mean?
+A) Processes form a cycle while waiting for resources
+B) CPU repeats the same instruction
+C) The disk rotates too slowly
+D) A process exits normally
 Answer: A
-Explanation: Distributed systems run across networks, and networks can drop packets or split temporarily.
-Topic: Distributed systems
+Explanation: Circular wait creates a dependency cycle among processes.
+Topic: Deadlock conditions
 
-Question 3: What is the main tradeoff during a partition?
-A) CPU speed vs memory size
-B) Consistency vs availability
-C) UI design vs backend design
-D) Passwords vs tokens
+Question 3: What does deadlock prevention do?
+A) Break at least one necessary condition
+B) Increase CPU clock speed
+C) Disable all interrupts
+D) Always use FIFO
+Answer: A
+Explanation: Prevention ensures one of the four necessary conditions cannot hold.
+Topic: Deadlock handling
+
+Question 4: What is the goal of the Banker algorithm?
+A) Find shortest path
+B) Keep the system in a safe state
+C) Sort processes by priority
+D) Allocate disk blocks
 Answer: B
-Explanation: During a partition, a system may choose to stay available with stale data or preserve consistency by delaying/rejecting some requests.
-Topic: CAP theorem
+Explanation: Banker checks whether granting a request leaves a safe sequence.
+Topic: Deadlock avoidance
 
-Question 4: What does a CP system prioritize?
-A) Availability over consistency
-B) Consistency over availability during partitions
-C) Only fast reads
-D) Only UI responsiveness
-Answer: B
-Explanation: CP systems protect consistency even if some requests cannot be served during a partition.
-Topic: CP systems
-
-Question 5: What does an AP system prioritize?
-A) Availability during partitions
-B) Perfect consistency only
-C) Single-server storage
-D) Manual synchronization
+Question 5: Which tool helps visualize resource cycles?
+A) Resource allocation graph
+B) ER diagram
+C) Routing table
+D) Parse tree
 Answer: A
-Explanation: AP systems keep responding during partitions, sometimes with eventually consistent data.
-Topic: AP systems
+Explanation: Cycles in resource allocation graphs can reveal deadlock risk.
+Topic: Deadlock detection
 `,
-  explain: `Imagine your study group is editing notes in different rooms. If the internet breaks, everyone can either keep writing and risk mismatch, or pause until everyone agrees. CAP is about that tradeoff for computers.`,
+  explain: `Imagine four students each holding one book and waiting for the next student's book. Nobody can move because everyone is waiting for someone else. That is deadlock.`,
   'simple-explanation': `Simple Explanation:
-Imagine you and your friends share one notebook, but the internet between you breaks.
+Imagine every student in a lab has one cable and needs one more cable from another student.
 
-Consistency means everyone sees the same notebook.
-Availability means everyone can still use the notebook.
-Partition tolerance means the group keeps working even when the internet breaks.
+Nobody gives up their cable.
+Everyone keeps waiting.
+The work never starts.
 
-CAP says when the internet breaks, you usually cannot have perfect same answers and always-working access at the same time.
+That stuck situation is deadlock.
 
 Real-life Example:
-A chat app may let you send messages while offline, but other people may see them later.`,
+A printer queue can freeze if jobs lock files and devices in a cycle.`,
   exam: `Important exam questions:
-1. Explain CAP theorem with one real-world example.
-2. Compare consistency and availability during a network partition.
-3. Describe the Paxos prepare phase.
-4. Why is Raft considered easier to understand than Paxos?`,
+1. State and explain the four necessary conditions for deadlock.
+2. Draw a resource allocation graph and identify whether deadlock exists.
+3. Explain Banker's Algorithm with a safe sequence.
+4. Compare deadlock prevention, avoidance, detection, and recovery.`,
   'important-questions': `Very Important:
-1. Explain CAP theorem with examples.
-2. Differentiate between consistency and availability.
-3. Why is partition tolerance unavoidable?
+1. Explain the four deadlock conditions.
+2. Solve a Banker Algorithm safety sequence.
+3. Draw a resource allocation graph and detect cycles.
 
 Medium Important:
-4. Explain CP and AP systems.
-5. Give examples of distributed databases and their tradeoffs.
+4. Compare prevention and avoidance.
+5. Explain recovery after deadlock detection.
 
 Quick Revision:
-6. Define consistency.
-7. Define availability.
-8. Define partition tolerance.`,
+6. Define hold and wait.
+7. Define circular wait.
+8. Define safe state.`,
   flashcards: `Flashcards:
-Front: What does C mean in CAP?
-Back: Consistency, every read sees the most recent write.
-Tag: CAP
+Front: What are the four deadlock conditions?
+Back: Mutual exclusion, hold and wait, no preemption, circular wait.
+Tag: Deadlocks
 
-Front: What does A mean in CAP?
-Back: Availability, every request receives a non-error response.
-Tag: CAP
+Front: What does deadlock prevention do?
+Back: It breaks at least one necessary deadlock condition.
+Tag: Deadlocks
 
-Front: What does P mean in CAP?
-Back: Partition tolerance, the system keeps working despite network splits.
-Tag: CAP`
+Front: What is a safe state?
+Back: A state where all processes can finish in some order.
+Tag: Banker Algorithm`
 };
 
 const createDemoState = () => {
@@ -188,7 +189,8 @@ const createDemoState = () => {
     user: { id: 'demo-user-alex', username: 'Alex Rivera', email: 'alex@demo.nexus' },
     workspaces: [{
       _id: DEMO_WORKSPACE_ID,
-      name: 'CS Final Year Workspace',
+      name: 'Semester 5 Exam OS',
+      description: 'Learning OS demo with courses, living lectures, doubts, tasks, quizzes, and revision progress.',
       owner: { _id: 'demo-user-alex', username: 'Alex Rivera', email: 'alex@nexus.demo' },
       members: [
         { user: { _id: 'demo-user-alex', username: 'Alex Rivera', email: 'alex@nexus.demo' }, role: 'admin' },
@@ -198,39 +200,38 @@ const createDemoState = () => {
       ]
     }],
     documents: [
-      { _id: 'demo-doc-ds-lecture', title: 'Lecture Notes', category: 'Distributed Systems', plainTextContent: DEMO_DOC_CONTENT['demo-doc-ds-lecture'], updatedAt: now },
-      { _id: 'demo-doc-ds-problems', title: 'Problem Sets', category: 'Distributed Systems', plainTextContent: DEMO_DOC_CONTENT['demo-doc-ds-problems'], updatedAt: now },
-      { _id: 'demo-doc-ds-exam', title: 'Exam Prep', category: 'Distributed Systems', plainTextContent: DEMO_DOC_CONTENT['demo-doc-ds-exam'], updatedAt: now },
-      { _id: 'demo-doc-ml-guide', title: 'ML Study Guide', category: 'Machine Learning', plainTextContent: DEMO_DOC_CONTENT['demo-doc-ml-guide'], updatedAt: now },
-      { _id: 'demo-doc-ml-eval', title: 'Model Evaluation Notes', category: 'Machine Learning', plainTextContent: DEMO_DOC_CONTENT['demo-doc-ml-eval'], updatedAt: now },
-      { _id: 'demo-doc-project-plan', title: 'Final Year Project Plan', category: 'Project Work', plainTextContent: DEMO_DOC_CONTENT['demo-doc-project-plan'], updatedAt: now },
-      { _id: 'demo-doc-meeting-notes', title: 'Meeting Notes', category: 'Project Work', plainTextContent: DEMO_DOC_CONTENT['demo-doc-meeting-notes'], updatedAt: now }
+      { _id: 'demo-doc-os-deadlocks', title: 'Lecture 5: Deadlocks', category: 'Operating Systems', learningMilestones: { summaryGenerated: true, aiExplanation: true, quizGenerated: true, taskCreated: true }, examWeight: 'High', quizAccuracy: 60, plainTextContent: DEMO_DOC_CONTENT['demo-doc-os-deadlocks'], updatedAt: now },
+      { _id: 'demo-doc-os-scheduling', title: 'Lecture 4: CPU Scheduling', category: 'Operating Systems', learningMilestones: { summaryGenerated: true, aiExplanation: true, flashcardsGenerated: true, quizGenerated: true, taskCreated: true }, examWeight: 'High', quizAccuracy: 82, plainTextContent: DEMO_DOC_CONTENT['demo-doc-os-scheduling'], updatedAt: now },
+      { _id: 'demo-doc-dbms-normalization', title: 'Lecture 3: Normalization', category: 'DBMS', learningMilestones: { flashcardsGenerated: true, taskCreated: true }, examWeight: 'High', quizAccuracy: 70, plainTextContent: DEMO_DOC_CONTENT['demo-doc-dbms-normalization'], updatedAt: now },
+      { _id: 'demo-doc-dbms-transactions', title: 'Lecture 4: Transactions and ACID', category: 'DBMS', learningMilestones: { aiExplanation: true }, examWeight: 'Medium', quizAccuracy: 55, plainTextContent: DEMO_DOC_CONTENT['demo-doc-dbms-transactions'], updatedAt: now },
+      { _id: 'demo-doc-cn-tcp', title: 'Lecture 6: TCP Congestion Control', category: 'Computer Networks', learningMilestones: {}, examWeight: 'High', quizAccuracy: 48, plainTextContent: DEMO_DOC_CONTENT['demo-doc-cn-tcp'], updatedAt: now },
+      { _id: 'demo-doc-cn-routing', title: 'Lecture 5: Routing Algorithms', category: 'Computer Networks', learningMilestones: { summaryGenerated: true, flashcardsGenerated: true, quizGenerated: true }, examWeight: 'Medium', quizAccuracy: 76, plainTextContent: DEMO_DOC_CONTENT['demo-doc-cn-routing'], updatedAt: now }
     ],
     channels: [
-      { _id: 'demo-thread-paxos', slug: 'paxos-clarification', name: 'Clarification on Paxos Algorithm' },
-      { _id: 'demo-thread-finals', slug: 'study-group-finals', name: 'Study group for finals?' },
-      { _id: 'demo-thread-ml', slug: 'ml-assignment', name: 'ML assignment deadline' }
+      { _id: 'demo-thread-os', slug: 'os-deadlocks', name: 'OS doubts: Deadlocks' },
+      { _id: 'demo-thread-dbms', slug: 'dbms-normalization', name: 'DBMS assignment' },
+      { _id: 'demo-thread-cn', slug: 'cn-revision', name: 'Networks revision' }
     ],
     messages: [
-      { _id: 'demo-msg-1', channelId: 'general', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Class starts at 10 AM. I uploaded the notes from yesterday.', createdAt: now },
-      { _id: 'demo-msg-2', channelId: 'general', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'Did anyone complete assignment 4?', createdAt: now },
-      { _id: 'demo-msg-3', channelId: 'general', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: "Question 4 is tricky. I'll share my approach after lunch.", createdAt: now }
+      { _id: 'demo-msg-1', channelId: 'general', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'OS midterm is in 12 days. I marked Deadlocks as high priority.', createdAt: now },
+      { _id: 'demo-msg-2', channelId: 'general', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'DBMS normalization assignment is due tomorrow. Can we review 3NF examples?', createdAt: now },
+      { _id: 'demo-msg-3', channelId: 'general', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: "I scored 3/5 on the deadlocks quiz. Revising Banker algorithm next.", createdAt: now }
     ],
     documentMessages: [
-      { _id: 'demo-doc-msg-1', sender: { username: 'Rohan Kapoor' }, body: "Why must the acceptor only respond if n is greater than any previous prepare it has seen?", linkedText: 'When a proposer sends a prepare request with proposal number n, acceptors only promise to higher proposal numbers.', status: 'open', replies: [
-        { _id: 'demo-doc-reply-1', sender: { username: 'Priya Sharma' }, body: 'Acceptors promise only to higher proposal numbers so older proposals cannot override newer ones.' },
-        { _id: 'demo-doc-reply-2', sender: { username: 'Rohan Kapoor' }, body: 'That makes sense now.' }
+      { _id: 'demo-doc-msg-1', sender: { username: 'Rohan Kapoor' }, body: 'Why does circular wait matter if every process is only waiting for one resource?', linkedText: 'Circular wait: processes form a cycle of resource dependencies.', status: 'open', replies: [
+        { _id: 'demo-doc-reply-1', sender: { username: 'Priya Sharma' }, body: 'Because the cycle means each process is blocked by the next one, so none can release what the others need.' },
+        { _id: 'demo-doc-reply-2', sender: { username: 'Alex Rivera' }, body: 'Add a resource allocation graph and it becomes visible.' }
       ] },
-      { _id: 'demo-doc-msg-2', sender: { username: 'Alex Rivera' }, body: 'What does partition tolerance mean in one line?', linkedText: 'Partition tolerance means the system continues despite dropped messages.', status: 'resolved', resolvedBy: { username: 'Priya Sharma' }, resolvedAt: now, replies: [
-        { _id: 'demo-doc-reply-3', sender: { username: 'Priya Sharma' }, body: 'It means the system keeps operating even when parts of the network cannot talk to each other.' }
+      { _id: 'demo-doc-msg-2', sender: { username: 'Alex Rivera' }, body: 'Is Banker algorithm prevention or avoidance?', linkedText: 'Avoidance checks whether a request keeps the system in a safe state.', status: 'resolved', resolvedBy: { username: 'Priya Sharma' }, resolvedAt: now, replies: [
+        { _id: 'demo-doc-reply-3', sender: { username: 'Priya Sharma' }, body: 'Avoidance. It checks safety before granting requests.' }
       ] }
     ],
     documentTasks: [
-      { _id: 'demo-task-1', title: 'Review CAP theorem', status: 'todo', priority: 'high', dueDate: now, assignee: { username: 'Alex Rivera' } },
-      { _id: 'demo-task-2', title: 'Prepare ML quiz questions', status: 'in_progress', priority: 'medium', dueDate: now, assignee: { username: 'Priya Sharma' } },
-      { _id: 'demo-task-3', title: 'Submit final year project proposal', status: 'todo', priority: 'high', dueDate: now, assignee: { username: 'Sam Okafor' } },
-      { _id: 'demo-task-4', title: 'Sync notes with team', status: 'done', priority: 'low', dueDate: now, assignee: { username: 'Alex Rivera' } },
-      { _id: 'demo-task-5', title: 'Revise CAP theorem', status: 'todo', priority: 'medium', dueDate: now, assignee: { username: 'Rohan Kapoor' } }
+      { _id: 'demo-task-1', title: 'Revise Deadlocks before dinner', status: 'todo', priority: 'high', dueDate: now, documentId: 'demo-doc-os-deadlocks', assignee: { username: 'Alex Rivera' } },
+      { _id: 'demo-task-2', title: 'Solve 5 CPU Scheduling numericals', status: 'done', priority: 'medium', dueDate: now, documentId: 'demo-doc-os-scheduling', assignee: { username: 'Priya Sharma' }, completedAt: now },
+      { _id: 'demo-task-3', title: 'Submit DBMS normalization assignment', status: 'todo', priority: 'high', dueDate: now, documentId: 'demo-doc-dbms-normalization', assignee: { username: 'Sam Okafor' } },
+      { _id: 'demo-task-4', title: 'Finish TCP congestion flashcards', status: 'todo', priority: 'medium', dueDate: now, documentId: 'demo-doc-cn-tcp', assignee: { username: 'Alex Rivera' } },
+      { _id: 'demo-task-5', title: 'Review ACID isolation examples', status: 'done', priority: 'low', dueDate: now, documentId: 'demo-doc-dbms-transactions', assignee: { username: 'Rohan Kapoor' } }
     ],
     presence: [
       { userId: 'demo-user-priya', email: 'priya@nexus.demo', cursor: { start: 68, end: 68 } },
@@ -238,10 +239,10 @@ const createDemoState = () => {
       { userId: 'demo-user-rohan', email: 'rohan@nexus.demo', cursor: null }
     ],
     activityItems: [
-      { id: 'demo-activity-1', actor: 'Priya Sharma', action: 'edited', target: 'ML Study Guide', time: '2 min ago', documentId: 'demo-doc-ml-guide' },
-      { id: 'demo-activity-2', actor: 'Rohan Kapoor', action: 'asked a doubt on', target: 'CAP Theorem', time: '8 min ago', documentId: 'demo-doc-ds-lecture' },
-      { id: 'demo-activity-3', actor: 'Sam Okafor', action: 'completed task', target: 'Project Proposal', time: '15 min ago', documentId: 'demo-doc-project-plan' },
-      { id: 'demo-activity-4', actor: 'Alex Rivera', action: 'generated quiz from', target: 'Distributed Systems Notes', time: '22 min ago', documentId: 'demo-doc-ds-lecture' }
+      { id: 'demo-activity-1', actor: 'Priya Sharma', action: 'revised', target: 'CPU Scheduling', time: '2 min ago', documentId: 'demo-doc-os-scheduling' },
+      { id: 'demo-activity-2', actor: 'Rohan Kapoor', action: 'asked a doubt on', target: 'Deadlocks circular wait', time: '8 min ago', documentId: 'demo-doc-os-deadlocks' },
+      { id: 'demo-activity-3', actor: 'Sam Okafor', action: 'created task for', target: 'DBMS assignment', time: '15 min ago', documentId: 'demo-doc-dbms-normalization' },
+      { id: 'demo-activity-4', actor: 'Alex Rivera', action: 'generated quiz from', target: 'Deadlocks', time: '22 min ago', documentId: 'demo-doc-os-deadlocks' }
     ]
   };
 };
