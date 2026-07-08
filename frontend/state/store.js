@@ -14,6 +14,14 @@ export const state = {
   unreadChatCount: Number(localStorage.getItem('chatUnreadCount') || 0),
   documentMessages: [],
   workspaceThreads: [],
+  taskStore: {
+    byId: {},
+    ids: [],
+    loadedWorkspaceId: '',
+    loading: false,
+    loadedAt: 0,
+    error: ''
+  },
   documentTasks: [],
   dashboardTasks: [],
   studyMaterials: [],
@@ -28,6 +36,7 @@ export const state = {
   typingUsers: [],
   lastAiAction: '',
   lastAiOutput: '',
+  aiStructuredOutput: null,
   aiStudySession: null,
   activeContextTab: 'ai',
   contextLoadedFor: {
@@ -36,6 +45,12 @@ export const state = {
     library: ''
   },
   activeSettingsTab: localStorage.getItem('settingsTab') || 'general',
+  accountSecurity: {
+    loading: false,
+    loaded: false,
+    error: '',
+    data: null
+  },
   preferences: (() => {
     const prefs = JSON.parse(localStorage.getItem('nexusPreferences') || '{"theme":"light","density":"comfortable","reduceMotion":false,"emailNotifications":true,"taskNotifications":true,"discussionNotifications":true}');
     const theme = localStorage.getItem('theme');

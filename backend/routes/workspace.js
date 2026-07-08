@@ -13,7 +13,7 @@ const { validateInput, schemas } = require('../middleware/validateInput');
 const { requireRole, requireMembership } = require('../middleware/requirePermission');
 const { asyncHandler } = require('../utils/AppError');
 const WorkspaceService = require('../services/WorkspaceService');
-const { Document, DocumentMessage, Workspace } = require('../models');
+const { Document, DocumentMessage, DocumentTask, Workspace } = require('../models');
 const { isValidObjectId } = require('../utils/validation');
 const { canViewWorkspace } = require('../utils/permissions');
 
@@ -91,6 +91,49 @@ router.get(
   asyncHandler(async (req, res) => {
     const workspaces = await WorkspaceService.getByUser(req.user.id);
     res.json(workspaces);
+  })
+);
+
+/**
+ * GET /api/workspaces/:workspaceId/tasks
+ * Get task summaries across every document in the workspace.
+ */
+router.get(
+  '/:workspaceId/tasks',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { workspaceId } = req.params;
+    if (!isValidObjectId(workspaceId)) {
+      return res.status(400).json({ error: 'Valid workspace ID is required' });
+    }
+
+    const workspace = await Workspace.findOne({ _id: workspaceId, 'members.user': req.user.id });
+    if (!workspace || !canViewWorkspace(workspace, req.user.id)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const tasks = await DocumentTask.find({ workspace: workspaceId })
+      .sort({ status: 1, dueDate: 1, createdAt: -1 })
+      .populate('assignee', 'username email')
+      .populate('creator', 'username email')
+      .populate('document', 'title');
+
+    res.json(tasks.map((task) => ({
+      _id: task._id,
+      workspaceId: task.workspace,
+      documentId: task.document?._id || task.document,
+      documentTitle: task.document?.title || 'Untitled Lecture',
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      dueDate: task.dueDate,
+      assignee: task.assignee,
+      creator: task.creator,
+      completedAt: task.completedAt,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt
+    })));
   })
 );
 

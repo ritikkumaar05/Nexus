@@ -10,12 +10,15 @@
 
 const {
   Attachment,
+  AiGenerationCache,
   Channel,
   Comment,
   Document,
   DocumentMessage,
   DocumentTask,
   DocumentVersion,
+  LearningEvent,
+  LearningMemory,
   Message,
   StudyMaterial,
   User,
@@ -256,12 +259,15 @@ class WorkspaceService {
 
     const deleteResults = await Promise.all([
       Attachment.deleteMany({ workspace: workspaceId }),
+      AiGenerationCache.deleteMany({ workspace: workspaceId }),
       Channel.deleteMany({ workspace: workspaceId }),
       Comment.deleteMany({ workspace: workspaceId }),
       Document.deleteMany({ workspace: workspaceId }),
       DocumentMessage.deleteMany({ workspace: workspaceId }),
       DocumentTask.deleteMany({ workspace: workspaceId }),
       DocumentVersion.deleteMany({ workspace: workspaceId }),
+      LearningEvent.deleteMany({ workspace: workspaceId }),
+      LearningMemory.deleteMany({ workspace: workspaceId }),
       Message.deleteMany({ workspace: workspaceId }),
       StudyMaterial.deleteMany({ workspace: workspaceId }),
       WorkspaceInvitation.deleteMany({ workspace: workspaceId })

@@ -121,6 +121,14 @@ const AUTH = {
   // Account token (password reset, email verification) TTL in hours
   ACCOUNT_TOKEN_TTL_HOURS: 2,
 
+  // Email verification OTP duration and abuse controls
+  EMAIL_OTP_TTL_MINUTES: Number(process.env.EMAIL_OTP_TTL_MINUTES || 10),
+  EMAIL_OTP_MAX_ATTEMPTS: Number(process.env.EMAIL_OTP_MAX_ATTEMPTS || 5),
+  EMAIL_OTP_RESEND_COOLDOWN_SECONDS: Number(process.env.EMAIL_OTP_RESEND_COOLDOWN_SECONDS || 60),
+
+  // Password reset email abuse controls
+  PASSWORD_RESET_COOLDOWN_SECONDS: Number(process.env.PASSWORD_RESET_COOLDOWN_SECONDS || 60),
+
   // OAuth handoff token duration in minutes
   OAUTH_HANDOFF_TTL_MINUTES: 5,
   

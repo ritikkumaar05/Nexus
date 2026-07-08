@@ -104,7 +104,7 @@ const renderLectureProgressList = (lectures = []) => lectures.map((lecture) => `
   <button class="lecture-progress-row" data-open-document="${escapeHtml(lecture._id || '')}" type="button">
     <span>
       <strong>${escapeHtml(lecture.title || 'Untitled lecture')}</strong>
-      <small>${escapeHtml(lecture.category || 'Course')} · ${lecture.progress >= 90 ? 'Mastered' : lecture.progress >= 30 ? 'In progress' : 'Not started'}</small>
+      <small>${escapeHtml(lecture.category || 'Course')} · ${lecture.progress >= 90 ? 'Ready for revision' : lecture.progress >= 30 ? 'In progress' : 'Not started'}</small>
     </span>
     <em>${Number.isFinite(Number(lecture.progress)) ? `${Number(lecture.progress)}%` : '0%'}</em>
   </button>
@@ -129,8 +129,8 @@ export const renderHomePage = () => {
         <header class="home-welcome-header">
           <div class="welcome-copy">
             <span class="eyebrow">Nexus Workspace</span>
-            <h2>Loading your workspace...</h2>
-            <p>We are getting your notes, tasks, and chats ready.</p>
+            <h2>Getting your study workspace ready...</h2>
+            <p>Opening your notes, tasks, doubts, and recent study context.</p>
           </div>
         </header>
         <div class="home-grid">
@@ -146,7 +146,7 @@ export const renderHomePage = () => {
       <div class="dashboard-shell dashboard-shell-v2">
         ${emptyState({
           title: 'Create your first study workspace',
-          body: 'Organize notes, tasks, doubts, and AI study tools in one calm place.',
+          body: 'Organize notes, tasks, doubts, and Nexus Mentor in one calm place.',
           action: 'Create Workspace',
           actionId: 'emptyHomeCreateWorkspaceBtn',
           secondaryAction: 'Try Demo Workspace',
@@ -192,7 +192,7 @@ export const renderHomePage = () => {
           <p>${state.demoMode ? 'Your Semester 5 study coach is already organized around lectures, progress, doubts, and revision.' : 'Here is what to study next and what needs attention.'}</p>
         </div>
         <div class="header-stats-row">
-          <span class="stat-pill"><span class="pill-icon">◆</span> ${coach.examInDays ? `${coach.examLabel} in ${coach.examInDays} days` : 'Study plan active'}</span>
+          <span class="stat-pill"><span class="pill-icon">◆</span> ${coach.examInDays ? `${coach.examLabel} in ${coach.examInDays} days` : 'Study path ready'}</span>
           <span class="stat-pill"><span class="pill-icon">📚</span> ${coach.totalLectures} lectures</span>
           <span class="stat-pill"><span class="pill-icon">✅</span> ${coach.completedTasks} tasks complete</span>
           <span class="stat-pill streak-pill ${coach.streakActiveToday ? 'streak-active' : coach.studyStreak > 0 ? 'streak-alive' : 'streak-zero'}">
@@ -212,11 +212,11 @@ export const renderHomePage = () => {
           <div>
             <span class="judge-tour-kicker">Five-minute tour</span>
             <h3>See the living lecture loop</h3>
-            <p>Open Deadlocks, select the circular wait paragraph, ask AI to explain it, review the attached doubt, then take the quiz. The demo shows Nexus organizing progress instead of files.</p>
+            <p>Open Deadlocks, select the circular wait paragraph, ask Nexus Mentor to explain it, review the attached doubt, then take the quiz. The demo shows Nexus organizing progress instead of files.</p>
           </div>
           <div class="judge-tour-actions">
             <button data-open-document="${escapeHtml(primaryDoc?._id || state.selectedDocumentId || '')}" type="button">Open lecture</button>
-            <button data-dashboard-action="ai" type="button">Try AI</button>
+            <button data-dashboard-action="ai" type="button">Ask Mentor</button>
             <button data-dashboard-target="tasks" type="button">Tasks</button>
             <button data-dashboard-target="chat" type="button">Chat</button>
           </div>
@@ -229,7 +229,7 @@ export const renderHomePage = () => {
           <article class="card-v3 learning-coach-card">
             <div class="learning-coach-main">
               <span class="doc-badge">Overall Workspace Progress</span>
-              <h3>${coach.progress}% of learning completed</h3>
+              <h3>${coach.progress}% revision coverage</h3>
               <p>${primaryDoc ? `Next lecture to move forward: ${escapeHtml(primaryDoc.title || 'Untitled lecture')} · ${Number(primaryDoc.progress || 0)}% complete` : 'Add one lecture and Nexus will organize notes, doubts, tasks, quizzes, and revision around it.'}</p>
               ${renderProgressBar(coach.progress)}
               <div class="course-progress-list">
@@ -238,7 +238,7 @@ export const renderHomePage = () => {
             </div>
             <div class="learning-coach-metrics">
               <span><strong>${coach.totalLectures}</strong><small>Total lectures</small></span>
-              <span><strong>${coach.masteredLectures}</strong><small>Mastered ≥90%</small></span>
+              <span><strong>${coach.masteredLectures}</strong><small>Ready ≥90%</small></span>
               <span><strong>${coach.inProgressLectures}</strong><small>In progress 30–89%</small></span>
               <span><strong>${coach.notStartedLectures}</strong><small>Not started &lt;30%</small></span>
               <span><strong>${coach.completedTasks}</strong><small>Completed tasks</small></span>
@@ -271,7 +271,7 @@ export const renderHomePage = () => {
                   <span class="doc-icon-large">📄</span>
                   <div>
                     <h3>Create your first study note</h3>
-                    <p>Write notes, generate flashcards, and study with AI.</p>
+                    <p>Write notes, generate flashcards, and study with Nexus Mentor.</p>
                   </div>
                 </div>
               </div>
@@ -284,7 +284,7 @@ export const renderHomePage = () => {
           <article class="card-v3 revision-map-card">
             <div class="card-header-v3">
               <h3>Lecture Mastery Map</h3>
-              <span class="chat-channel-badge">${coach.lecturesLeft} left to master</span>
+              <span class="chat-channel-badge">${coach.lecturesLeft} left to review</span>
             </div>
             <div class="revision-map-list">
               ${renderLectureProgressList(coach.revisionQueue.length ? coach.revisionQueue : recentDocuments.slice(0, 4)) || `
@@ -314,10 +314,10 @@ export const renderHomePage = () => {
                 <div class="empty-focus-state">
                   <span class="empty-icon">✓</span>
                   <h4>No focus tasks yet</h4>
-                  <p>Create a study task or let AI generate a plan from your current lecture.</p>
+                  <p>Create a study task or let Nexus Mentor draft a plan from your current lecture.</p>
                   <div class="empty-actions-row">
                     <button class="empty-state-btn primary" data-dashboard-action="new-task">+ Add Study Task</button>
-                    <button class="empty-state-btn" data-dashboard-action="ai">🪄 Generate with AI</button>
+                    <button class="empty-state-btn" data-dashboard-action="ai">Generate with Mentor</button>
                   </div>
                 </div>
               `}
@@ -342,7 +342,7 @@ export const renderHomePage = () => {
                 <div class="empty-activity-state">
                   <span class="empty-icon">↗</span>
                   <h4>No activity yet</h4>
-                  <p>Lecture revisions, quiz attempts, doubts, and AI actions will appear here.</p>
+                  <p>Lecture revisions, quiz attempts, doubts, and mentor actions will appear here.</p>
                   <div class="empty-actions-row">
                     <button class="empty-state-btn primary" data-dashboard-action="new-document">+ Create Lecture</button>
                     <button class="empty-state-btn" data-dashboard-action="invite">👥 Invite Member</button>
@@ -370,7 +370,7 @@ export const renderHomePage = () => {
               `).join('') || `
                 <div class="empty-chat-state">
                   <span class="empty-icon">✓</span>
-                  <h4>No blockers right now</h4>
+                  <h4>No unresolved doubts yet</h4>
                   <p>Doubts attached to paragraphs will stay here until resolved.</p>
                 </div>
               `}
@@ -393,7 +393,7 @@ export const renderHomePage = () => {
               </button>
               <button class="action-btn-large" data-dashboard-action="ai" type="button">
                 <span class="action-icon">🤖</span>
-                <strong>Ask Tutor</strong>
+                <strong>Ask Mentor</strong>
               </button>
               <button class="action-btn-large" data-dashboard-action="new-task" type="button">
                 <span class="action-icon">✅</span>
@@ -402,10 +402,10 @@ export const renderHomePage = () => {
             </div>
           </article>
 
-          <!-- SECTION 7 — AI STUDY COACH -->
+          <!-- SECTION 7 — NEXUS MENTOR -->
           <article class="card-v3 ai-coach-card">
             <div class="card-header-v3">
-              <h3>AI Tutor</h3>
+              <h3>Nexus Mentor</h3>
               <span class="chat-channel-badge">Lecture-aware</span>
             </div>
             <div class="ai-coach-suggestions">
@@ -424,7 +424,7 @@ export const renderHomePage = () => {
             </div>
             <div class="ai-coach-actions">
               <button class="ai-coach-btn primary" data-dashboard-action="ai" type="button">
-                <span>Ask Tutor</span>
+                <span>Ask Mentor</span>
               </button>
               <button class="ai-coach-btn secondary" data-dashboard-target="chat" type="button">
                 <span>Chat</span>

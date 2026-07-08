@@ -10,6 +10,10 @@ const express = require('express');
 const router = express.Router();
 const { Document, Workspace } = require('../models');
 const { generateText } = require('../services/aiService');
+const AiGenerationCacheService = require('./AiGenerationCacheService');
+const LearningContextBuilder = require('./LearningContextBuilder');
+const LearningContextService = require('./LearningContextService');
+const LearningMemoryService = require('./LearningMemoryService');
 const authenticateToken = require('../middleware/auth');
 const { isValidObjectId, normalizeString, isNonEmptyString } = require('../utils/validation');
 const { canEditWorkspaceContent, canViewWorkspace } = require('../utils/permissions');
@@ -20,6 +24,131 @@ const MAX_WORKSPACE_CONTEXT_CHARS = 30000;
 const truncate = (value, maxLength) => {
   if (!value) return '';
   return value.length > maxLength ? value.slice(0, maxLength) : value;
+};
+
+const structuredInstructionForAction = (action) => {
+  if (['quiz', 'generate-quiz'].includes(action)) {
+    return `Return only valid JSON with this shape:
+{"questions":[{"question":"...","options":[{"key":"A","text":"..."},{"key":"B","text":"..."},{"key":"C","text":"..."},{"key":"D","text":"..."}],"answer":"A","explanation":"...","topic":"..."}]}
+Create exactly 10 questions.`;
+  }
+
+  if (['flashcards', 'generate-flashcards'].includes(action)) {
+    return `Return only valid JSON with this shape:
+{"cards":[{"front":"...","back":"...","tag":"..."}]}
+Create 8 to 12 cards.`;
+  }
+
+  return `Return only valid JSON with this shape:
+{"sections":[{"title":"...","text":"...","items":["..."]}]}`;
+};
+
+const extractJson = (value = '') => {
+  const text = String(value || '').trim();
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1] || text.slice(
+    Math.max(0, Math.min(...['{', '['].map((char) => {
+      const index = text.indexOf(char);
+      return index < 0 ? Number.POSITIVE_INFINITY : index;
+    }))),
+    Math.max(text.lastIndexOf('}'), text.lastIndexOf(']')) + 1
+  );
+
+  try {
+    return JSON.parse(candidate);
+  } catch (error) {
+    return null;
+  }
+};
+
+const normalizeStructuredOutput = (action, parsed) => {
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  if (['quiz', 'generate-quiz'].includes(action) && Array.isArray(parsed.questions)) {
+    return {
+      type: 'quiz',
+      questions: parsed.questions.slice(0, 20).map((question, index) => ({
+        id: question.id || `q-${index}`,
+        question: String(question.question || '').trim(),
+        options: Array.isArray(question.options) ? question.options.map((option, optionIndex) => ({
+          key: String(option.key || String.fromCharCode(65 + optionIndex)).trim().toUpperCase().slice(0, 1),
+          text: String(option.text || '').trim()
+        })).filter((option) => option.key && option.text).slice(0, 6) : [],
+        answer: String(question.answer || '').trim().toUpperCase().slice(0, 1),
+        answerText: String(question.answerText || '').trim(),
+        explanation: String(question.explanation || '').trim(),
+        topic: String(question.topic || 'Study notes').trim()
+      })).filter((question) => question.question)
+    };
+  }
+
+  if (['flashcards', 'generate-flashcards'].includes(action) && Array.isArray(parsed.cards)) {
+    return {
+      type: 'flashcards',
+      cards: parsed.cards.slice(0, 40).map((card, index) => ({
+        id: card.id || `card-${index}`,
+        front: String(card.front || '').trim(),
+        back: String(card.back || '').trim(),
+        tag: String(card.tag || 'Study notes').trim()
+      })).filter((card) => card.front && card.back)
+    };
+  }
+
+  if (Array.isArray(parsed.sections)) {
+    return {
+      type: 'structured',
+      sections: parsed.sections.slice(0, 12).map((section) => ({
+        title: String(section.title || 'Study Output').trim(),
+        text: String(section.text || '').trim(),
+        items: Array.isArray(section.items) ? section.items.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 20) : []
+      })).filter((section) => section.title || section.text || section.items.length)
+    };
+  }
+
+  return null;
+};
+
+const renderStructuredResponse = (action, structured, fallback = '') => {
+  if (!structured) return fallback;
+  if (structured.type === 'quiz') {
+    return `Quiz from your notes\n\n${structured.questions.map((question, index) => {
+      const options = (question.options || []).map((option) => `${option.key}) ${option.text}`).join('\n');
+      return `Question ${index + 1}: ${question.question}
+${options}
+Answer: ${question.answer || question.answerText}
+Explanation: ${question.explanation}
+Topic: ${question.topic || 'Study notes'}`;
+    }).join('\n\n')}`;
+  }
+
+  if (structured.type === 'flashcards') {
+    return `Flashcards:\n\n${structured.cards.map((card) => `Front: ${card.front}
+Back: ${card.back}
+Tag: ${card.tag || 'Study notes'}`).join('\n\n')}`;
+  }
+
+  return (structured.sections || []).map((section) => {
+    const items = (section.items || []).map((item) => `- ${item}`).join('\n');
+    return `${section.title}\n${section.text || ''}${items ? `\n${items}` : ''}`.trim();
+  }).join('\n\n') || fallback;
+};
+
+const summarizeDocumentChunks = async ({ action, documentTitle, chunks }) => {
+  if (!chunks || chunks.length <= 1) return '';
+
+  const summaries = [];
+  for (const chunk of chunks) {
+    const prompt = LearningContextBuilder.buildChunkPrompt({
+      documentTitle,
+      action,
+      chunk,
+      totalChunks: chunks.length
+    });
+    const summary = await generateText(prompt, 'You prepare compact lecture chunk summaries for a later final AI study response. Return concise markdown notes only.');
+    summaries.push(`Section ${chunk.index}: ${summary}`);
+  }
+
+  return summaries.join('\n\n');
 };
 
 // --- ENDPOINT A: CONTEXTUAL WORKSPACE ASSISTANT (RAG Lite) ---
@@ -60,8 +189,12 @@ router.post('/chat', authenticateToken, async (req, res) => {
       workspaceKnowledgeBase += `\n--- Document #${idx + 1} [Title: ${title}] ---\n${content}\n`;
     });
     workspaceKnowledgeBase = truncate(workspaceKnowledgeBase, MAX_WORKSPACE_CONTEXT_CHARS);
+    const learningContext = await LearningContextService.buildWorkspaceChatContext({
+      userId: req.user.id,
+      workspaceId
+    });
 
-    const systemPrompt = `
+    const baseSystemPrompt = `
 You are the central AI Brain of an all-in-one collaborative workspace (combining Docs, Notion, and WhatsApp-like chat).
 The user is asking you a question. You have access to their team's workspace documents. Use this context to answer their question accurately.
 If the documents do not contain the answer, you can use your general knowledge, but clearly distinguish what is from their workspace files vs general knowledge.
@@ -70,9 +203,18 @@ If the documents do not contain the answer, you can use your general knowledge, 
 ${workspaceKnowledgeBase}
 ------------------------------------
 `;
+    const systemPrompt = LearningContextService.composeSystemPrompt(baseSystemPrompt, learningContext);
 
     // 3. Request completion from Gemini Service
     const aiResponse = await generateText(query, systemPrompt);
+    LearningMemoryService.safeRecord(() => LearningMemoryService.recordAiInteraction({
+      userId: req.user.id,
+      workspaceId,
+      action: 'workspace-chat',
+      sourceText: query,
+      responseText: aiResponse,
+      source: 'workspace-chat'
+    }));
 
     res.json({ response: aiResponse });
 
@@ -88,11 +230,21 @@ router.post('/document-action', authenticateToken, async (req, res) => {
   try {
     const action = normalizeString(req.body.action);
     const text = typeof req.body.text === 'string' ? req.body.text : '';
+    const selectedText = typeof req.body.selectedText === 'string'
+      ? req.body.selectedText
+      : normalizeString(req.body.source) === 'selection'
+        ? text
+        : '';
     const instructions = normalizeString(req.body.instructions);
     const workspaceId = normalizeString(req.body.workspaceId);
     const documentId = normalizeString(req.body.documentId);
+    const hasDocumentContext = isValidObjectId(workspaceId) && isValidObjectId(documentId);
 
-    if (!isNonEmptyString(action) || !isNonEmptyString(text)) {
+    if (!isNonEmptyString(action)) {
+      return res.status(400).json({ error: 'Action is required' });
+    }
+
+    if (!hasDocumentContext && !isNonEmptyString(text)) {
       return res.status(400).json({ error: 'Action and source text are required' });
     }
 
@@ -111,7 +263,7 @@ router.post('/document-action', authenticateToken, async (req, res) => {
       }
     }
 
-    if (text.length > MAX_AI_INPUT_CHARS) {
+    if (!hasDocumentContext && text.length > MAX_AI_INPUT_CHARS) {
       return res.status(413).json({ error: 'Source text is too large for one AI operation' });
     }
 
@@ -155,6 +307,7 @@ Tag: ...`;
         break;
       case 'simple-explanation':
       case 'explain-simple':
+      case 'explain':
         systemPrompt = `You are Nexus, a simple teaching assistant. Explain the user's notes like the learner is 10 years old.
 Return markdown with:
 Simple Explanation
@@ -184,8 +337,97 @@ Then add a short note on what to revise first.`;
         return res.status(400).json({ error: 'Unsupported action type' });
     }
 
-    const aiResponse = await generateText(userPrompt, systemPrompt);
-    res.json({ response: aiResponse });
+    let structured = null;
+    let sourceTextForMemory = text;
+    let generationCacheKey = '';
+    let generationDocumentUpdatedAt = null;
+
+    if (hasDocumentContext) {
+      const documentContext = await LearningContextBuilder.buildDocumentContext({
+        userId: req.user.id,
+        workspaceId,
+        documentId,
+        action,
+        selectedText,
+        legacyText: text,
+        instructions
+      });
+
+      if (!documentContext || !isNonEmptyString(documentContext.sourceText)) {
+        return res.status(400).json({ error: 'Add lecture text before running AI' });
+      }
+
+      generationDocumentUpdatedAt = documentContext.document?.updatedAt || null;
+      generationCacheKey = AiGenerationCacheService.buildKey({
+        userId: req.user.id,
+        workspaceId,
+        documentId,
+        action,
+        selectedText: documentContext.selectedText,
+        instructions,
+        documentUpdatedAt: generationDocumentUpdatedAt
+      });
+      const cached = await AiGenerationCacheService.get(generationCacheKey);
+      if (cached) {
+        return res.json({
+          response: cached.response,
+          structured: cached.structured || null,
+          cached: true
+        });
+      }
+
+      const chunkSummaries = await summarizeDocumentChunks({
+        action,
+        documentTitle: documentContext.document?.title || 'Untitled lecture',
+        chunks: documentContext.chunks
+      });
+
+      sourceTextForMemory = documentContext.selectedText || truncate(documentContext.documentText, MAX_AI_INPUT_CHARS);
+      userPrompt = [
+        documentContext.selectedText ? `Selected text:\n${documentContext.selectedText}` : '',
+        chunkSummaries ? `Lecture section summaries:\n${chunkSummaries}` : `Lecture source:\n${documentContext.sourceText}`,
+        documentContext.currentHeading ? `Current heading: ${documentContext.currentHeading}` : '',
+        `Requested action: ${action}`
+      ].filter(Boolean).join('\n\n');
+      systemPrompt = `${systemPrompt}
+
+Structured output contract:
+${structuredInstructionForAction(action)}`;
+      systemPrompt = LearningContextService.composeSystemPrompt(systemPrompt, documentContext.contextBlock);
+    } else {
+      systemPrompt = `${systemPrompt}
+
+Structured output contract:
+${structuredInstructionForAction(action)}`;
+    }
+
+    const rawAiResponse = await generateText(userPrompt, systemPrompt);
+    structured = normalizeStructuredOutput(action, extractJson(rawAiResponse));
+    const aiResponse = renderStructuredResponse(action, structured, rawAiResponse);
+
+    if (hasDocumentContext) {
+      LearningMemoryService.safeRecord(() => LearningMemoryService.recordAiInteraction({
+        userId: req.user.id,
+        workspaceId,
+        documentId,
+        action,
+        sourceText: sourceTextForMemory,
+        responseText: aiResponse,
+        source: normalizeString(req.body.source) || 'document'
+      }));
+      LearningMemoryService.safeRecord(() => AiGenerationCacheService.set({
+        cacheKey: generationCacheKey,
+        userId: req.user.id,
+        workspaceId,
+        documentId,
+        action,
+        documentUpdatedAt: generationDocumentUpdatedAt,
+        response: aiResponse,
+        structured,
+        metadata: { source: normalizeString(req.body.source) || 'document' }
+      }));
+    }
+    res.json({ response: aiResponse, structured });
 
   } catch (err) {
     const status = err.message === 'GEMINI_API_KEY is not configured' ? 503 : 500;

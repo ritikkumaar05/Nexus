@@ -11,7 +11,15 @@ export const createApiClient = ({
     if (status === 0 || lower.includes('failed to fetch') || lower.includes('networkerror')) {
       return "Couldn't connect right now. Check your connection and try again.";
     }
-    if (lower.includes('verify your email') || lower.includes('verification link expired')) {
+    if (lower.includes('verify your email') || lower.includes('otp expired')) {
+      return text;
+    }
+    if (
+      lower.includes('current password') ||
+      lower.includes('deletion code') ||
+      lower.includes('continue with google') ||
+      lower.includes('google identity')
+    ) {
       return text;
     }
     if (status === 401 || lower.includes('invalid or expired') || lower.includes('session expired')) {
@@ -78,7 +86,7 @@ export const createApiClient = ({
         '/api/auth/login',
         '/api/auth/register',
         '/api/auth/verify-email',
-        '/api/auth/verify-email/request',
+        '/api/auth/resend-verification',
         '/api/auth/password/forgot',
         '/api/auth/password/reset',
         '/api/auth/google/complete'
@@ -92,9 +100,15 @@ export const createApiClient = ({
         return request(path, options, false);
       }
       if (response.status === 413) {
+        if (path === '/api/ai/document-action') {
+          throw new Error('This lecture is too large to process in one request. Nexus is preparing it in smaller sections.');
+        }
         throw new Error('This content is too large to save. Try shortening the document or saving smaller study material.');
       }
-      throw new Error(friendlyError(data?.error || `Request failed with ${response.status}`, response.status));
+      const detailMessage = Array.isArray(data?.details) && data.details[0]?.message
+        ? data.details[0].message
+        : '';
+      throw new Error(friendlyError(detailMessage || data?.error || `Request failed with ${response.status}`, response.status));
     }
 
     return data;

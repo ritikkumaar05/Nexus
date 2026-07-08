@@ -11964,6 +11964,24 @@ body.document-workspace-screen:not(.focus-mode) .context-view[data-context-view=
   line-height: 1.45 !important;
 }
 
+body.document-workspace-screen:not(.focus-mode) .context-view[data-context-view="ai"] .study-context-evidence {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 8px 10px !important;
+  border-radius: 10px !important;
+  background: color-mix(in srgb, var(--panel) 92%, var(--muted) 8%) !important;
+  border: 1px solid color-mix(in srgb, var(--line) 86%, var(--muted) 14%) !important;
+  color: var(--muted) !important;
+  font-size: 11.5px !important;
+}
+
+body.document-workspace-screen:not(.focus-mode) .context-view[data-context-view="ai"] .study-context-evidence strong {
+  color: var(--text) !important;
+  font-weight: 700 !important;
+}
+
 body.document-workspace-screen:not(.focus-mode) .context-view[data-context-view="ai"] .study-section-grid {
   display: grid !important;
   gap: 12px !important;

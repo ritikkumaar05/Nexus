@@ -135,7 +135,7 @@ const renderAuthBelowFoldSections = () => `
                 <div class="preview-collab-cursor">
                   <span class="cursor-bar" style="background: #10b981;"></span>
                   <span class="cursor-badge" style="background: #10b981;">Ronnie 👋</span>
-                  <span class="cursor-text">Wait, can we summarize this with the AI helper?</span>
+                  <span class="cursor-text">Wait, can Nexus Mentor summarize this?</span>
                 </div>
                 <div class="preview-task-chips">
                   <span class="task-chip completed"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Read paper</span>
@@ -148,7 +148,7 @@ const renderAuthBelowFoldSections = () => `
             <div class="preview-ai-panel">
               <div class="preview-ai-header">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                <strong>Nexus AI Helper</strong>
+                <strong>Nexus Mentor</strong>
               </div>
               <div class="preview-ai-chat">
                 <div class="preview-bubble user">Summarize the backpropagation steps.</div>
@@ -172,7 +172,7 @@ const renderAuthBelowFoldSections = () => `
         <div class="section-header">
           <span class="eyebrow">Powerful Features</span>
           <h2>Everything you need to ace your courses.</h2>
-          <p>Ditch the fragmented tools. Bring your study group, lecture notes, and AI assistance into one workspace.</p>
+          <p>Ditch the fragmented tools. Bring your study group, lecture notes, and guided study support into one workspace.</p>
         </div>
         <div class="features-grid">
           <div class="feature-card">
@@ -229,8 +229,8 @@ const renderAuthBelowFoldSections = () => `
       <section class="final-cta-section" aria-label="Get Started CTA">
         <div class="final-cta-card">
           <h2>Build your study workspace in minutes.</h2>
-          <p>Open the demo workspace to see shared notes, document discussions, tasks, chat, and AI study tools working together.</p>
-          <a class="hero-btn-primary" href="#/signup">Create your workspace</a>
+          <p>Open the demo workspace to see shared notes, document discussions, tasks, chat, and Nexus Mentor working together.</p>
+          <a class="hero-btn-primary" href="#/signup" data-auth-create-workspace>Create your workspace</a>
         </div>
       </section>
 `;
@@ -282,7 +282,7 @@ export const renderAuthPage = (mode) => {
             </div>
             <h2 class="hero-headline">Turn messy class collaboration into one study workspace.</h2>
             <p class="hero-subtext">
-              Nexus brings notes, tasks, chat, doubts, and AI study aids into one shared room so teams can move from lecture to revision faster.
+              Nexus brings notes, tasks, chat, doubts, and Nexus Mentor into one shared room so teams can move from lecture to revision faster.
             </p>
             <div class="hero-actions">
               <a class="hero-btn-primary" href="#/signup">Start free</a>
@@ -295,7 +295,7 @@ export const renderAuthPage = (mode) => {
               </div>
               <div class="trust-item">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                <span>AI summaries</span>
+                <span>Mentor summaries</span>
               </div>
               <div class="trust-item">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
@@ -303,13 +303,13 @@ export const renderAuthPage = (mode) => {
               </div>
               <div class="trust-item">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
-                <span>Smart tasks</span>
+                <span>Study tasks</span>
               </div>
             </div>
             <div class="hero-proof-row" aria-label="Nexus highlights">
               <div>
                 <strong>One workspace</strong>
-                <span>Notes, tasks, threads, and AI</span>
+                <span>Notes, tasks, threads, and Mentor</span>
               </div>
               <div>
                 <strong>Zero setup</strong>
@@ -329,7 +329,7 @@ export const renderAuthPage = (mode) => {
                 <div class="auth-card-header">
                   <p class="auth-kicker">${mode === 'signup' ? 'Start free' : 'Welcome back'}</p>
                   <h2>${mode === 'signup' ? 'Create your account' : 'Sign in to Nexus'}</h2>
-                  <p>${mode === 'signup' ? 'Set up your workspace and start collaborating in minutes.' : 'Continue to your notes, tasks, chat, and AI study tools.'}</p>
+                  <p>${mode === 'signup' ? 'Set up your workspace and start collaborating in minutes.' : 'Continue to your notes, tasks, chat, and mentor-guided study tools.'}</p>
                 </div>
                 <div class="auth-value-strip" aria-label="Account benefits">
                   <span>Private workspace</span>
@@ -343,12 +343,12 @@ export const renderAuthPage = (mode) => {
                 ` : ''}
 
                 <div class="auth-fields">
-                  ${mode === 'signup' ? `
-                    <label class="auth-field" for="pageUsernameInput">
-                      <span>Username</span>
-                      <input id="pageUsernameInput" autocomplete="username" placeholder="Alex Kumar" />
-                    </label>
-                  ` : ''}
+	                  ${mode === 'signup' ? `
+	                    <label class="auth-field" for="pageUsernameInput">
+	                      <span>Username</span>
+	                      <input id="pageUsernameInput" autocomplete="username" placeholder="alex_kumar" />
+	                    </label>
+	                  ` : ''}
                   <label class="auth-field" for="pageEmailInput">
                     <span>Email address</span>
                     <input id="pageEmailInput" type="email" autocomplete="email" placeholder="you@university.edu" />
@@ -399,8 +399,8 @@ export const renderAuthPage = (mode) => {
                 </p>
                 ${mode === 'login' ? `
                   <p class="auth-switch">
-                    Need a new verification email?
-                    <a href="#/resend-verification">Resend verification email</a>
+                    Need a new OTP?
+                    <a href="#/resend-verification">Resend verification OTP</a>
                   </p>
                 ` : ''}
                 <button class="demo-auth-link" data-try-demo type="button">Try Demo Workspace instead</button>
@@ -418,8 +418,8 @@ export const renderAuthPage = (mode) => {
 export const renderEmailVerificationPage = (mode = 'verify-email') => {
   setMainMode('auth');
   setRouteChrome('');
-  const token = routeQuery().get('token') || '';
   const isVerify = mode === 'verify-email';
+  const pendingEmail = sessionStorage.getItem('nexusPendingVerificationEmail') || '';
 
   els.routePage.innerHTML = `
     <div class="nexus-landing auth-page password-recovery-page">
@@ -452,30 +452,36 @@ export const renderEmailVerificationPage = (mode = 'verify-email') => {
             <section class="auth-card-wrap" aria-label="${isVerify ? 'Verify email' : 'Resend verification'}">
               <form id="${isVerify ? 'pageVerifyEmailForm' : 'pageResendVerificationForm'}" class="auth-card">
                 <div class="auth-card-header">
-                  <p class="auth-kicker">${isVerify ? 'Email verification' : 'Resend email'}</p>
-                  <h2>${isVerify ? 'Finish account setup' : 'Send a new verification link'}</h2>
-                  <p>${isVerify ? 'Use the verification link from your email.' : 'Enter the email address you used when creating your account.'}</p>
+                  <p class="auth-kicker">${isVerify ? 'Email OTP verification' : 'Resend OTP'}</p>
+                  <h2>${isVerify ? 'Enter your 6-digit OTP' : 'Send a new verification OTP'}</h2>
+                  <p>${isVerify ? 'Check your email and enter the OTP we sent to finish account setup.' : 'Enter the email address you used when creating your account.'}</p>
                 </div>
                 <div class="auth-fields">
                   ${isVerify ? `
-                    <label class="auth-field" for="pageVerifyTokenInput">
-                      <span>Verification code</span>
-                      <input id="pageVerifyTokenInput" autocomplete="one-time-code" placeholder="Verification code from your email link" value="${escapeHtml(token)}" />
+                    <label class="auth-field" for="pageVerifyEmailInput">
+                      <span>Email address</span>
+                      <input id="pageVerifyEmailInput" type="email" autocomplete="email" placeholder="you@university.edu" value="${escapeHtml(pendingEmail)}" />
                     </label>
+                    <label class="auth-field" for="pageVerifyOtpInput">
+                      <span>Verification OTP</span>
+                      <input id="pageVerifyOtpInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456" />
+                    </label>
+                    <button id="pageResendOtpInlineBtn" type="button" class="ghost" style="margin-top: 4px;">Resend OTP</button>
+                    <p id="verificationResendCountdown" class="muted-copy hidden" style="margin: -6px 0 0;">You can resend OTP soon.</p>
                   ` : `
                     <label class="auth-field" for="pageResendEmailInput">
                       <span>Email address</span>
-                      <input id="pageResendEmailInput" type="email" autocomplete="email" placeholder="you@university.edu" />
+                      <input id="pageResendEmailInput" type="email" autocomplete="email" placeholder="you@university.edu" value="${escapeHtml(pendingEmail)}" />
                     </label>
                   `}
                 </div>
                 <button id="${isVerify ? 'pageVerifyEmailSubmit' : 'pageResendVerificationSubmit'}" type="submit" class="auth-submit" style="margin-top: 24px;">
-                  <span>${isVerify ? 'Verify email' : 'Resend verification email'}</span>
+                  <span>${isVerify ? 'Verify OTP' : 'Resend verification OTP'}</span>
                 </button>
                 <div id="emailVerificationResult" class="password-recovery-result hidden"></div>
                 <p class="auth-switch">
-                  ${isVerify ? 'Link expired?' : 'Already verified?'}
-                  <a href="#/${isVerify ? 'resend-verification' : 'login'}">${isVerify ? 'Resend verification email' : 'Sign in'}</a>
+                  ${isVerify ? 'Already verified?' : 'Already verified?'}
+                  <a href="#/login">Sign in</a>
                 </p>
               </form>
             </section>
@@ -556,7 +562,7 @@ export const renderPasswordRecoveryPage = (mode = 'forgot-password') => {
             </div>
             <h2 class="hero-headline">Turn messy class collaboration into one study workspace.</h2>
             <p class="hero-subtext">
-              Nexus brings notes, tasks, chat, doubts, and AI study aids into one shared room so teams can move from lecture to revision faster.
+              Nexus brings notes, tasks, chat, doubts, and Nexus Mentor into one shared room so teams can move from lecture to revision faster.
             </p>
             <div class="hero-actions">
               <a class="hero-btn-primary" href="#/signup">Start free</a>
@@ -569,7 +575,7 @@ export const renderPasswordRecoveryPage = (mode = 'forgot-password') => {
               </div>
               <div class="trust-item">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                <span>AI summaries</span>
+                <span>Mentor summaries</span>
               </div>
               <div class="trust-item">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
@@ -577,7 +583,7 @@ export const renderPasswordRecoveryPage = (mode = 'forgot-password') => {
               </div>
               <div class="trust-item">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
-                <span>Smart tasks</span>
+                <span>Study tasks</span>
               </div>
             </div>
           </div>
@@ -594,13 +600,14 @@ export const renderPasswordRecoveryPage = (mode = 'forgot-password') => {
 
                 <div class="auth-fields">
                   ${isReset ? `
-                    <label class="auth-field" for="pageResetTokenInput">
-                      <span>Reset token</span>
-                      <input id="pageResetTokenInput" autocomplete="one-time-code" placeholder="Reset token" value="${escapeHtml(token)}" />
-                    </label>
+                    <input id="pageResetTokenInput" type="hidden" value="${escapeHtml(token)}" />
                     <label class="auth-field" for="pageNewPasswordInput">
                       <span>New password</span>
                       <input id="pageNewPasswordInput" type="password" autocomplete="new-password" placeholder="New password" />
+                    </label>
+                    <label class="auth-field" for="pageConfirmNewPasswordInput">
+                      <span>Confirm password</span>
+                      <input id="pageConfirmNewPasswordInput" type="password" autocomplete="new-password" placeholder="Confirm password" />
                     </label>
                   ` : `
                     <label class="auth-field" for="pageForgotEmailInput">
@@ -617,8 +624,8 @@ export const renderPasswordRecoveryPage = (mode = 'forgot-password') => {
                 <div id="passwordRecoveryResult" class="password-recovery-result hidden"></div>
 
                 <p class="auth-switch">
-                  ${isReset ? 'Remembered your password?' : 'Already have a reset token?'}
-                  <a href="#/${isReset ? 'login' : 'reset-password'}">${isReset ? 'Sign in' : 'Reset password'}</a>
+                  ${isReset ? 'Remembered your password?' : 'Remembered your password?'}
+                  <a href="#/login">Sign in</a>
                 </p>
               </form>
             </section>

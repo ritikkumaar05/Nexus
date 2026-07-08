@@ -17,6 +17,8 @@ const UserSchema = new mongoose.Schema({
   googleId: { type: String, default: undefined, unique: true, sparse: true },
   profileImage: { type: String, default: '' },
   emailVerifiedAt: { type: Date, default: null },
+  passwordChangedAt: { type: Date, default: null },
+  deletedAt: { type: Date, default: null },
   lastLogin: { type: Date, default: null }
 }, { timestamps: true });
 
@@ -38,18 +40,42 @@ const SessionSchema = new mongoose.Schema({
   expiresAt: { type: Date, required: true }
 }, { timestamps: true });
 SessionSchema.index({ user: 1, revokedAt: 1 });
+SessionSchema.index({ user: 1, revokedAt: 1, expiresAt: 1, updatedAt: -1 });
 SessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // --- ACCOUNT TOKEN SCHEMA ---
 const AccountTokenSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  type: { type: String, enum: ['email-verification', 'password-reset', 'oauth-handoff'], required: true },
+  type: { type: String, enum: ['password-reset', 'oauth-handoff'], required: true },
   tokenHash: { type: String, required: true, unique: true },
   usedAt: { type: Date, default: null },
   expiresAt: { type: Date, required: true }
 }, { timestamps: true });
 AccountTokenSchema.index({ user: 1, type: 1, usedAt: 1 });
+AccountTokenSchema.index(
+  { user: 1, type: 1 },
+  { unique: true, partialFilterExpression: { type: 'password-reset', usedAt: null } }
+);
 AccountTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+// --- EMAIL OTP SCHEMA ---
+const EmailOtpSchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  email: { type: String, required: true, lowercase: true, trim: true },
+  purpose: { type: String, enum: ['email-verification', 'account-delete'], default: 'email-verification', required: true },
+  otpHash: { type: String, required: true },
+  attempts: { type: Number, default: 0 },
+  usedAt: { type: Date, default: null },
+  lastSentAt: { type: Date, required: true },
+  expiresAt: { type: Date, required: true }
+}, { timestamps: true });
+EmailOtpSchema.index({ user: 1, purpose: 1, usedAt: 1, createdAt: -1 });
+EmailOtpSchema.index({ email: 1, purpose: 1, usedAt: 1, createdAt: -1 });
+EmailOtpSchema.index(
+  { user: 1, purpose: 1 },
+  { unique: true, partialFilterExpression: { usedAt: null } }
+);
+EmailOtpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // --- WORKSPACE SCHEMA ---
 const WorkspaceSchema = new mongoose.Schema({
@@ -138,6 +164,7 @@ const DocumentTaskSchema = new mongoose.Schema({
   completedAt: { type: Date, default: null }
 }, { timestamps: true });
 DocumentTaskSchema.index({ workspace: 1, document: 1, createdAt: -1 });
+DocumentTaskSchema.index({ workspace: 1, status: 1, dueDate: 1, createdAt: -1 });
 DocumentTaskSchema.index({ assignee: 1 });
 DocumentTaskSchema.index({ status: 1 });
 DocumentTaskSchema.index({ dueDate: 1 });
@@ -230,6 +257,66 @@ DocumentMessageSchema.index({ parentMessage: 1, createdAt: 1 });
 DocumentMessageSchema.index({ sender: 1 });
 DocumentMessageSchema.index({ body: 'text' });
 
+// --- LEARNING MEMORY SCHEMAS ---
+const LearningEventSchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  workspace: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', required: true },
+  document: { type: mongoose.Schema.Types.ObjectId, ref: 'Document', default: null },
+  type: {
+    type: String,
+    enum: ['ai_action', 'study_material', 'study_progress', 'study_task', 'document_doubt'],
+    required: true
+  },
+  action: { type: String, required: true, trim: true },
+  concepts: [{ type: String, trim: true }],
+  summary: { type: String, default: '', trim: true },
+  source: { type: String, default: '', trim: true },
+  metadata: { type: Object, default: {} }
+}, { timestamps: true });
+LearningEventSchema.index({ user: 1, workspace: 1, document: 1, createdAt: -1 });
+LearningEventSchema.index({ workspace: 1, document: 1, type: 1, createdAt: -1 });
+
+const LearningMemorySchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  workspace: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', required: true },
+  document: { type: mongoose.Schema.Types.ObjectId, ref: 'Document', default: null },
+  scope: { type: String, enum: ['document', 'workspace'], default: 'document' },
+  kind: {
+    type: String,
+    enum: ['activity', 'artifact', 'weakness', 'strength', 'doubt', 'preference'],
+    required: true
+  },
+  key: { type: String, required: true, trim: true, maxlength: 180 },
+  title: { type: String, default: '', trim: true, maxlength: 180 },
+  summary: { type: String, default: '', trim: true, maxlength: 1200 },
+  concepts: [{ type: String, trim: true }],
+  confidence: { type: Number, default: 0.6, min: 0, max: 1 },
+  evidenceCount: { type: Number, default: 1, min: 1 },
+  lastSeenAt: { type: Date, default: Date.now },
+  metadata: { type: Object, default: {} }
+}, { timestamps: true });
+LearningMemorySchema.index({ user: 1, workspace: 1, document: 1, kind: 1, lastSeenAt: -1 });
+LearningMemorySchema.index(
+  { user: 1, workspace: 1, document: 1, kind: 1, key: 1 },
+  { unique: true }
+);
+
+// --- AI GENERATION CACHE SCHEMA ---
+const AiGenerationCacheSchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  workspace: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', required: true },
+  document: { type: mongoose.Schema.Types.ObjectId, ref: 'Document', required: true },
+  action: { type: String, required: true, trim: true },
+  cacheKey: { type: String, required: true, unique: true },
+  documentUpdatedAt: { type: Date, default: null },
+  response: { type: String, required: true },
+  structured: { type: Object, default: null },
+  metadata: { type: Object, default: {} },
+  expiresAt: { type: Date, required: true }
+}, { timestamps: true });
+AiGenerationCacheSchema.index({ user: 1, workspace: 1, document: 1, action: 1, updatedAt: -1 });
+AiGenerationCacheSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
 // --- AUDIT LOG SCHEMA ---
 const AuditLogSchema = new mongoose.Schema({
   workspace: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', default: null },
@@ -240,13 +327,17 @@ const AuditLogSchema = new mongoose.Schema({
   metadata: { type: Object, default: {} }
 }, { timestamps: true });
 AuditLogSchema.index({ workspace: 1, createdAt: -1 });
+AuditLogSchema.index({ actor: 1, createdAt: -1 });
+AuditLogSchema.index({ targetType: 1, targetId: 1, createdAt: -1 });
 
 module.exports = {
   AccountToken: mongoose.model('AccountToken', AccountTokenSchema),
+  AiGenerationCache: mongoose.model('AiGenerationCache', AiGenerationCacheSchema),
   Attachment: mongoose.model('Attachment', AttachmentSchema),
   AuditLog: mongoose.model('AuditLog', AuditLogSchema),
   Comment: mongoose.model('Comment', CommentSchema),
   DocumentVersion: mongoose.model('DocumentVersion', DocumentVersionSchema),
+  EmailOtp: mongoose.model('EmailOtp', EmailOtpSchema),
   Session: mongoose.model('Session', SessionSchema),
   User: mongoose.model('User', UserSchema),
   Workspace: mongoose.model('Workspace', WorkspaceSchema),
@@ -255,6 +346,8 @@ module.exports = {
   Document: mongoose.model('Document', DocumentSchema),
   DocumentMessage: mongoose.model('DocumentMessage', DocumentMessageSchema),
   DocumentTask: mongoose.model('DocumentTask', DocumentTaskSchema),
+  LearningEvent: mongoose.model('LearningEvent', LearningEventSchema),
+  LearningMemory: mongoose.model('LearningMemory', LearningMemorySchema),
   StudyMaterial: mongoose.model('StudyMaterial', StudyMaterialSchema),
   Message: mongoose.model('Message', MessageSchema)
 };

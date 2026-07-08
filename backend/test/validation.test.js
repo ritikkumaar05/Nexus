@@ -93,6 +93,46 @@ test('createInvitation schema accepts invitation without workspaceId', () => {
   assert.equal(parsed.role, 'member');
 });
 
+test('verifyEmailOtp schema accepts 6-digit OTP only', () => {
+  const parsed = schemas.verifyEmailOtp.parse({
+    email: 'test@example.com',
+    otp: '123456'
+  });
+  assert.equal(parsed.email, 'test@example.com');
+  assert.equal(parsed.otp, '123456');
+  assert.throws(
+    () => schemas.verifyEmailOtp.parse({ email: 'test@example.com', otp: '12345' }),
+    /OTP must be a 6-digit code/
+  );
+});
+
+test('resendVerification schema accepts email payload', () => {
+  const parsed = schemas.resendVerification.parse({ email: 'TEST@EXAMPLE.COM' });
+  assert.equal(parsed.email, 'test@example.com');
+});
+
+test('forgotPassword schema normalizes email payload', () => {
+  const parsed = schemas.forgotPassword.parse({ email: ' RESET@EXAMPLE.COM ' });
+  assert.equal(parsed.email, 'reset@example.com');
+});
+
+test('resetPassword schema requires token and a valid new password', () => {
+  const parsed = schemas.resetPassword.parse({
+    token: 'reset-token',
+    password: 'newpassword123'
+  });
+  assert.equal(parsed.token, 'reset-token');
+  assert.equal(parsed.password, 'newpassword123');
+  assert.throws(
+    () => schemas.resetPassword.parse({ token: '', password: 'newpassword123' }),
+    /Reset link is required/
+  );
+  assert.throws(
+    () => schemas.resetPassword.parse({ token: 'reset-token', password: 'short' }),
+    /Password must be at least/
+  );
+});
+
 test('updateStudyMaterialProgress schema accepts quiz and flashcard progress update payload', () => {
   const parsed = schemas.updateStudyMaterialProgress.parse({
     quizProgress: {
@@ -138,5 +178,3 @@ test('createComment schema rejects empty comments', () => {
     /Comment body is required/
   );
 });
-
-

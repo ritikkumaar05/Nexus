@@ -88,8 +88,12 @@ GOOGLE_CLIENT_SECRET=
 GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5000/api/auth/google/callback
 EMAIL_PROVIDER_URL=
 EMAIL_PROVIDER_API_KEY=
+EMAIL_FROM=Nexus <no-reply@example.com>
+PASSWORD_RESET_COOLDOWN_SECONDS=60
 GEMINI_API_KEY=
 ```
+
+Email verification and password reset require `EMAIL_PROVIDER_URL` to point to an HTTP email provider endpoint. Without it, development logs redact the generated email body and no external email is delivered.
 
 Create the frontend env file:
 

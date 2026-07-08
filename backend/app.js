@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const accountRoutes = require('./routes/account');
 const authRoutes = require('./routes/auth');
 const workspaceRoutes = require('./routes/workspace');
 const documentRoutes = require('./routes/document');
@@ -77,6 +78,7 @@ const createApp = () => {
   });
 
   app.use('/api/auth', authLimiter, authRoutes);
+  app.use('/api/account', authLimiter, accountRoutes);
   app.use('/api/workspaces', workspaceRoutes);
   app.use('/api/workspaces/:workspaceId/documents/:documentId/tasks', documentTaskRoutes);
   app.use('/api/workspaces/:workspaceId/documents/:documentId/messages', messageLimiter, documentMessageRoutes);

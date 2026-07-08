@@ -184,7 +184,9 @@ Tag: Banker Algorithm`
 };
 
 const createDemoState = () => {
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
+  const minutesAgo = (minutes) => new Date(nowDate.getTime() - (minutes * 60 * 1000)).toISOString();
   return {
     user: { id: 'demo-user-alex', username: 'Alex Rivera', email: 'alex@demo.nexus' },
     workspaces: [{
@@ -208,14 +210,35 @@ const createDemoState = () => {
       { _id: 'demo-doc-cn-routing', title: 'Lecture 5: Routing Algorithms', category: 'Computer Networks', learningMilestones: { summaryGenerated: true, flashcardsGenerated: true, quizGenerated: true }, examWeight: 'Medium', quizAccuracy: 76, plainTextContent: DEMO_DOC_CONTENT['demo-doc-cn-routing'], updatedAt: now }
     ],
     channels: [
+      { _id: 'demo-thread-general', slug: 'general', name: 'General' },
       { _id: 'demo-thread-os', slug: 'os-deadlocks', name: 'OS doubts: Deadlocks' },
       { _id: 'demo-thread-dbms', slug: 'dbms-normalization', name: 'DBMS assignment' },
       { _id: 'demo-thread-cn', slug: 'cn-revision', name: 'Networks revision' }
     ],
     messages: [
-      { _id: 'demo-msg-1', channelId: 'general', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'OS midterm is in 12 days. I marked Deadlocks as high priority.', createdAt: now },
-      { _id: 'demo-msg-2', channelId: 'general', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'DBMS normalization assignment is due tomorrow. Can we review 3NF examples?', createdAt: now },
-      { _id: 'demo-msg-3', channelId: 'general', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: "I scored 3/5 on the deadlocks quiz. Revising Banker algorithm next.", createdAt: now }
+      { _id: 'demo-msg-general-1', channelId: 'general', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Morning team. OS midterm is in 12 days, so I marked Deadlocks and CPU Scheduling as high priority.', createdAt: minutesAgo(46), reactions: [{ emoji: '✅', users: ['demo-user-alex', 'demo-user-sam'] }] },
+      { _id: 'demo-msg-general-2', channelId: 'general', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'DBMS normalization assignment is due tomorrow. Can we review 3NF examples after lunch?', createdAt: minutesAgo(42) },
+      { _id: 'demo-msg-general-3', channelId: 'general', sender: { _id: 'demo-user-sam', username: 'Sam Okafor' }, content: 'I added the Library relation example to the DBMS notes. The transitive dependency part still feels tricky.', createdAt: minutesAgo(38) },
+      { _id: 'demo-msg-general-4', channelId: 'general', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: 'Nice. I scored 3/5 on the deadlocks quiz. Revising Banker algorithm next.', createdAt: minutesAgo(33), reactions: [{ emoji: '🔥', users: ['demo-user-priya'] }] },
+      { _id: 'demo-msg-general-5', channelId: 'general', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Plan: 20 min Deadlocks recap, 15 min CPU Scheduling numericals, then one Memory Management flashcard round.', createdAt: minutesAgo(24) },
+      { _id: 'demo-msg-general-6', channelId: 'general', sender: { _id: 'demo-user-sam', username: 'Sam Okafor' }, content: 'I can take Networks. TCP congestion control is my weak topic, especially slow start vs congestion avoidance.', createdAt: minutesAgo(18) },
+      { _id: 'demo-msg-general-7', channelId: 'general', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'Dropping one doubt in the Deadlocks channel. Circular wait finally clicked but Banker still confuses me.', createdAt: minutesAgo(12) },
+      { _id: 'demo-msg-general-8', channelId: 'general', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Perfect. Everyone pick one task before 7 PM so the dashboard stays honest.', createdAt: minutesAgo(7) },
+
+      { _id: 'demo-msg-os-1', channelId: 'os-deadlocks', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'Can someone explain why circular wait creates a deadlock if every process is only waiting for one resource?', createdAt: minutesAgo(64) },
+      { _id: 'demo-msg-os-2', channelId: 'os-deadlocks', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Because the waiting forms a cycle. P1 waits for P2, P2 waits for P3, and eventually someone waits for P1. No one can release first.', createdAt: minutesAgo(61), reactions: [{ emoji: '💡', users: ['demo-user-rohan', 'demo-user-alex'] }] },
+      { _id: 'demo-msg-os-3', channelId: 'os-deadlocks', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: 'I added that explanation to Lecture 5. Also generated a 5-question quiz from the note.', createdAt: minutesAgo(57) },
+      { _id: 'demo-msg-os-4', channelId: 'os-deadlocks', sender: { _id: 'demo-user-sam', username: 'Sam Okafor' }, content: 'Banker Algorithm check: available + allocated resources should let us find a safe sequence, right?', createdAt: minutesAgo(49) },
+      { _id: 'demo-msg-os-5', channelId: 'os-deadlocks', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Yes. If every process can finish in some order, the state is safe. If not, granting the request is risky.', createdAt: minutesAgo(47) },
+
+      { _id: 'demo-msg-dbms-1', channelId: 'dbms-normalization', sender: { _id: 'demo-user-sam', username: 'Sam Okafor' }, content: 'For Library(issue_id, book_id, member_id, member_name, return_date), member_name depends on member_id, not issue_id.', createdAt: minutesAgo(73) },
+      { _id: 'demo-msg-dbms-2', channelId: 'dbms-normalization', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'So that is a transitive dependency if issue_id is the key?', createdAt: minutesAgo(70) },
+      { _id: 'demo-msg-dbms-3', channelId: 'dbms-normalization', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Exactly. Split Member(member_id, member_name) and Issue(issue_id, book_id, member_id, return_date).', createdAt: minutesAgo(67), reactions: [{ emoji: '✅', users: ['demo-user-rohan'] }] },
+      { _id: 'demo-msg-dbms-4', channelId: 'dbms-normalization', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: 'I will turn this into flashcards after the OS revision block.', createdAt: minutesAgo(52) },
+
+      { _id: 'demo-msg-cn-1', channelId: 'cn-revision', sender: { _id: 'demo-user-sam', username: 'Sam Okafor' }, content: 'Networks check: slow start grows cwnd exponentially until ssthresh, then congestion avoidance grows linearly.', createdAt: minutesAgo(31) },
+      { _id: 'demo-msg-cn-2', channelId: 'cn-revision', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: 'And packet loss usually means congestion, so TCP cuts the window. I always forget fast recovery.', createdAt: minutesAgo(29) },
+      { _id: 'demo-msg-cn-3', channelId: 'cn-revision', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Add that as a weak topic. Tomorrow we can compare TCP with sliding window protocol.', createdAt: minutesAgo(21) }
     ],
     documentMessages: [
       { _id: 'demo-doc-msg-1', sender: { username: 'Rohan Kapoor' }, body: 'Why does circular wait matter if every process is only waiting for one resource?', linkedText: 'Circular wait: processes form a cycle of resource dependencies.', status: 'open', replies: [

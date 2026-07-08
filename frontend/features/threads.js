@@ -4,9 +4,9 @@ const app = () => globalThis;
 
 const renderThreadsLoadingSection = () => `
   <div class="thread-section-header">
-    <h3>Loading doubts</h3>
+    <h3>Finding your doubts</h3>
   </div>
-  <div class="threads-loading-list" aria-label="Loading doubts">
+  <div class="threads-loading-list" aria-label="Finding unresolved doubts">
     ${Array.from({ length: 4 }, () => `
       <article class="thread-list-card thread-list-card-skeleton" aria-hidden="true">
         <span class="skeleton-row short"></span>
@@ -18,7 +18,7 @@ const renderThreadsLoadingSection = () => `
 `;
 
 const renderThreadDetailLoading = () => `
-  <div class="thread-detail-loading" aria-label="Loading selected doubt">
+  <div class="thread-detail-loading" aria-label="Opening selected doubt">
     <span class="skeleton-row short"></span>
     <span class="skeleton-row title"></span>
     <span class="skeleton-row"></span>
@@ -95,7 +95,10 @@ export const renderThreadDetailHtml = (thread) => {
   const timeStr = new Date(thread.createdAt).toLocaleString();
   const isResolved = thread.status === 'resolved';
 
-  const hasAiReply = (thread.replies || []).find(r => r.sender?.username?.toLowerCase().includes('ai') || r.sender?.email?.toLowerCase().includes('ai') || r.body.startsWith('🤖 AI'));
+  const hasAiReply = (thread.replies || []).find((r) => {
+    const identity = `${r.sender?.username || ''} ${r.sender?.email || ''} ${r.body || ''}`.toLowerCase();
+    return identity.includes('nexus mentor') || identity.includes('ai companion') || r.body?.startsWith('🤖 AI');
+  });
 
   return `
     <div class="thread-detail-header-row">
@@ -167,15 +170,15 @@ export const renderThreadDetailHtml = (thread) => {
       <div class="detail-ai-tutor-card">
         <div class="ai-card-header">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275Z"/></svg>
-          <span>AI Study Companion</span>
+          <span>Nexus Mentor</span>
         </div>
         <div class="ai-card-body">
           ${hasAiReply ? `
             <p>${app().escapeHtml(hasAiReply.body)}</p>
           ` : `
-            <p>Need some quick explanation or guidance? Ask the AI Tutor to analyze this doubt and suggest answers instantly.</p>
+            <p>Need a quick explanation? Ask Nexus Mentor to reason from the linked lecture context.</p>
             <button class="subtle-btn ask-ai-tutor-btn" data-ai-doubt-id="${thread._id}" data-ai-doc-id="${thread.documentId}" type="button">
-              ✦ Ask AI Tutor
+              ✦ Ask Mentor
             </button>
           `}
         </div>

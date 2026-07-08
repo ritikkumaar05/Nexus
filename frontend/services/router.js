@@ -83,7 +83,7 @@ export const renderRoute = async () => {
 
     if (route === 'tasks') {
       globalThis.loadDashboardTasks({ limit: state.documents.length }).then(() => {
-        if (currentRoute() === 'tasks') globalThis.renderTasksPage();
+        if (currentRoute() === 'tasks') globalThis.renderTasksBoard();
       });
       return globalThis.renderTasksPage();
     }

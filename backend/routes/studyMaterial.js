@@ -8,6 +8,7 @@ const {
   canManageWorkspace,
   canViewWorkspace
 } = require('../utils/permissions');
+const LearningMemoryService = require('../services/LearningMemoryService');
 
 const VALID_TYPES = new Set(['summary', 'quiz', 'flashcards', 'important_questions', 'explanation']);
 const MAX_TITLE_LENGTH = 160;
@@ -165,6 +166,10 @@ router.post('/', async (req, res) => {
       targetId: material._id,
       metadata: { documentId: payload.documentId, type: payload.type }
     });
+    LearningMemoryService.safeRecord(() => LearningMemoryService.recordStudyMaterial({
+      userId: req.user.id,
+      material
+    }));
 
     res.status(201).json(cleanMaterial(material));
   } catch (err) {
@@ -233,6 +238,11 @@ router.patch('/:id/progress', async (req, res) => {
       targetId: material._id,
       metadata: { type: material.type }
     });
+    LearningMemoryService.safeRecord(() => LearningMemoryService.recordStudyProgress({
+      userId: req.user.id,
+      material,
+      progress: req.body
+    }));
 
     res.json(cleanMaterial(updated));
   } catch (err) {

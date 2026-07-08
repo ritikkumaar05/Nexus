@@ -92,64 +92,54 @@ export const renderTaskCardHtml = (task) => {
 
   const isMenuOpen = activeTaskMoreMenuId === task._id;
 
+  const priorityCardClass = task.priority === 'high' ? 'priority-high-card' : task.priority === 'low' ? 'priority-low-card' : 'priority-medium-card';
+
   return `
-    <article class="task-page-card task-card-v2 ${isDone ? 'completed' : ''}" draggable="true" data-task-id="${task._id}" data-doc-id="${task.documentId || ''}">
-      <div class="task-card-body" style="display: flex; flex-direction: column; gap: 10px; width: 100%; min-width: 0;">
-        <div class="card-top-badges" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
-          <div class="left-badges" style="display: flex; align-items: center; gap: 6px;">
-            <span class="priority-badge priority-${task.priority || 'medium'}" style="font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; ${task.priority === 'high' ? 'background: rgba(239, 68, 68, 0.12); color: #ef4444;' : task.priority === 'low' ? 'background: rgba(100, 116, 139, 0.12); color: var(--muted);' : 'background: rgba(245, 158, 11, 0.12); color: #f59e0b;'}">${priorityLabel}</span>
+    <article class="task-page-card task-card-v2 ${isDone ? 'completed' : ''} ${priorityCardClass}" draggable="true" data-task-id="${task._id}" data-doc-id="${task.documentId || ''}">
+      <div class="card-top-badges">
+        <div class="left-badges">
+          <span class="priority-badge priority-${task.priority || 'medium'}">${priorityLabel}</span>
+          ${task.documentId ? `
+            <span class="doc-link-badge" title="Linked to: ${escapeHtml(task.documentTitle)}">
+              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              ${escapeHtml(task.documentTitle)}
+            </span>
+          ` : ''}
+        </div>
+        <div class="card-actions-wrapper">
+          <button class="icon-button task-menu-toggle-btn" data-toggle-task-menu="${task._id}" type="button" title="More options">⋯</button>
+          <div class="chat-dropdown-menu ${isMenuOpen ? '' : 'hidden'}" style="top: 24px; right: 0; width: 160px; z-index: 10;">
+            <button class="chat-dropdown-item task-action-edit" data-edit-task-id="${task._id}" type="button">Edit Task</button>
+            <button class="chat-dropdown-item task-action-copy" data-copy-title="${escapeHtml(task.title)}" type="button">Copy Title</button>
             ${task.documentId ? `
-              <span class="doc-link-badge" title="Linked Note" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; color: var(--primary); background: var(--primary-soft); padding: 2px 6px; border-radius: 4px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
-                ${escapeHtml(task.documentTitle)}
-              </span>
+              <button class="chat-dropdown-item task-action-go-doc" data-go-doc-id="${task.documentId}" type="button">Open Note</button>
             ` : ''}
-          </div>
-          
-          <div class="card-actions-wrapper" style="position: relative; display: flex; align-items: center;">
-            <button class="icon-button task-menu-toggle-btn" data-toggle-task-menu="${task._id}" type="button" title="More options" style="padding: 2px 6px;">⋯</button>
-            <div class="chat-dropdown-menu ${isMenuOpen ? '' : 'hidden'}" style="top: 24px; right: 0; width: 160px; z-index: 10;">
-              <button class="chat-dropdown-item task-action-edit" data-edit-task-id="${task._id}" type="button">
-                Edit Task
-              </button>
-              <button class="chat-dropdown-item task-action-copy" data-copy-title="${escapeHtml(task.title)}" type="button">
-                Copy Title
-              </button>
-              ${task.documentId ? `
-                <button class="chat-dropdown-item task-action-go-doc" data-go-doc-id="${task.documentId}" type="button">
-                  Open Note
-                </button>
-              ` : ''}
-              <button class="chat-dropdown-item delete-action task-action-delete" data-delete-task-id="${task._id}" type="button">
-                Delete Task
-              </button>
-            </div>
+            <button class="chat-dropdown-item delete-action task-action-delete" data-delete-task-id="${task._id}" type="button">Delete Task</button>
           </div>
         </div>
-        
-        <div class="task-title-row">
-          <input type="checkbox" class="task-checkbox-v2" ${isDone ? 'checked' : ''} data-check-task-id="${task._id}" />
-          <strong>${escapeHtml(task.title)}</strong>
-        </div>
-        
-        ${task.description ? `
-          <small class="task-desc-preview" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; color: var(--muted); line-height: 1.4; margin: 0; word-break: break-word;">${escapeHtml(task.description)}</small>
-        ` : ''}
-        
-        <div class="card-footer-info" style="display: flex; align-items: center; justify-content: space-between; border-top: 1px dashed var(--line); padding-top: 10px; margin-top: 4px; gap: 8px;">
-          <span class="${dueBadgeClass}" style="font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; ${dueBadgeClass.includes('overdue') ? 'color: #ef4444; font-weight: 600;' : dueBadgeClass.includes('due-soon') ? 'color: #f59e0b; font-weight: 600;' : 'color: var(--muted);'}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            ${escapeHtml(dueLabel)}
-          </span>
-          
-          <div class="assignee-info" style="display: flex; align-items: center; gap: 6px;">
-            ${assigneeName ? `
-              <span class="assignee-avatar" title="${escapeHtml(assigneeName)}" style="width: 22px; height: 22px; background: var(--primary-soft); color: var(--primary); border-radius: 50%; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center;">${escapeHtml(assigneeInitials)}</span>
-              <span class="assignee-name" title="${escapeHtml(assigneeName)}" style="font-size: 11px; color: var(--muted); max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(assigneeName)}</span>
-            ` : `
-              <span class="assignee-name unassigned" style="font-size: 11px; color: var(--muted); max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: italic; opacity: 0.7;">Unassigned</span>
-            `}
-          </div>
+      </div>
+
+      <div class="task-title-row">
+        <input type="checkbox" class="task-checkbox-v2" ${isDone ? 'checked' : ''} data-check-task-id="${task._id}" />
+        <strong>${escapeHtml(task.title)}</strong>
+      </div>
+
+      ${task.description ? `
+        <small class="task-desc-preview">${escapeHtml(task.description)}</small>
+      ` : ''}
+
+      <div class="card-footer-info">
+        <span class="${dueBadgeClass}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          ${escapeHtml(dueLabel)}
+        </span>
+        <div class="assignee-info">
+          ${assigneeName ? `
+            <span class="assignee-avatar" title="${escapeHtml(assigneeName)}">${escapeHtml(assigneeInitials)}</span>
+            <span class="assignee-name" title="${escapeHtml(assigneeName)}">${escapeHtml(assigneeName)}</span>
+          ` : `
+            <span class="assignee-name unassigned">Unassigned</span>
+          `}
         </div>
       </div>
     </article>
@@ -169,7 +159,7 @@ export const showAddTaskModal = async () => {
     <form id="addTaskModalForm" novalidate style="display: flex; flex-direction: column; gap: 16px;">
       <div class="form-field-v2">
         <label>Task Title *</label>
-        <input type="text" id="addTaskModalTitle" placeholder="e.g. Read CAP theorem paper" required />
+        <input type="text" id="addTaskModalTitle" placeholder="e.g. Revise Banker algorithm examples" required />
       </div>
       <div class="form-field-v2">
         <label>Description (Optional)</label>
@@ -269,13 +259,12 @@ export const showAddTaskModal = async () => {
         const member = members.find(m => (m.user?._id || m.user?.id || m.user) === assignee);
         task.assignee = member ? member.user : { username: 'Teammate' };
       }
-      state.documentTasks.push(task);
-      state.dashboardTasks.push(task);
+      upsertTaskInStore(task);
       addActivity({ action: 'created task', target: task.title });
       markLectureMilestone(docId, 'taskCreated', { message: 'Study task created' });
       showToast('Demo task created locally');
       document.getElementById('chatOverlayModal')?.remove();
-      renderTasksPage();
+      renderTasksBoard();
       return;
     }
 
@@ -284,13 +273,12 @@ export const showAddTaskModal = async () => {
         method: 'POST',
         body: JSON.stringify(payload)
       });
-      state.documentTasks.push(task);
-      state.dashboardTasks.push(task);
+      upsertTaskInStore(task);
       addActivity({ action: 'created task', target: task.title });
       markLectureMilestone(docId, 'taskCreated', { message: 'Study task created' });
       showToast('Task created successfully!');
       document.getElementById('chatOverlayModal')?.remove();
-      renderTasksPage();
+      renderTasksBoard();
     } catch (err) {
       showToast(friendlyUiMessage(err.message, { isError: true }), true);
       if (submitBtn) submitBtn.disabled = false;
@@ -300,7 +288,7 @@ export const showAddTaskModal = async () => {
 
 
 export const showEditTaskModal = async (taskId) => {
-  const allTasks = [...state.dashboardTasks, ...state.documentTasks];
+  const allTasks = workspaceTaskList();
   const task = allTasks.find(t => t._id === taskId);
   if (!task) return;
 
@@ -415,11 +403,10 @@ export const showEditTaskModal = async (taskId) => {
       } else {
         updated.assignee = null;
       }
-      state.documentTasks = state.documentTasks.map(item => item._id === taskId ? updated : item);
-      state.dashboardTasks = state.dashboardTasks.map(item => item._id === taskId ? updated : item);
+      upsertTaskInStore(updated);
       showToast('Demo task updated locally');
       document.getElementById('chatOverlayModal')?.remove();
-      renderTasksPage();
+      renderTasksBoard();
       return;
     }
 
@@ -428,11 +415,10 @@ export const showEditTaskModal = async (taskId) => {
         method: 'PATCH',
         body: JSON.stringify(payload)
       });
-      state.documentTasks = state.documentTasks.map(item => item._id === taskId ? updatedTask : item);
-      state.dashboardTasks = state.dashboardTasks.map(item => item._id === taskId ? updatedTask : item);
+      upsertTaskInStore(updatedTask);
       showToast('Task updated successfully!');
       document.getElementById('chatOverlayModal')?.remove();
-      renderTasksPage();
+      renderTasksBoard();
     } catch (err) {
       showToast(friendlyUiMessage(err.message, { isError: true }), true);
       if (submitBtn) submitBtn.disabled = false;
@@ -440,88 +426,155 @@ export const showEditTaskModal = async (taskId) => {
   });
 };
 
+const taskIsDone = (task = {}) => task.status === 'done' || task.status === 'completed';
 
-export const renderTasksPage = () => {
-  setMainMode('feature');
-  setRouteChrome('tasks');
+const renderTasksSkeleton = () => `
+  <div class="tasks-loading-stack" aria-label="Preparing task board">
+    ${loadingRows(4)}
+  </div>
+`;
 
-  const searchInputBefore = document.getElementById('tasksSearchInput');
-  const wasSearchFocused = (document.activeElement === searchInputBefore);
-  const searchValLen = searchInputBefore ? searchInputBefore.value.length : 0;
+const getRenderableTasks = () => workspaceTaskList().map((task) => normalizeTask(task)).filter(Boolean);
 
-  const workspace = selectedWorkspace();
-  const allTasks = [...state.dashboardTasks, ...state.documentTasks]
-    .filter((task, index, array) => array.findIndex((item) => item._id === task._id) === index)
-    .map(task => {
-      const doc = state.documents.find(d => d._id === task.documentId || d._id === task.document);
-      return {
-        ...task,
-        documentTitle: doc?.title || 'Note',
-        documentId: task.documentId || task.document
-      };
-    });
-
+const getTasksViewData = () => {
+  const allTasks = getRenderableTasks();
   const stats = getTaskStats(allTasks);
   const filteredTasks = getFilteredTasks(allTasks);
+  return {
+    allTasks,
+    stats,
+    filteredTasks,
+    openTasks: filteredTasks.filter(t => !taskIsDone(t)),
+    completedTasks: filteredTasks.filter(t => taskIsDone(t))
+  };
+};
 
-  const openTasks = filteredTasks.filter(t => t.status !== 'done' && t.status !== 'completed');
-  const completedTasks = filteredTasks.filter(t => t.status === 'done' || t.status === 'completed');
-
+const renderTasksColumnsHtml = ({ openTasks, completedTasks }) => {
   const openEmptyHtml = `
     <div class="tasks-compact-empty">
-      <span class="empty-icon">📋</span>
+      <div class="empty-icon-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12h6M9 8h6M9 16h4"/></svg>
+      </div>
       <h4>No open tasks</h4>
-      <p>Plan your next study session, assign work, or create a task from a document.</p>
-      <button class="primary" id="tasksOpenEmptyAddTaskBtn" type="button">+ Add Task</button>
+      <p>Plan your study session, assign work, or create a task from a document.</p>
+      <button class="btn-empty-add" id="tasksOpenEmptyAddTaskBtn" type="button">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Task
+      </button>
     </div>
   `;
 
   const completedEmptyHtml = `
     <div class="tasks-compact-empty">
-      <span class="empty-icon">✓</span>
+      <div class="empty-icon-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg>
+      </div>
       <h4>Nothing completed yet</h4>
-      <p>Completed tasks will appear here when your group finishes work.</p>
+      <p>Completed tasks appear here once your team finishes work.</p>
     </div>
   `;
 
-  let contentHtml = '';
-  if (taskViewMode === 'list') {
-    contentHtml = `
-      <section class="tasks-column" data-task-column-status="open">
-        <div class="tasks-column-head">
-          <h3>Open Tasks</h3>
-          <span>${openTasks.length}</span>
+  const openColLabel  = taskViewMode === 'list' ? 'Open Tasks'      : 'Open';
+  const doneColLabel  = taskViewMode === 'list' ? 'Completed Tasks'  : 'Completed';
+  const isInitialLoading = state.taskStore.loading && !openTasks.length && !completedTasks.length;
+
+  const colHeadHtml = (label, count, colKey) => `
+    <div class="tasks-column-head" data-col="${colKey}">
+      <div class="col-head-left">
+        <div class="col-icon">
+          ${colKey === 'open'
+            ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12h6M9 8h6M9 16h4"/></svg>`
+            : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg>`
+          }
         </div>
-        ${openTasks.map(t => renderTaskCardHtml(t)).join('') || openEmptyHtml}
-      </section>
-      
-      <section class="tasks-column" data-task-column-status="completed" style="margin-top: 12px;">
-        <div class="tasks-column-head">
-          <h3>Completed Tasks</h3>
-          <span>${completedTasks.length}</span>
-        </div>
-        ${completedTasks.map(t => renderTaskCardHtml(t)).join('') || completedEmptyHtml}
-      </section>
-    `;
-  } else {
-    contentHtml = `
-      <section class="tasks-column" data-task-column-status="open">
-        <div class="tasks-column-head">
-          <h3>Open</h3>
-          <span>${openTasks.length}</span>
-        </div>
-        ${openTasks.map(t => renderTaskCardHtml(t)).join('') || openEmptyHtml}
-      </section>
-      
-      <section class="tasks-column" data-task-column-status="completed">
-        <div class="tasks-column-head">
-          <h3>Completed</h3>
-          <span>${completedTasks.length}</span>
-        </div>
-        ${completedTasks.map(t => renderTaskCardHtml(t)).join('') || completedEmptyHtml}
-      </section>
-    `;
-  }
+        <h3>${label}</h3>
+      </div>
+      <span class="col-badge">${count}</span>
+    </div>
+  `;
+
+  return `
+    <section class="tasks-column" data-task-column-status="open">
+      ${colHeadHtml(openColLabel, openTasks.length, 'open')}
+      <div class="tasks-column-body-v2">
+        ${isInitialLoading ? renderTasksSkeleton() : (openTasks.map(t => renderTaskCardHtml(t)).join('') || openEmptyHtml)}
+      </div>
+    </section>
+    <section class="tasks-column" data-task-column-status="completed">
+      ${colHeadHtml(doneColLabel, completedTasks.length, 'done')}
+      <div class="tasks-column-body-v2">
+        ${isInitialLoading ? renderTasksSkeleton() : (completedTasks.map(t => renderTaskCardHtml(t)).join('') || completedEmptyHtml)}
+      </div>
+    </section>
+  `;
+};
+
+const bindTaskDragAndDrop = () => {
+  const boardEl = document.querySelector('.tasks-board, .tasks-list');
+  if (!boardEl) return;
+
+  const cards = boardEl.querySelectorAll('.task-page-card');
+  cards.forEach(card => {
+    card.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', card.dataset.taskId);
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+    });
+  });
+
+  const columns = boardEl.querySelectorAll('.tasks-column');
+  columns.forEach(column => {
+    column.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      column.classList.add('drag-hover');
+    });
+    column.addEventListener('dragleave', () => {
+      column.classList.remove('drag-hover');
+    });
+    column.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      column.classList.remove('drag-hover');
+      const taskId = e.dataTransfer.getData('text/plain');
+      const targetStatus = column.dataset.taskColumnStatus;
+      if (taskId && targetStatus) {
+        await moveTaskStatus(taskId, targetStatus);
+      }
+    });
+  });
+};
+
+export const renderTasksBoard = () => {
+  const boardEl = document.querySelector('.tasks-board, .tasks-list');
+  if (!boardEl) return renderTasksPage();
+
+  const { stats, openTasks, completedTasks } = getTasksViewData();
+  const nextClassName = taskViewMode === 'list' ? 'tasks-list' : 'tasks-board';
+  boardEl.className = nextClassName;
+  boardEl.innerHTML = renderTasksColumnsHtml({ openTasks, completedTasks });
+
+  const statValues = {
+    open: stats.open,
+    'due-soon': stats.dueSoon,
+    done: stats.completed,
+    mine: stats.assignedToMe
+  };
+  Object.entries(statValues).forEach(([key, value]) => {
+    const statCount = document.querySelector(`[data-stat="${key}"] .stat-count`);
+    if (statCount) statCount.textContent = String(value);
+  });
+
+  bindTaskDragAndDrop();
+};
+
+export const renderTasksPage = () => {
+  setMainMode('feature');
+  setRouteChrome('tasks');
+
+  const workspace = selectedWorkspace();
+  const { stats, openTasks, completedTasks } = getTasksViewData();
+  const contentHtml = renderTasksColumnsHtml({ openTasks, completedTasks });
 
   els.routePage.innerHTML = `
     <div class="tasks-page-v2">
@@ -530,34 +583,45 @@ export const renderTasksPage = () => {
           <h2>Tasks</h2>
           <p>Plan, assign, and finish study work across ${escapeHtml(workspace?.name || 'this workspace')}.</p>
         </div>
-        <button class="primary" id="tasksPageAddTaskBtn" type="button">+ Add Task</button>
+        <button class="btn-add-task primary" id="tasksPageAddTaskBtn" type="button">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Task
+        </button>
       </header>
 
       <!-- Stats Row -->
       <section class="tasks-stats-row">
-        <div class="tasks-stat-card">
-          <div class="stat-icon">📋</div>
+        <div class="tasks-stat-card" data-stat="open">
+          <div class="stat-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12h6M9 8h6M9 16h4"/></svg>
+          </div>
           <div class="stat-info">
             <span class="stat-label">Open</span>
             <strong class="stat-count">${stats.open}</strong>
           </div>
         </div>
-        <div class="tasks-stat-card">
-          <div class="stat-icon">⏳</div>
+        <div class="tasks-stat-card" data-stat="due-soon">
+          <div class="stat-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
           <div class="stat-info">
             <span class="stat-label">Due Soon</span>
             <strong class="stat-count">${stats.dueSoon}</strong>
           </div>
         </div>
-        <div class="tasks-stat-card">
-          <div class="stat-icon">✅</div>
+        <div class="tasks-stat-card" data-stat="done">
+          <div class="stat-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg>
+          </div>
           <div class="stat-info">
             <span class="stat-label">Completed</span>
             <strong class="stat-count">${stats.completed}</strong>
           </div>
         </div>
-        <div class="tasks-stat-card">
-          <div class="stat-icon">👤</div>
+        <div class="tasks-stat-card" data-stat="mine">
+          <div class="stat-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
           <div class="stat-info">
             <span class="stat-label">Assigned to Me</span>
             <strong class="stat-count">${stats.assignedToMe}</strong>
@@ -568,11 +632,11 @@ export const renderTasksPage = () => {
       <!-- Toolbar -->
       <section class="tasks-toolbar">
         <div class="tasks-search-wrapper">
-          <svg xmlns="http://www.w3.org/2000/svg" class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           <input type="text" id="tasksSearchInput" placeholder="Search tasks..." value="${escapeHtml(taskSearchQuery)}" />
-          ${taskSearchQuery ? '<button type="button" class="clear-search-btn" id="tasksClearSearchBtn">×</button>' : ''}
+          ${taskSearchQuery ? '<button type="button" class="clear-search-btn" id="tasksClearSearchBtn" title="Clear search">×</button>' : ''}
         </div>
-        
+
         <div class="tasks-filters-group">
           <div class="tasks-filter-chips">
             <button class="filter-chip ${taskFilterTab === 'all' ? 'active' : ''}" data-tasks-filter-tab="all" type="button">All</button>
@@ -580,96 +644,64 @@ export const renderTasksPage = () => {
             <button class="filter-chip ${taskFilterTab === 'due_soon' ? 'active' : ''}" data-tasks-filter-tab="due_soon" type="button">Due Soon</button>
             <button class="filter-chip ${taskFilterTab === 'overdue' ? 'active' : ''}" data-tasks-filter-tab="overdue" type="button">Overdue</button>
           </div>
-          
+
           <div class="tasks-dropdowns">
             <label class="toolbar-select-label">
-              Sort by:
+              Sort:
               <select id="tasksSortSelect">
-                <option value="priority" ${taskSortField === 'priority' ? 'selected' : ''}>Priority</option>
-                <option value="dueDate" ${taskSortField === 'dueDate' ? 'selected' : ''}>Due Date</option>
-                <option value="createdAt" ${taskSortField === 'createdAt' ? 'selected' : ''}>Created Date</option>
+                <option value="priority"  ${taskSortField === 'priority'  ? 'selected' : ''}>Priority</option>
+                <option value="dueDate"   ${taskSortField === 'dueDate'   ? 'selected' : ''}>Due Date</option>
+                <option value="createdAt" ${taskSortField === 'createdAt' ? 'selected' : ''}>Created</option>
               </select>
             </label>
             <div class="tasks-view-toggle">
-              <button class="icon-btn ${taskViewMode === 'board' ? 'active' : ''}" id="tasksViewToggleBoardBtn" type="button" title="Board View">📋 Board</button>
-              <button class="icon-btn ${taskViewMode === 'list' ? 'active' : ''}" id="tasksViewToggleListBtn" type="button" title="List View">📝 List</button>
+              <button class="icon-btn ${taskViewMode === 'board' ? 'active' : ''}" id="tasksViewToggleBoardBtn" type="button" title="Board View">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                Board
+              </button>
+              <button class="icon-btn ${taskViewMode === 'list' ? 'active' : ''}" id="tasksViewToggleListBtn" type="button" title="List View">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                List
+              </button>
             </div>
           </div>
         </div>
       </section>
 
       <!-- Tasks Content Layout -->
-      <div class="${taskViewMode === 'list' ? 'tasks-list' : 'tasks-board'}" style="${taskViewMode === 'list' ? 'display: flex; flex-direction: column; gap: 24px;' : ''}">
+      <div class="${taskViewMode === 'list' ? 'tasks-list' : 'tasks-board'}">
         ${contentHtml}
       </div>
     </div>
   `;
 
-  if (wasSearchFocused) {
-    const searchInputAfter = document.getElementById('tasksSearchInput');
-    if (searchInputAfter) {
-      searchInputAfter.focus();
-      searchInputAfter.setSelectionRange(searchValLen, searchValLen);
-    }
-  }
-
-  // --- Drag and Drop Bindings ---
-  const boardEl = document.querySelector('.tasks-board, .tasks-list');
-  if (boardEl) {
-    const cards = boardEl.querySelectorAll('.task-page-card');
-    cards.forEach(card => {
-      card.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', card.dataset.taskId);
-        card.classList.add('dragging');
-      });
-      card.addEventListener('dragend', () => {
-        card.classList.remove('dragging');
-      });
-    });
-
-    const columns = boardEl.querySelectorAll('.tasks-column');
-    columns.forEach(column => {
-      column.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        column.classList.add('drag-hover');
-      });
-      column.addEventListener('dragleave', () => {
-        column.classList.remove('drag-hover');
-      });
-      column.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        column.classList.remove('drag-hover');
-        const taskId = e.dataTransfer.getData('text/plain');
-        const targetStatus = column.dataset.taskColumnStatus;
-        if (taskId && targetStatus) {
-          await moveTaskStatus(taskId, targetStatus);
-        }
-      });
-    });
-  }
+  bindTaskDragAndDrop();
 };
 
 export const moveTaskStatus = async (taskId, columnStatus) => {
   const newStatus = columnStatus === 'completed' ? 'done' : 'todo';
   
-  const allTasks = [...state.dashboardTasks, ...state.documentTasks];
+  const allTasks = workspaceTaskList();
   const task = allTasks.find(t => t._id === taskId);
   if (!task) return;
   
   if (task.status === newStatus) return; // no change
   
   // Optimistic UI update
-  task.status = newStatus;
-  task.completedAt = newStatus === 'done' ? new Date().toISOString() : null;
+  const previousTask = { ...task };
+  const optimisticTask = {
+    ...task,
+    status: newStatus,
+    completedAt: newStatus === 'done' ? new Date().toISOString() : null
+  };
   
-  state.dashboardTasks = state.dashboardTasks.map(t => t._id === taskId ? { ...t, status: newStatus, completedAt: task.completedAt } : t);
-  state.documentTasks = state.documentTasks.map(t => t._id === taskId ? { ...t, status: newStatus, completedAt: task.completedAt } : t);
-  refreshLectureProgress(task.documentId || task.document || state.selectedDocumentId, {
+  upsertTaskInStore(optimisticTask);
+  refreshLectureProgress(optimisticTask.documentId || optimisticTask.document || state.selectedDocumentId, {
     message: 'All linked tasks completed',
     show: newStatus === 'done'
   });
   
-  renderTasksPage();
+  renderTasksBoard();
   
   if (state.demoMode) {
     showToast('Task updated locally');
@@ -677,19 +709,16 @@ export const moveTaskStatus = async (taskId, columnStatus) => {
   }
   
   try {
-    const docId = task.documentId || task.document;
-    await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${docId}/tasks/${task._id}`, {
+    const docId = optimisticTask.documentId || optimisticTask.document;
+    const updatedTask = await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${docId}/tasks/${optimisticTask._id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status: newStatus })
     });
+    upsertTaskInStore(updatedTask);
     showToast('Task status updated!');
   } catch (err) {
     showToast(err.message, true);
-    // revert
-    task.status = newStatus === 'done' ? 'todo' : 'done';
-    task.completedAt = task.status === 'done' ? new Date().toISOString() : null;
-    state.dashboardTasks = state.dashboardTasks.map(t => t._id === taskId ? { ...t, status: task.status, completedAt: task.completedAt } : t);
-    state.documentTasks = state.documentTasks.map(t => t._id === taskId ? { ...t, status: task.status, completedAt: task.completedAt } : t);
-    renderTasksPage();
+    upsertTaskInStore(previousTask);
+    renderTasksBoard();
   }
 };

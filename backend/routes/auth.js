@@ -13,7 +13,6 @@ const { asyncHandler } = require('../utils/AppError');
 const authenticateToken = require('../middleware/auth');
 const AuthService = require('../services/AuthService');
 const { AUTH } = require('../config/constants');
-const { validateAccessToken } = require('../utils/sessionAuth');
 
 const REFRESH_COOKIE_NAME = 'nexus_refresh_token';
 const OAUTH_STATE_COOKIE_NAME = 'nexus_oauth_state';
@@ -54,19 +53,12 @@ const readRefreshCookie = (req) => parseCookies(req.headers.cookie || '')[REFRES
 
 const publicAuthResult = ({ refreshToken, ...result }) => result;
 
-const optionalAuth = asyncHandler(async (req, _res, next) => {
-  const authHeader = req.headers.authorization || '';
-  const [scheme, token] = authHeader.split(' ');
-  if (scheme === 'Bearer' && token) {
-    try {
-      const { verified } = await validateAccessToken(token);
-      req.user = verified;
-    } catch (err) {
-      req.user = null;
-    }
+const waitForMinimumAuthResponseTime = async (startedAt, minimumMs = 150) => {
+  const remaining = minimumMs - (Date.now() - startedAt);
+  if (remaining > 0) {
+    await new Promise((resolve) => setTimeout(resolve, remaining));
   }
-  next();
-});
+};
 
 const appBaseUrl = () => (
   process.env.FRONTEND_ORIGIN
@@ -198,25 +190,65 @@ router.post('/google/complete', asyncHandler(async (req, res) => {
   });
 }));
 
-router.post('/verify-email/request', optionalAuth, asyncHandler(async (req, res) => {
-  const result = await AuthService.requestEmailVerification(req.user?.id || req.body?.email);
-  res.json(result);
+router.post(
+  '/resend-verification',
+  validateInput(schemas.resendVerification),
+  asyncHandler(async (req, res) => {
+    const startedAt = Date.now();
+    try {
+      const result = await AuthService.requestEmailVerification(req.body.email);
+      await waitForMinimumAuthResponseTime(startedAt);
+      res.json(result);
+    } catch (err) {
+      await waitForMinimumAuthResponseTime(startedAt);
+      throw err;
+    }
+  })
+);
+
+router.post('/verify-email', validateInput(schemas.verifyEmailOtp), asyncHandler(async (req, res) => {
+  const startedAt = Date.now();
+  try {
+    const result = await AuthService.verifyEmail(req.body.email, req.body.otp);
+    await waitForMinimumAuthResponseTime(startedAt);
+    res.json(result);
+  } catch (err) {
+    await waitForMinimumAuthResponseTime(startedAt);
+    throw err;
+  }
 }));
 
-router.post('/verify-email', asyncHandler(async (req, res) => {
-  const result = await AuthService.verifyEmail(req.body?.token);
-  res.json(result);
-}));
+router.post(
+  '/password/forgot',
+  validateInput(schemas.forgotPassword),
+  asyncHandler(async (req, res) => {
+    const startedAt = Date.now();
+    try {
+      const result = await AuthService.requestPasswordReset(req.body.email);
+      await waitForMinimumAuthResponseTime(startedAt);
+      res.json(result);
+    } catch (err) {
+      await waitForMinimumAuthResponseTime(startedAt);
+      throw err;
+    }
+  })
+);
 
-router.post('/password/forgot', asyncHandler(async (req, res) => {
-  const result = await AuthService.requestPasswordReset(req.body?.email);
-  res.json(result);
-}));
-
-router.post('/password/reset', asyncHandler(async (req, res) => {
-  const result = await AuthService.resetPassword(req.body?.token, req.body?.password);
-  res.json(result);
-}));
+router.post(
+  '/password/reset',
+  validateInput(schemas.resetPassword),
+  asyncHandler(async (req, res) => {
+    const startedAt = Date.now();
+    try {
+      const result = await AuthService.resetPassword(req.body.token, req.body.password);
+      await waitForMinimumAuthResponseTime(startedAt);
+      res.json(result);
+    } catch (err) {
+      await waitForMinimumAuthResponseTime(startedAt);
+      throw err;
+    }
+  })
+);
 
 /**
  * GET /api/auth/me

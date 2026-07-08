@@ -11,7 +11,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const { AccountToken, Session, User } = require('../models');
+const { AccountToken, EmailOtp, Session, User } = require('../models');
 const { getJwtSecret } = require('../config/env');
 const EmailService = require('./EmailService');
 const {
@@ -28,7 +28,7 @@ class AuthService {
    * @param {string} email - User email
    * @param {string} password - User password
    * @param {string} username - Username
-   * @returns {Promise<Object>} { token, refreshToken, user, verificationToken }
+   * @returns {Promise<Object>} { user, verificationRequired }
    * @throws {ValidationError} If input is invalid
    * @throws {ConflictError} If email/username already exists
    */
@@ -83,6 +83,7 @@ class AuthService {
 
     // Check for existing user
     const existingUser = await User.findOne({
+      deletedAt: null,
       $or: [{ email: normalizedEmail }, { username: normalizedUsername }]
     });
 
@@ -106,17 +107,22 @@ class AuthService {
 
     const savedUser = await newUser.save();
 
-    // Create email verification token
-    const verificationToken = await this._createAccountToken(savedUser, 'email-verification');
-    const verificationUrl = await EmailService.sendVerificationEmail({
-      user: savedUser,
-      token: verificationToken
-    });
+    try {
+      await this._sendEmailVerificationOtp(savedUser);
+    } catch (err) {
+      await Promise.allSettled([
+        EmailOtp.deleteMany({ user: savedUser._id, purpose: 'email-verification' }),
+        typeof savedUser.deleteOne === 'function'
+          ? savedUser.deleteOne()
+          : User.deleteOne({ _id: savedUser._id })
+      ]);
+      throw err;
+    }
 
     return {
       user: this._formatUser(savedUser),
-      verificationSent: true,
-      ...(process.env.NODE_ENV === 'production' ? {} : { verificationUrl })
+      verificationRequired: true,
+      verificationSent: true
     };
   }
 
@@ -144,7 +150,7 @@ class AuthService {
     }
 
     // Find user by email
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({ email: normalizedEmail, deletedAt: null });
 
     if (!user || !user.passwordHash) {
       throw new AuthenticationError('Invalid email or password');
@@ -208,7 +214,7 @@ class AuthService {
   async completeOauthHandoff(token) {
     const accountToken = await this._consumeAccountToken(token, 'oauth-handoff');
     const user = await User.findById(accountToken.user);
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw new NotFoundError('User', accountToken.user);
     }
     if (!this._isValidEmail(user.email)) {
@@ -220,38 +226,114 @@ class AuthService {
   async requestEmailVerification(emailOrUserId) {
     const user = this._isValidObjectId(emailOrUserId)
       ? await User.findById(emailOrUserId)
-      : await User.findOne({ email: String(emailOrUserId || '').toLowerCase().trim() });
+      : await User.findOne({ email: String(emailOrUserId || '').toLowerCase().trim(), deletedAt: null });
 
-    if (!user) {
-      return { message: 'If an account exists, a verification email has been sent.' };
+    const generic = {
+      message: 'If an unverified account exists, a new OTP has been sent.'
+    };
+
+    if (!user || user.deletedAt) {
+      return generic;
     }
 
     if (user.emailVerifiedAt) {
-      return { message: 'Email is already verified.' };
+      return generic;
     }
 
-    await AccountToken.updateMany(
-      { user: user._id, type: 'email-verification', usedAt: null },
-      { usedAt: new Date() }
-    );
-    const verificationToken = await this._createAccountToken(user, 'email-verification');
-    const verificationUrl = await EmailService.sendVerificationEmail({ user, token: verificationToken });
-
-    return {
-      message: 'Verification email sent.',
-      ...(process.env.NODE_ENV === 'production' ? {} : { verificationUrl })
-    };
+    await this._sendEmailVerificationOtp(user, { enforceCooldown: true });
+    return generic;
   }
 
-  async verifyEmail(token) {
-    const accountToken = await this._consumeAccountToken(token, 'email-verification');
-    const user = await User.findById(accountToken.user);
+  async verifyEmail(email, otp) {
+    const normalizedEmail = String(email || '').toLowerCase().trim();
+    const normalizedOtp = String(otp || '').trim();
+    const genericOtpError = 'Invalid or expired OTP';
+
+    if (!this._isValidEmail(normalizedEmail)) {
+      throw new ValidationError('Valid email is required');
+    }
+
+    if (!/^\d{6}$/.test(normalizedOtp)) {
+      throw new ValidationError('Enter the 6-digit OTP from your email');
+    }
+
+    const user = await User.findOne({ email: normalizedEmail, deletedAt: null });
     if (!user) {
-      throw new NotFoundError('User', accountToken.user);
+      this._constantTimeOtpCompare(
+        this._hashOtp(normalizedOtp, 'missing-user', normalizedEmail),
+        this._hashOtp('000000', 'missing-user', normalizedEmail)
+      );
+      throw new AuthenticationError(genericOtpError);
+    }
+
+    if (user.emailVerifiedAt) {
+      this._constantTimeOtpCompare(
+        this._hashOtp(normalizedOtp, user._id, normalizedEmail),
+        this._hashOtp('000000', user._id, normalizedEmail)
+      );
+      throw new AuthenticationError(genericOtpError);
+    }
+
+    const now = new Date();
+    const otpHash = this._hashOtp(normalizedOtp, user._id, normalizedEmail);
+    const consumedOtp = await EmailOtp.findOneAndUpdate({
+      user: user._id,
+      email: normalizedEmail,
+      purpose: 'email-verification',
+      usedAt: null,
+      expiresAt: { $gt: now },
+      attempts: { $lt: AUTH.EMAIL_OTP_MAX_ATTEMPTS },
+      otpHash
+    }, {
+      usedAt: now
+    }, {
+      returnDocument: 'after',
+      sort: { createdAt: -1 }
+    });
+
+    if (!consumedOtp) {
+      const latestActiveOtp = await EmailOtp.findOne({
+        user: user._id,
+        email: normalizedEmail,
+        purpose: 'email-verification',
+        usedAt: null
+      }).sort({ createdAt: -1 });
+
+      if (latestActiveOtp) {
+        this._constantTimeOtpCompare(otpHash, latestActiveOtp.otpHash);
+        if (latestActiveOtp.expiresAt <= now || latestActiveOtp.attempts >= AUTH.EMAIL_OTP_MAX_ATTEMPTS) {
+          await EmailOtp.updateOne({ _id: latestActiveOtp._id, usedAt: null }, { usedAt: now });
+        } else {
+          const attemptedOtp = await EmailOtp.findOneAndUpdate({
+            _id: latestActiveOtp._id,
+            usedAt: null,
+            attempts: { $lt: AUTH.EMAIL_OTP_MAX_ATTEMPTS }
+          }, {
+            $inc: { attempts: 1 }
+          }, {
+            returnDocument: 'after'
+          });
+          if (attemptedOtp?.attempts >= AUTH.EMAIL_OTP_MAX_ATTEMPTS) {
+            await EmailOtp.updateOne({ _id: attemptedOtp._id, usedAt: null }, { usedAt: now });
+          }
+        }
+      } else {
+        this._constantTimeOtpCompare(
+          otpHash,
+          this._hashOtp('000000', user._id, normalizedEmail)
+        );
+      }
+      throw new AuthenticationError(genericOtpError);
     }
 
     user.emailVerifiedAt = user.emailVerifiedAt || new Date();
-    await user.save();
+    await Promise.all([
+      user.save(),
+      EmailOtp.updateMany(
+        { user: user._id, purpose: 'email-verification', usedAt: null },
+        { usedAt: now }
+      )
+    ]);
 
     return {
       message: 'Email verified successfully.',
@@ -260,6 +342,8 @@ class AuthService {
   }
 
   async requestPasswordReset(email) {
+    const generic = { message: 'If an account exists, password reset instructions have been sent.' };
+
     if (!email || typeof email !== 'string') {
       throw new ValidationError('Email is required');
     }
@@ -269,22 +353,53 @@ class AuthService {
       throw new ValidationError('Please provide a valid email address');
     }
 
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({ email: normalizedEmail, deletedAt: null });
     if (!user || !user.passwordHash) {
-      return { message: 'If an account exists, password reset instructions have been sent.' };
+      return generic;
+    }
+
+    const latestActiveReset = await AccountToken.findOne({
+      user: user._id,
+      type: 'password-reset',
+      usedAt: null
+    }).sort({ createdAt: -1 });
+    const cooldownMs = AUTH.PASSWORD_RESET_COOLDOWN_SECONDS * 1000;
+    if (latestActiveReset?.createdAt && Date.now() - latestActiveReset.createdAt.getTime() < cooldownMs) {
+      return generic;
     }
 
     await AccountToken.updateMany(
       { user: user._id, type: 'password-reset', usedAt: null },
       { usedAt: new Date() }
     );
-    const resetToken = await this._createAccountToken(user, 'password-reset');
-    const resetUrl = await EmailService.sendPasswordResetEmail({ user, token: resetToken });
+    let resetToken = '';
+    try {
+      resetToken = await this._createAccountToken(user, 'password-reset');
+    } catch (err) {
+      if (err?.code === 11000) return generic;
+      throw err;
+    }
 
-    return {
-      message: 'If an account exists, password reset instructions have been sent.',
-      ...(process.env.NODE_ENV === 'production' ? {} : { resetUrl })
-    };
+    try {
+      const result = await EmailService.sendPasswordResetEmail({ user, token: resetToken });
+      if (!result?.delivered) {
+        await AccountToken.updateMany(
+          { user: user._id, type: 'password-reset', usedAt: null },
+          { usedAt: new Date() }
+        );
+      }
+    } catch (err) {
+      await AccountToken.updateMany(
+        { user: user._id, type: 'password-reset', usedAt: null },
+        { usedAt: new Date() }
+      );
+      console.error('Password reset email delivery failed:', JSON.stringify({
+        userId: String(user._id),
+        message: err.message
+      }));
+    }
+
+    return generic;
   }
 
   async resetPassword(token, password) {
@@ -298,13 +413,20 @@ class AuthService {
 
     const accountToken = await this._consumeAccountToken(token, 'password-reset');
     const user = await User.findById(accountToken.user);
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw new NotFoundError('User', accountToken.user);
     }
 
     user.passwordHash = await this.hashPassword(password);
     user.authProvider = user.authProvider || 'email';
-    await user.save();
+    user.passwordChangedAt = new Date();
+    await Promise.all([
+      user.save(),
+      Session.updateMany(
+        { user: user._id, revokedAt: null },
+        { revokedAt: new Date() }
+      )
+    ]);
 
     return { message: 'Password reset successful.' };
   }
@@ -351,7 +473,7 @@ class AuthService {
     // Get user
     const user = await User.findById(session.user);
 
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw new NotFoundError('User', session.user);
     }
 
@@ -455,10 +577,10 @@ class AuthService {
    */
   async getProfile(userId) {
     const user = await User.findById(userId).select(
-      'username fullName email authProvider profileImage emailVerifiedAt createdAt updatedAt lastLogin'
+      'username fullName email passwordHash authProvider googleId profileImage emailVerifiedAt passwordChangedAt createdAt updatedAt lastLogin deletedAt'
     );
 
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw new NotFoundError('User', userId);
     }
 
@@ -534,7 +656,7 @@ class AuthService {
   /**
    * Create account token (for password reset, email verification, etc.)
    * @param {Object} user - User document
-   * @param {string} type - Token type (email-verification, password-reset)
+   * @param {string} type - Token type (password-reset, oauth-handoff)
    * @returns {Promise<string>} Opaque token
    * @private
    */
@@ -555,24 +677,30 @@ class AuthService {
 
   async _consumeAccountToken(token, type) {
     if (!token || typeof token !== 'string') {
-      throw new ValidationError('Token is required');
+      throw new ValidationError(type === 'password-reset' ? 'Reset link is required' : 'Token is required');
     }
 
+    const now = new Date();
     const tokenHash = this._hashAccountToken(token);
-    const accountToken = await AccountToken.findOne({ tokenHash, type });
+    const accountToken = await AccountToken.findOneAndUpdate({
+      tokenHash,
+      type,
+      usedAt: null,
+      expiresAt: { $gt: now }
+    }, {
+      usedAt: now
+    }, {
+      returnDocument: 'after'
+    });
 
-    if (!accountToken || accountToken.usedAt) {
-      throw new AuthenticationError('Invalid or expired token');
+    if (!accountToken) {
+      await AccountToken.updateOne(
+        { tokenHash, type, usedAt: null, expiresAt: { $lte: now } },
+        { usedAt: now }
+      );
+      throw new AuthenticationError(type === 'password-reset' ? 'Invalid or expired reset link' : 'Invalid or expired token');
     }
 
-    if (accountToken.expiresAt <= new Date()) {
-      accountToken.usedAt = new Date();
-      await accountToken.save();
-      throw new AuthenticationError(this._expiredTokenMessage(type));
-    }
-
-    accountToken.usedAt = new Date();
-    await accountToken.save();
     return accountToken;
   }
 
@@ -582,6 +710,76 @@ class AuthService {
 
   _generateCsrfToken() {
     return crypto.randomBytes(32).toString('base64url');
+  }
+
+  _generateNumericOtp() {
+    return String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+  }
+
+  _hashOtp(otp, userId, email) {
+    return crypto
+      .createHmac('sha256', getJwtSecret())
+      .update(`${String(userId)}:${String(email).toLowerCase().trim()}:${String(otp)}`)
+      .digest('hex');
+  }
+
+  _constantTimeOtpCompare(actualHash, expectedHash) {
+    const actual = Buffer.from(String(actualHash || ''), 'hex');
+    const expected = Buffer.from(String(expectedHash || ''), 'hex');
+    if (actual.length !== expected.length) {
+      const fallback = Buffer.from(this._hashAccountToken('otp-length-mismatch'), 'hex');
+      crypto.timingSafeEqual(fallback, fallback);
+      return false;
+    }
+    return crypto.timingSafeEqual(actual, expected);
+  }
+
+  async _sendEmailVerificationOtp(user, { enforceCooldown = false } = {}) {
+    const normalizedEmail = String(user.email || '').toLowerCase().trim();
+    if (!this._isValidEmail(normalizedEmail)) {
+      throw new ValidationError('Cannot send OTP to an invalid email address');
+    }
+
+    const now = new Date();
+    if (enforceCooldown) {
+      const latestOtp = await EmailOtp.findOne({
+        user: user._id,
+        purpose: 'email-verification',
+        usedAt: null
+      }).sort({ createdAt: -1 });
+      const cooldownMs = AUTH.EMAIL_OTP_RESEND_COOLDOWN_SECONDS * 1000;
+      if (latestOtp?.lastSentAt && now - latestOtp.lastSentAt < cooldownMs) {
+        return false;
+      }
+    }
+
+    await EmailOtp.updateMany(
+      { user: user._id, purpose: 'email-verification', usedAt: null },
+      { usedAt: now }
+    );
+
+    const otp = this._generateNumericOtp();
+    try {
+      await EmailOtp.create({
+        user: user._id,
+        email: normalizedEmail,
+        purpose: 'email-verification',
+        otpHash: this._hashOtp(otp, user._id, normalizedEmail),
+        attempts: 0,
+        lastSentAt: now,
+        expiresAt: new Date(now.getTime() + AUTH.EMAIL_OTP_TTL_MINUTES * 60 * 1000)
+      });
+    } catch (err) {
+      if (err?.code === 11000) return false;
+      throw err;
+    }
+
+    await EmailService.sendVerificationOtpEmail({
+      user,
+      otp,
+      expiresInMinutes: AUTH.EMAIL_OTP_TTL_MINUTES
+    });
+    return true;
   }
 
   _assertValidCsrfToken(session, csrfToken) {
@@ -607,7 +805,7 @@ class AuthService {
     if (type === 'oauth-handoff') {
       return 'Google sign-in expired. Please try again.';
     }
-    return 'Verification link expired. Please request a new email.';
+    return 'OTP expired. Please request a new OTP.';
   }
 
   async _verifyGoogleIdToken(idToken) {
@@ -651,8 +849,8 @@ class AuthService {
     const now = new Date();
     let user = await User.findOne({
       $or: [
-        { googleId: googleUser.googleId },
-        { email: googleUser.email }
+        { googleId: googleUser.googleId, deletedAt: null },
+        { email: googleUser.email, deletedAt: null }
       ]
     });
 
@@ -713,9 +911,12 @@ class AuthService {
       fullName: user.fullName || user.username,
       email: user.email,
       authProvider: user.authProvider || 'email',
+      hasPassword: Boolean(user.passwordHash),
+      googleConnected: Boolean(user.googleId || user.authProvider === 'google'),
       profileImage: user.profileImage || '',
       emailVerified: Boolean(user.emailVerifiedAt),
       emailVerifiedAt: user.emailVerifiedAt,
+      passwordChangedAt: user.passwordChangedAt || null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       lastLogin: user.lastLogin

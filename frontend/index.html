@@ -231,9 +231,9 @@
                 <div id="saveStatusChip" class="hidden"></div>
               </div>
 
-              <div class="editor-ai-shortcuts unified-action-bar" aria-label="AI study shortcuts">
-                <button data-ai-study-action="summarize" class="action-btn action-primary" type="button">
-                  <span class="action-icon">✦</span> Ask AI
+              <div class="editor-ai-shortcuts unified-action-bar" aria-label="Mentor study shortcuts">
+                <button data-focus-ai-prompt class="action-btn action-primary" type="button">
+                  <span class="action-icon">✦</span> Ask Mentor
                 </button>
                 <button id="emptyActionPaste" class="action-btn" type="button">
                   <span class="action-icon">📋</span> Paste lecture
@@ -361,7 +361,7 @@
                   </button>
                   <button type="button" class="empty-action-card" data-dashboard-action="ai">
                     <span class="action-icon">🤖</span>
-                    <span class="action-label">Ask AI</span>
+                    <span class="action-label">Ask Mentor</span>
                   </button>
                 </div>
               </div>
@@ -374,7 +374,7 @@
                 aria-multiline="true"
                 tabindex="0"
                 spellcheck="true"
-                data-placeholder="Start writing your notes, paste lecture content, or ask AI to create a study outline..."
+                data-placeholder="Start writing your notes, paste lecture content, or ask Nexus Mentor to create a study outline..."
               ></div>
             </div>
           </section>
@@ -384,7 +384,7 @@
             class="resize-handle ai-resize-handle"
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize AI assistant panel"
+            aria-label="Resize mentor panel"
             tabindex="0"
           >
             <span class="resize-grip" aria-hidden="true"></span>
@@ -392,9 +392,9 @@
 
           <aside class="context-panel">
             <div class="context-tabs" role="tablist" aria-label="Document context">
-              <button class="context-tab active" data-context-tab="ai" type="button" title="Lecture Tutor">
+              <button class="context-tab active" data-context-tab="ai" type="button" title="Nexus Mentor">
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275Z"/></svg>
-                <span>Tutor</span>
+                <span>Mentor</span>
               </button>
               <button class="context-tab" data-context-tab="library" type="button" title="Study Kit">
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>
@@ -413,28 +413,28 @@
             <section class="context-view active" data-context-view="ai">
               <div class="ai-panel-scroll">
                 <section class="ai-panel-section ai-tutor-section" aria-labelledby="aiTutorHeading">
-                  <div id="aiTutorHeading" class="tutor-section-heading">AI Tutor</div>
+                  <div id="aiTutorHeading" class="tutor-section-heading">Nexus Mentor</div>
                   <div class="context-header tutor-status-card">
                     <span class="context-icon">✦</span>
                     <div class="tutor-status-copy">
-                      <h3>Lecture Tutor</h3>
-                      <p id="aiContextLabel">Uses this lecture and selected paragraph as context.</p>
+                      <h3>Nexus Mentor</h3>
+                      <p id="aiContextLabel">Ask about this lecture or use a study action below.</p>
                     </div>
-                    <div class="tutor-badges" aria-label="Tutor status">
-                      <span>Context aware</span>
-                      <span>Live</span>
+                    <div class="tutor-badges" aria-label="Context used by Nexus Mentor">
+                      <span>Current lecture</span>
+                      <span>Saved study context</span>
                     </div>
                   </div>
-                  <form id="aiPromptForm" class="ai-prompt-card" aria-label="Ask AI">
-                    <input id="aiPromptInput" type="text" placeholder="Ask AI about this lecture..." autocomplete="off" />
-                    <button id="aiPromptSubmitBtn" class="primary" type="submit">Ask AI</button>
+                  <form id="aiPromptForm" class="ai-prompt-card" aria-label="Ask Nexus Mentor">
+                    <input id="aiPromptInput" type="text" placeholder="Ask Nexus Mentor about this lecture..." autocomplete="off" />
+                    <button id="aiPromptSubmitBtn" class="primary" type="submit">Ask</button>
                   </form>
                 </section>
 
                 <section class="ai-panel-section" aria-labelledby="aiScopeHeading">
                   <div id="aiScopeHeading" class="tutor-section-heading">Input Scope</div>
-                  <div class="ai-source-toggle tutor-source-toggle" aria-label="AI source">
-                    <label><input type="radio" name="aiSource" value="document" checked /> Full Lecture</label>
+                  <div class="ai-source-toggle tutor-source-toggle" aria-label="Mentor source">
+                    <label><input type="radio" name="aiSource" value="document" checked /> Current Lecture</label>
                     <label><input type="radio" name="aiSource" value="selection" /> Selected Text</label>
                   </div>
                   <p id="aiSelectionHint" class="ai-selection-hint">Select text in the editor to use a focused paragraph.</p>
@@ -448,7 +448,7 @@
                     <option value="simple-explanation">Explain Like I'm 10</option>
                     <option value="important-questions">Important Questions</option>
                   </select>
-                  <div id="aiQuickActionsHeading" class="tutor-section-heading">Quick Actions</div>
+                  <div id="aiQuickActionsHeading" class="tutor-section-heading">Study Actions</div>
                   <div class="tutor-quick-actions">
                     <button class="ai-tool-button" data-ai-study-action="summarize" type="button">
                       <span class="ai-tool-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
@@ -471,7 +471,7 @@
                 </section>
 
                 <section class="ai-panel-section" aria-labelledby="aiStudyToolsHeading">
-                  <div id="aiStudyToolsHeading" class="tutor-section-heading">Study Tools</div>
+                  <div id="aiStudyToolsHeading" class="tutor-section-heading">Save or Revise</div>
                   <div class="tutor-secondary-actions">
                     <button class="ai-tool-button" data-ai-study-action="important-questions" type="button">
                       <span class="ai-tool-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
@@ -479,7 +479,7 @@
                     </button>
                     <button id="createAiDocumentBtn" class="ai-tool-button" type="button">
                       <span class="ai-tool-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>
-                      <span>Linked Lecture</span>
+                      <span>Create Doc</span>
                     </button>
                   </div>
                 </section>

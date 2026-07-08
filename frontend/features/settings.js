@@ -4,124 +4,171 @@ export const renderSettingsContent = (tab, workspace) => {
   const canManage = workspace ? isCurrentUserWorkspaceAdmin(workspace) : false;
   const canOwnerManage = workspace ? isWorkspaceOwner(workspace) : false;
   const isDirty = isSettingsDirty();
+  const security = state.accountSecurity?.data || {};
+  const password = security.password || {
+    hasPassword: Boolean(state.user?.hasPassword),
+    passwordChangedAt: state.user?.passwordChangedAt || null
+  };
+  const google = security.google || {
+    connected: Boolean(state.user?.googleConnected || state.user?.authProvider === 'google')
+  };
+  const email = security.email || {
+    address: state.user?.email || '',
+    verified: Boolean(state.user?.emailVerified),
+    verifiedAt: state.user?.emailVerifiedAt || null
+  };
+  const account = security.account || {
+    createdAt: state.user?.createdAt || null
+  };
+  const metadataLoading = Boolean(state.accountSecurity?.loading && !state.accountSecurity?.loaded);
+  const securityDate = (value) => value ? new Date(value).toLocaleString() : 'Not available';
+  const metadataValue = (value) => value
+    ? escapeHtml(securityDate(value))
+    : metadataLoading
+      ? '<span class="security-skeleton" aria-label="Loading"></span>'
+      : 'Not available';
 
   const panels = {
     general: `
       <section class="settings-content-card" data-settings-panel="general">
-        <h3>General Settings</h3>
-        <p>Manage workspace profile, account settings, and workspace identity.</p>
+        <div class="settings-panel-header">
+          <h3>General Settings</h3>
+          <p>Manage workspace identity, account profile, and workspace administration.</p>
+        </div>
 
-        <div class="security-card">
-          <div class="security-card-header">
-            <h4>Workspace Profile</h4>
-          </div>
-          <p>Identity details for the workspace.</p>
-          
-          <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 20px;">
-            <span class="workspace-avatar big">
-              ${escapeHtml(getInitials(settingsWorkspaceName || 'S'))}
-            </span>
-            <div style="flex: 1;">
-              <label style="margin: 0;">Workspace Name
-                <input id="settingsWorkspaceNameInput" value="${escapeHtml(settingsWorkspaceName)}" ${canManage ? '' : 'readonly'} placeholder="Workspace Name" />
-              </label>
+        <!-- Workspace Profile -->
+        <div class="settings-section-card">
+          <div class="settings-section-title">
+            <div>
+              <h4>Workspace Profile</h4>
+              <p>Identity details visible to all workspace members.</p>
             </div>
           </div>
-
-          <label style="margin-bottom: 16px;">Workspace Description
+          <div class="settings-profile-row">
+            <span class="workspace-avatar big">${escapeHtml(getInitials(settingsWorkspaceName || 'S'))}</span>
+            <div class="settings-field" style="flex:1;">
+              <label class="settings-field-label">Workspace Name</label>
+              <input id="settingsWorkspaceNameInput" value="${escapeHtml(settingsWorkspaceName)}" ${canManage ? '' : 'readonly'} placeholder="Workspace Name" />
+            </div>
+          </div>
+          <div class="settings-field">
+            <label class="settings-field-label">Workspace Description</label>
             <textarea id="settingsWorkspaceDescriptionInput" ${canManage ? '' : 'readonly'} placeholder="Describe this workspace...">${escapeHtml(settingsWorkspaceDescription)}</textarea>
-          </label>
-
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 12px; background: var(--panel-soft); border-radius: var(--radius-md); font-size: 13px; margin-bottom: 16px;">
-            <div><span style="color: var(--muted); display: block; font-size: 11px; margin-bottom: 2px;">CREATED</span><strong>${workspace?.createdAt ? new Date(workspace.createdAt).toLocaleDateString() : 'Not available'}</strong></div>
-            <div><span style="color: var(--muted); display: block; font-size: 11px; margin-bottom: 2px;">MEMBERS</span><strong>${workspace?.members?.length || 1} members</strong></div>
-            <div>
-              <span style="color: var(--muted); display: block; font-size: 11px; margin-bottom: 2px;">WORKSPACE ID</span>
-              <div style="display: flex; gap: 6px; align-items: center;">
-                <code style="background: transparent; padding: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px;">${workspace?._id || ''}</code>
-                <button class="ghost" id="settingsCopyWorkspaceIdBtn" style="padding: 2px 6px; font-size: 11px; height: auto;" type="button">Copy</button>
+          </div>
+          <div class="settings-meta-grid">
+            <div class="settings-meta-item">
+              <span class="settings-meta-label">Created</span>
+              <span class="settings-meta-value">${workspace?.createdAt ? new Date(workspace.createdAt).toLocaleDateString() : 'N/A'}</span>
+            </div>
+            <div class="settings-meta-item">
+              <span class="settings-meta-label">Members</span>
+              <span class="settings-meta-value">${workspace?.members?.length || 1}</span>
+            </div>
+            <div class="settings-meta-item">
+              <span class="settings-meta-label">Workspace ID</span>
+              <div class="settings-meta-copy-row">
+                <code>${workspace?._id || ''}</code>
+                <button class="settings-meta-copy-btn" id="settingsCopyWorkspaceIdBtn" type="button">Copy</button>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="security-card">
-          <div class="security-card-header">
-            <h4>Account Profile</h4>
-          </div>
-          <p>Manage your account settings and credentials.</p>
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--panel-soft); border-radius: var(--radius-md);">
+        <!-- Account Profile -->
+        <div class="settings-section-card">
+          <div class="settings-section-title">
             <div>
-              <strong>${escapeHtml(state.user?.username || 'User')}</strong>
-              <span style="display: block; font-size: 12px; color: var(--muted); margin-top: 2px;">${escapeHtml(state.user?.email || '')}</span>
+              <h4>Account Profile</h4>
+              <p>Your personal account details and session.</p>
             </div>
-            <button class="soft-button" id="settingsSignOutBtn" style="color: #ef4444;" type="button">Sign Out</button>
+          </div>
+          <div class="settings-account-info-card">
+            <div>
+              <div class="account-name">${escapeHtml(state.user?.username || 'User')}</div>
+              <div class="account-email">${escapeHtml(state.user?.email || '')}</div>
+            </div>
+            <button class="ghost" id="settingsSignOutBtn" style="color: #ef4444; border-color: color-mix(in srgb, #ef4444 30%, var(--line));" type="button">Sign Out</button>
           </div>
         </div>
 
-        <div class="security-card">
-          <div class="security-card-header">
-            <h4>Workspace Administration</h4>
+        <!-- Workspace Administration -->
+        <div class="settings-section-card">
+          <div class="settings-section-title">
+            <div>
+              <h4>Workspace Administration</h4>
+              <p>Manage members, invitations, roles, and advanced workspace tools.</p>
+            </div>
           </div>
-          <p>Access members directory, invite management, and database tools.</p>
-          <button class="soft-button" data-route-go="workspace-settings" type="button">Manage Workspace Settings</button>
+          <div>
+            <button class="soft-button" data-route-go="workspace-settings" type="button">Manage Workspace Settings</button>
+          </div>
         </div>
 
         <div class="settings-save-footer">
           <button class="ghost" id="settingsCancelBtn" type="button">Cancel</button>
           <button class="primary" id="settingsSaveBtn" type="button" ${settingsSaveInProgress || !isDirty ? 'disabled' : ''}>
-            ${settingsSaveInProgress ? 'Saving...' : 'Save Changes'}
+            ${settingsSaveInProgress ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </section>
     `,
     appearance: `
       <section class="settings-content-card" data-settings-panel="appearance">
-        <h3>Appearance Settings</h3>
-        <p>Control how Nexus feels while you read, write, and collaborate.</p>
+        <div class="settings-panel-header">
+          <h3>Appearance</h3>
+          <p>Control how Nexus feels while you read, write, and collaborate.</p>
+        </div>
 
-        <div class="security-card">
-          <div class="security-card-header">
-            <h4>Theme Preference</h4>
+        <!-- Theme -->
+        <div class="settings-section-card">
+          <div class="settings-section-title">
+            <div>
+              <h4>Theme Preference</h4>
+              <p>Select your interface theme or sync with system preferences.</p>
+            </div>
           </div>
-          <p>Select your interface theme or sync with system preferences.</p>
           <div class="theme-selector-grid">
             <div class="theme-select-card ${settingsTheme === 'light' ? 'active' : ''}" data-theme-val="light">
               <span class="theme-card-icon">☀️</span>
-              <strong>Light Mode</strong>
+              <strong>Light</strong>
               <span class="theme-card-desc">Sleek, bright palette</span>
             </div>
             <div class="theme-select-card ${settingsTheme === 'dark' ? 'active' : ''}" data-theme-val="dark">
               <span class="theme-card-icon">🌙</span>
-              <strong>Dark Mode</strong>
+              <strong>Dark</strong>
               <span class="theme-card-desc">Deep, contrast palette</span>
             </div>
             <div class="theme-select-card ${settingsTheme === 'system' ? 'active' : ''}" data-theme-val="system">
               <span class="theme-card-icon">🖥️</span>
-              <strong>System Sync</strong>
+              <strong>System</strong>
               <span class="theme-card-desc">Match device settings</span>
             </div>
           </div>
         </div>
 
-        <div class="security-card">
-          <div class="security-card-header">
-            <h4>Interface Density</h4>
+        <!-- Density -->
+        <div class="settings-section-card">
+          <div class="settings-section-title">
+            <div>
+              <h4>Interface Density</h4>
+              <p>Control the height and padding scale of workspace views.</p>
+            </div>
           </div>
-          <p>Control the height and padding scale of workspace views.</p>
-          <label style="margin: 0;">Density Level
+          <div class="settings-field">
+            <label class="settings-field-label">Density Level</label>
             <select id="settingsDensitySelect">
               <option value="comfortable" ${settingsDensity === 'comfortable' ? 'selected' : ''}>Comfortable (default)</option>
               <option value="compact" ${settingsDensity === 'compact' ? 'selected' : ''}>Compact (high density)</option>
             </select>
-          </label>
+          </div>
         </div>
 
-        <div class="notification-option-row">
-          <div class="notification-option-details">
-            <span class="notification-option-icon">✨</span>
-            <div>
-              <strong>Reduce motion</strong>
+        <!-- Reduce Motion -->
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-left">
+            <div class="settings-toggle-icon">✨</div>
+            <div class="settings-toggle-info">
+              <strong>Reduce Motion</strong>
               <p>Minimize hover lifts and animated transitions.</p>
             </div>
           </div>
@@ -134,90 +181,101 @@ export const renderSettingsContent = (tab, workspace) => {
         <div class="settings-save-footer">
           <button class="ghost" id="settingsCancelBtn" type="button">Cancel</button>
           <button class="primary" id="settingsSaveBtn" type="button" ${settingsSaveInProgress || !isDirty ? 'disabled' : ''}>
-            ${settingsSaveInProgress ? 'Saving...' : 'Save Changes'}
+            ${settingsSaveInProgress ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </section>
     `,
     notifications: `
       <section class="settings-content-card" data-settings-panel="notifications">
-        <h3>Notifications</h3>
-        <p>Choose which workspace events should ask for your attention.</p>
-
-        <div class="notification-option-row">
-          <div class="notification-option-details">
-            <span class="notification-option-icon">📧</span>
-            <div>
-              <strong>Email summaries</strong>
-              <p>Receive weekly updates and digest summaries by email.</p>
-            </div>
-          </div>
-          <label class="toggle-switch-wrapper">
-            <input type="checkbox" id="settingsEmailNotificationsInput" ${settingsEmailNotifications ? 'checked' : ''} />
-            <span class="toggle-switch-slider"></span>
-          </label>
+        <div class="settings-panel-header">
+          <h3>Notifications</h3>
+          <p>Choose which workspace events should ask for your attention.</p>
         </div>
 
-        <div class="notification-option-row">
-          <div class="notification-option-details">
-            <span class="notification-option-icon">📋</span>
+        <div class="settings-section-card">
+          <div class="settings-section-title">
             <div>
-              <strong>Task updates</strong>
-              <p>Notify me when document tasks are created, assigned, or completed.</p>
+              <h4>Email &amp; In-App Alerts</h4>
+              <p>Each notification can be individually toggled on or off.</p>
             </div>
           </div>
-          <label class="toggle-switch-wrapper">
-            <input type="checkbox" id="settingsTaskNotificationsInput" ${settingsTaskNotifications ? 'checked' : ''} />
-            <span class="toggle-switch-slider"></span>
-          </label>
-        </div>
 
-        <div class="notification-option-row">
-          <div class="notification-option-details">
-            <span class="notification-option-icon">💬</span>
-            <div>
-              <strong>Discussion replies</strong>
-              <p>Notify me when teammates reply in document discussions.</p>
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-left">
+              <div class="settings-toggle-icon">📧</div>
+              <div class="settings-toggle-info">
+                <strong>Email Summaries</strong>
+                <p>Receive weekly updates and digest summaries by email.</p>
+              </div>
             </div>
+            <label class="toggle-switch-wrapper">
+              <input type="checkbox" id="settingsEmailNotificationsInput" ${settingsEmailNotifications ? 'checked' : ''} />
+              <span class="toggle-switch-slider"></span>
+            </label>
           </div>
-          <label class="toggle-switch-wrapper">
-            <input type="checkbox" id="settingsDiscussionNotificationsInput" ${settingsDiscussionNotifications ? 'checked' : ''} />
-            <span class="toggle-switch-slider"></span>
-          </label>
-        </div>
 
-        <div class="notification-option-row">
-          <div class="notification-option-details">
-            <span class="notification-option-icon">🏷️</span>
-            <div>
-              <strong>Mentions & Activity</strong>
-              <p>Notify me when I am mentioned or tagged in discussions.</p>
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-left">
+              <div class="settings-toggle-icon">📋</div>
+              <div class="settings-toggle-info">
+                <strong>Task Updates</strong>
+                <p>Notify me when tasks are created, assigned, or completed.</p>
+              </div>
             </div>
+            <label class="toggle-switch-wrapper">
+              <input type="checkbox" id="settingsTaskNotificationsInput" ${settingsTaskNotifications ? 'checked' : ''} />
+              <span class="toggle-switch-slider"></span>
+            </label>
           </div>
-          <label class="toggle-switch-wrapper">
-            <input type="checkbox" id="settingsMentionNotificationsInput" ${settingsMentionNotifications ? 'checked' : ''} />
-            <span class="toggle-switch-slider"></span>
-          </label>
-        </div>
 
-        <div class="notification-option-row">
-          <div class="notification-option-details">
-            <span class="notification-option-icon">👋</span>
-            <div>
-              <strong>Workspace Invites</strong>
-              <p>Notify me when a new member joins or accepts an invite.</p>
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-left">
+              <div class="settings-toggle-icon">💬</div>
+              <div class="settings-toggle-info">
+                <strong>Discussion Replies</strong>
+                <p>Notify me when teammates reply in document discussions.</p>
+              </div>
             </div>
+            <label class="toggle-switch-wrapper">
+              <input type="checkbox" id="settingsDiscussionNotificationsInput" ${settingsDiscussionNotifications ? 'checked' : ''} />
+              <span class="toggle-switch-slider"></span>
+            </label>
           </div>
-          <label class="toggle-switch-wrapper">
-            <input type="checkbox" id="settingsInviteNotificationsInput" ${settingsInviteNotifications ? 'checked' : ''} />
-            <span class="toggle-switch-slider"></span>
-          </label>
+
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-left">
+              <div class="settings-toggle-icon">🏷️</div>
+              <div class="settings-toggle-info">
+                <strong>Mentions &amp; Activity</strong>
+                <p>Notify me when I am mentioned or tagged in discussions.</p>
+              </div>
+            </div>
+            <label class="toggle-switch-wrapper">
+              <input type="checkbox" id="settingsMentionNotificationsInput" ${settingsMentionNotifications ? 'checked' : ''} />
+              <span class="toggle-switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-left">
+              <div class="settings-toggle-icon">👋</div>
+              <div class="settings-toggle-info">
+                <strong>Workspace Invites</strong>
+                <p>Notify me when a new member joins or accepts an invite.</p>
+              </div>
+            </div>
+            <label class="toggle-switch-wrapper">
+              <input type="checkbox" id="settingsInviteNotificationsInput" ${settingsInviteNotifications ? 'checked' : ''} />
+              <span class="toggle-switch-slider"></span>
+            </label>
+          </div>
         </div>
 
         <div class="settings-save-footer">
           <button class="ghost" id="settingsCancelBtn" type="button">Cancel</button>
           <button class="primary" id="settingsSaveBtn" type="button" ${settingsSaveInProgress || !isDirty ? 'disabled' : ''}>
-            ${settingsSaveInProgress ? 'Saving...' : 'Save Changes'}
+            ${settingsSaveInProgress ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </section>
@@ -304,81 +362,130 @@ export const renderSettingsContent = (tab, workspace) => {
     `,
     security: `
       <section class="settings-content-card" data-settings-panel="security">
-        <h3>Security Settings</h3>
-        <p>Manage password updates, email verification, active sessions, and workspace lifecycle.</p>
-
-        <div class="security-card">
-          <div class="security-card-header">
-            <h4>Account Credentials</h4>
-          </div>
-          <p>Change your password regularly to keep your account secure.</p>
-          <button class="primary" data-tool="profile" type="button">Update Password & Profile</button>
+        <div class="settings-panel-header">
+          <h3>Security</h3>
+          <p>Manage sign-in methods, account credentials, and permanent account actions.</p>
         </div>
+        ${state.accountSecurity?.loading && !state.accountSecurity?.loaded ? '<p class="security-inline-state">Checking sign-in methods…</p>' : ''}
+        ${state.accountSecurity?.error ? `<p class="security-inline-state error">${escapeHtml(state.accountSecurity.error)}</p>` : ''}
 
-        <div class="security-card">
-          <div class="security-card-header">
-            <h4>Account Verification</h4>
-          </div>
-          <p>Ensure your recovery and communication channels are verified.</p>
-          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--panel-soft); border-radius: var(--radius-md);">
-            <div>
-              <strong>Email Status</strong>
-              <span style="display: block; font-size: 12px; color: var(--muted); margin-top: 2px;">${escapeHtml(state.user?.email || '')}</span>
-            </div>
-            <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 4px; background: rgba(16, 185, 129, 0.1); color: #10b981;">Verified</span>
-          </div>
-        </div>
+        <div class="security-cards-stack">
 
-        <div class="security-card">
-          <div class="security-card-header">
-            <h4>Active Devices & Sessions</h4>
-          </div>
-          <p>You are currently logged in to Nexus from these browser sessions.</p>
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md);">
-              <div>
-                <strong style="font-size: 13px;">Chrome on Linux (Current session)</strong>
-                <span style="display: block; font-size: 11px; color: var(--muted); margin-top: 2px;">IP: 192.168.1.45 · Active now</span>
+          <!-- Password -->
+          <div class="security-card">
+            <div class="security-card-header">
+              <div class="security-card-title-group">
+                <div class="security-card-icon-wrap">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </div>
+                <div>
+                  <h4>Password</h4>
+                  <p class="security-card-subtitle">Email &amp; password sign-in credentials</p>
+                </div>
               </div>
-              <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+              <span class="security-status-pill ${password.hasPassword ? 'ok' : 'warn'}">${password.hasPassword ? '\u2713 Enabled' : 'Not set'}</span>
             </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md); opacity: 0.7;">
-              <div>
-                <strong style="font-size: 13px;">Safari on iPhone</strong>
-                <span style="display: block; font-size: 11px; color: var(--muted); margin-top: 2px;">IP: 172.56.21.99 · Last active 2 hours ago</span>
-              </div>
-              <button class="ghost" style="padding: 2px 6px; font-size: 11px; height: auto;" type="button" onclick="showToast('Session revoked')">Revoke</button>
+            <div class="security-card-body">
+              ${password.hasPassword ? `
+                <div class="security-field-row">
+                  <span>Last changed</span>
+                  <strong>${metadataValue(password.passwordChangedAt)}</strong>
+                </div>
+                <div class="security-password-mask">••••••••••••</div>
+                <div class="security-card-actions">
+                  <button class="primary" data-account-password-action="change" type="button">Change Password</button>
+                </div>
+              ` : `
+                <p class="security-card-empty">No password set. Add one to enable email/password sign-in while keeping Google Sign-In active.</p>
+                <div class="security-card-actions">
+                  <button class="primary" data-account-password-action="set" type="button">Set Password</button>
+                </div>
+              `}
             </div>
           </div>
+
+          <!-- Sign-In Methods -->
+          <div class="security-card">
+            <div class="security-card-header">
+              <div class="security-card-title-group">
+                <div class="security-card-icon-wrap">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                </div>
+                <div>
+                  <h4>Sign-In Methods</h4>
+                  <p class="security-card-subtitle">Active authentication providers on your account</p>
+                </div>
+              </div>
+            </div>
+            <div class="security-card-body">
+              <div class="security-method-grid">
+                <div class="security-method-row">
+                  <div class="security-method-info">
+                    <span class="security-method-label">Google Account</span>
+                    <small class="security-method-desc">Sign in with your Google profile</small>
+                  </div>
+                  <span class="security-status-pill ${google.connected ? 'ok' : ''}">${google.connected ? '\u2713 Connected' : 'Not connected'}</span>
+                </div>
+                <div class="security-method-row">
+                  <div class="security-method-info">
+                    <span class="security-method-label">Email Verified</span>
+                    <small class="security-method-desc">${escapeHtml(email.address || 'No email on record')}</small>
+                  </div>
+                  <span class="security-status-pill ${email.verified ? 'ok' : 'warn'}">${email.verified ? '\u2713 Verified' : 'Unverified'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metadata -->
+          <div class="security-card">
+            <div class="security-card-header">
+              <div class="security-card-title-group">
+                <div class="security-card-icon-wrap">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                </div>
+                <div>
+                  <h4>Account Details</h4>
+                  <p class="security-card-subtitle">Server-backed security metadata</p>
+                </div>
+              </div>
+            </div>
+            <div class="security-card-body">
+              <div class="security-method-grid">
+                <div class="security-method-row">
+                  <div class="security-method-info">
+                    <span class="security-method-label">Account Created</span>
+                    <small class="security-method-desc">${metadataValue(account.createdAt)}</small>
+                  </div>
+                </div>
+                <div class="security-method-row">
+                  <div class="security-method-info">
+                    <span class="security-method-label">Password Changed</span>
+                    <small class="security-method-desc">${metadataValue(password.passwordChangedAt)}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
 
-        <div class="danger-zone-card">
-          <h4>Danger Zone</h4>
-          <p style="margin: 0 0 16px 0; font-size: 12px; color: var(--muted);">Irreversible actions concerning this workspace. Please proceed with caution.</p>
-          
+        <!-- Danger Zone -->
+        <div class="danger-zone-card account-danger-zone">
+          <div class="danger-zone-header">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <h4>Danger Zone</h4>
+          </div>
+          <p>Deleting your account is permanent. All owned workspaces, documents, tasks, threads, messages, AI history, sessions, and tokens will be removed.</p>
           <div class="danger-zone-row">
             <div>
-              <strong style="font-size: 14px; font-weight: 600; color: var(--text);">Leave Workspace</strong>
-              <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--muted);">You will lose access to all notes, channels, tasks and conversations in this workspace.</p>
+              <strong>Delete Account</strong>
+              <p>This cannot be undone. You will be signed out everywhere.</p>
             </div>
-            <button class="danger-button" id="settingsLeaveWorkspaceBtn" type="button" ${state.workspaces.length > 1 && !canOwnerManage ? '' : 'disabled'}>
-              Leave Workspace
-            </button>
+            <button class="danger-button" data-account-delete-start type="button">Delete Account</button>
           </div>
-
-          <div class="danger-zone-row">
-            <div>
-              <strong style="font-size: 14px; font-weight: 600; color: var(--text);">Delete Workspace</strong>
-              <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--muted);">Permanently delete this workspace and all its data. This action is irreversible.</p>
-            </div>
-            <button class="danger-button" id="settingsDeleteWorkspaceBtn" type="button" ${state.workspaces.length > 1 && canOwnerManage ? '' : 'disabled'}>
-              Delete Workspace
-            </button>
-          </div>
-          ${canOwnerManage && state.workspaces.length <= 1 ? '<small style="color: #ef4444; font-size: 11px; margin-top: 8px; display: block;">You must have at least one other workspace to delete this one.</small>' : ''}
-          ${!canOwnerManage ? '<small style="color: var(--muted); font-size: 11px; margin-top: 8px; display: block;">Only the workspace owner can delete this workspace.</small>' : ''}
-          ${canOwnerManage && state.workspaces.length > 1 ? '' : !canOwnerManage && state.workspaces.length <= 1 ? '<small style="color: #ef4444; font-size: 11px; margin-top: 8px; display: block;">You must have at least one other workspace to leave this one.</small>' : ''}
         </div>
+
       </section>
     `
   };
@@ -386,8 +493,36 @@ export const renderSettingsContent = (tab, workspace) => {
   return panels[tab] || panels.general;
 };
 
+const renderSecurityContentFromState = (workspace) => {
+  if (state.activeSettingsTab !== 'security') return;
+  const wrapper = document.querySelector('.settings-content-wrapper');
+  if (!wrapper) return;
+  wrapper.innerHTML = renderSettingsContent('security', workspace);
+};
 
-export const renderSettingsPage = () => {
+const loadSecurityOverviewInBackground = (workspace) => {
+  if (state.activeSettingsTab !== 'security' || !state.token || state.demoMode) return;
+  if (state.accountSecurity.loading) return;
+
+  state.accountSecurity.loading = true;
+  state.accountSecurity.error = '';
+  renderSecurityContentFromState(workspace);
+
+  request('/api/account/security')
+    .then((data) => {
+      state.accountSecurity.data = data;
+      state.accountSecurity.loaded = true;
+    })
+    .catch((err) => {
+      state.accountSecurity.error = err.message || 'Security details could not be loaded.';
+    })
+    .finally(() => {
+      state.accountSecurity.loading = false;
+      renderSecurityContentFromState(workspace);
+    });
+};
+
+export const renderSettingsPage = async () => {
   setMainMode('feature');
   setRouteChrome('settings');
   const workspace = selectedWorkspace();
@@ -399,22 +534,33 @@ export const renderSettingsPage = () => {
     ['security', 'Security']
   ];
   const tabIcons = {
-    general: '⚙️',
-    appearance: '🎨',
-    notifications: '🔔',
-    integrations: '🔌',
-    security: '🔒'
+    general: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>`,
+    appearance: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 10 10 0 1 1 0-20"/></svg>`,
+    notifications: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+    integrations: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="2" y="7" width="6" height="10" rx="1"/><rect x="16" y="7" width="6" height="10" rx="1"/><path d="M8 12h8"/></svg>`,
+    security: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`
   };
   els.routePage.innerHTML = `
     <div class="settings-page page-shell-v2">
       <header class="page-heading-v2">
-        <div><h2>Settings</h2><p>Configure workspace preferences, account security, and collaboration tools.</p></div>
+        <div>
+          <h2>Settings</h2>
+          <p>Configure workspace preferences, account security, and collaboration tools.</p>
+        </div>
       </header>
       <div class="settings-layout">
-        <nav class="settings-tabs">
-          ${tabs.map(([id, label]) => `
+        <nav class="settings-sidebar">
+          <span class="settings-nav-section-label">Account</span>
+          ${tabs.slice(0,2).map(([id, label]) => `
             <button class="settings-nav-btn ${state.activeSettingsTab === id ? 'active' : ''}" data-settings-tab="${id}" type="button">
-              <span class="settings-nav-btn-icon">${tabIcons[id] || '⚙️'}</span>
+              <span class="settings-nav-btn-icon">${tabIcons[id]}</span>
+              <span>${label}</span>
+            </button>
+          `).join('')}
+          <span class="settings-nav-section-label">Workspace</span>
+          ${tabs.slice(2).map(([id, label]) => `
+            <button class="settings-nav-btn ${state.activeSettingsTab === id ? 'active' : ''}" data-settings-tab="${id}" type="button">
+              <span class="settings-nav-btn-icon">${tabIcons[id]}</span>
               <span>${label}</span>
             </button>
           `).join('')}
@@ -425,6 +571,7 @@ export const renderSettingsPage = () => {
       </div>
     </div>
   `;
+  loadSecurityOverviewInBackground(workspace);
 };
 
 
@@ -584,5 +731,3 @@ export const renderWorkspaceSettingsPage = async () => {
     </div>
   `;
 };
-
-

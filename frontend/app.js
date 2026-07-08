@@ -69,9 +69,11 @@ let autosaveTimer = null;
 let dashboardHydrationTimer = null;
 let aiSelectionHintTimer = null;
 let titleUiTimer = null;
+let emailVerificationResendTimer = null;
 let aiGenerationInFlight = false;
 let flashcardProgressSaveTimer = null;
 let documentCreateInFlight = false;
+let workspaceCreateInFlight = false;
 let activeDocumentOpenProfile = null;
 let savedEditorRange = null;
 let workspaceThreadsLoadSeq = 0;
@@ -126,6 +128,7 @@ const CHAT_TYPING_PUBLISH_INTERVAL_MS = 1200;
 const GENERAL_CHAT_CHANNEL = 'general';
 const MAX_DOCUMENT_TEXT_CHARS = 200_000;
 const MAX_DOCUMENT_TEXT_BYTES = 850_000;
+const TASK_CACHE_TTL_MS = 45_000;
 
 const uniqueDocuments = (documents = []) => {
   const seen = new Set();
@@ -146,7 +149,7 @@ const friendlyUiMessage = (message = '', { isError = false } = {}) => {
   if (lower.includes('failed to fetch') || lower.includes('networkerror')) {
     return "Couldn't connect right now. Check your connection and try again.";
   }
-  if (lower.includes('verify your email') || lower.includes('verification link expired')) {
+  if (lower.includes('verify your email') || lower.includes('otp expired')) {
     return text;
   }
   if (lower.includes('invalid or expired refresh token') || lower.includes('invalid or expired token') || lower.includes('session expired')) {
@@ -164,6 +167,8 @@ const friendlyUiMessage = (message = '', { isError = false } = {}) => {
 
   return text;
 };
+
+const isValidSignupUsername = (username = '') => /^[a-zA-Z0-9_-]{3,50}$/.test(username);
 
 const clearInlineErrors = (form) => {
   form?.querySelectorAll('.field-error-text').forEach((node) => node.remove());
@@ -335,11 +340,26 @@ const els = {
 
 
 const copyText = async (text, successMessage = 'Copied') => {
+  const value = String(text || '');
+  if (!value) {
+    showToast('Nothing to copy', true);
+    return;
+  }
   try {
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(value);
     showToast(successMessage);
   } catch {
-    showToast(text);
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    textarea.remove();
+    showToast(copied ? successMessage : value, !copied);
   }
 };
 
@@ -618,14 +638,14 @@ const clearSession = () => {
   state.messages = [];
   state.documentMessages = [];
   state.workspaceThreads = [];
-  state.documentTasks = [];
-  state.dashboardTasks = [];
+  resetTaskStore();
   state.studyMaterials = [];
   state.demoStudyMaterials = [];
   state.activityItems = [];
   state.typingUsers = [];
   state.lastAiAction = '';
   state.lastAiOutput = '';
+  state.aiStructuredOutput = null;
   state.aiStudySession = null;
   state.pendingDoubtLinkedText = '';
   state.presence = [];
@@ -683,12 +703,105 @@ const LECTURE_PROGRESS_MILESTONES = [
   { key: 'summaryGenerated',  label: 'Lecture summary generated',     weight: 10 },
   { key: 'flashcardsGenerated', label: 'Flashcards generated',        weight: 15 },
   { key: 'quizGenerated',     label: 'Quiz generated',                weight: 15 },
+  { key: 'revisionGenerated', label: 'Revision questions generated',  weight: 10 },
   { key: 'doubtResolved',     label: 'Doubt created and resolved',    weight: 10 },
   { key: 'taskCreated',       label: 'Study task created',            weight: 10 },
   { key: 'allTasksCompleted', label: 'All linked tasks completed',    weight: 10 }
 ];
 
 const taskDocumentId = (task = {}) => String(task.documentId || task.document || task.docId || task.pageId || state.selectedDocumentId || '');
+
+const taskId = (task = {}) => String(task?._id || task?.id || '');
+
+const taskDocumentTitle = (task = {}) => {
+  if (task.documentTitle) return task.documentTitle;
+  const docId = taskDocumentId(task);
+  return state.documents.find((doc) => documentKey(doc) === docId)?.title || 'Note';
+};
+
+const normalizeTask = (task = {}) => {
+  const id = taskId(task);
+  if (!id) return null;
+  const documentId = taskDocumentId(task);
+  return {
+    ...task,
+    _id: id,
+    documentId,
+    documentTitle: taskDocumentTitle({ ...task, documentId }),
+    status: task.status || 'todo',
+    priority: task.priority || 'medium'
+  };
+};
+
+const workspaceTaskList = () => state.taskStore.ids
+  .map((id) => state.taskStore.byId[id])
+  .filter(Boolean);
+
+const syncLegacyTaskViews = () => {
+  const tasks = workspaceTaskList();
+  state.dashboardTasks = tasks;
+  state.documentTasks = state.selectedDocumentId
+    ? tasks.filter((task) => taskDocumentId(task) === String(state.selectedDocumentId))
+    : [];
+  return tasks;
+};
+
+const setWorkspaceTasks = (tasks = [], { workspaceId = state.selectedWorkspaceId } = {}) => {
+  const byId = {};
+  const ids = [];
+  tasks.forEach((task) => {
+    const normalized = normalizeTask(task);
+    if (!normalized || byId[normalized._id]) return;
+    byId[normalized._id] = normalized;
+    ids.push(normalized._id);
+  });
+  state.taskStore.byId = byId;
+  state.taskStore.ids = ids;
+  state.taskStore.loadedWorkspaceId = workspaceId || '';
+  state.taskStore.loadedAt = Date.now();
+  state.taskStore.error = '';
+  return syncLegacyTaskViews();
+};
+
+const resetTaskStore = () => {
+  state.taskStore.byId = {};
+  state.taskStore.ids = [];
+  state.taskStore.loadedWorkspaceId = '';
+  state.taskStore.loading = false;
+  state.taskStore.loadedAt = 0;
+  state.taskStore.error = '';
+  state.documentTasks = [];
+  state.dashboardTasks = [];
+};
+
+const upsertTaskInStore = (task = {}) => {
+  const normalized = normalizeTask(task);
+  if (!normalized) return null;
+  state.taskStore.byId[normalized._id] = {
+    ...(state.taskStore.byId[normalized._id] || {}),
+    ...normalized
+  };
+  if (!state.taskStore.ids.includes(normalized._id)) {
+    state.taskStore.ids.unshift(normalized._id);
+  }
+  state.taskStore.loadedWorkspaceId = state.selectedWorkspaceId || state.taskStore.loadedWorkspaceId;
+  state.taskStore.loadedAt = Date.now();
+  syncLegacyTaskViews();
+  return state.taskStore.byId[normalized._id];
+};
+
+const removeTaskFromStore = (taskIdValue) => {
+  const id = String(taskIdValue || '');
+  if (!id) return;
+  delete state.taskStore.byId[id];
+  state.taskStore.ids = state.taskStore.ids.filter((item) => item !== id);
+  state.taskStore.loadedWorkspaceId = state.selectedWorkspaceId || state.taskStore.loadedWorkspaceId;
+  state.taskStore.loadedAt = Date.now();
+  syncLegacyTaskViews();
+};
+
+const selectedDocumentTasks = () => workspaceTaskList()
+  .filter((task) => taskDocumentId(task) === String(state.selectedDocumentId || ''));
 
 // FIX: removed the state.selectedDocumentId fallback from threadDocumentId.
 // Using it caused threads with no documentId to be attributed to whatever
@@ -698,6 +811,8 @@ const threadDocumentId = (thread = {}) => String(thread.documentId || thread.doc
 const materialDocumentId = (material = {}) => String(material.documentId || material.document || material.docId || '');
 
 const allKnownTasks = () => {
+  const storeTasks = workspaceTaskList();
+  if (storeTasks.length || state.taskStore.loadedWorkspaceId === state.selectedWorkspaceId) return storeTasks;
   const seen = new Set();
   return [...state.dashboardTasks, ...state.documentTasks].filter((task) => {
     const key = String(task._id || task.id || `${taskDocumentId(task)}:${task.title}`);
@@ -759,6 +874,7 @@ const lectureMilestoneFlags = (doc = selectedDocument()) => {
     summaryGenerated:   Boolean(stored.summaryGenerated)  || materials.some((m) => studyMaterialMatchesAction(m, ['summary', 'summarize'])),
     flashcardsGenerated:Boolean(stored.flashcardsGenerated)||materials.some((m) => studyMaterialMatchesAction(m, ['flashcards'])),
     quizGenerated:      Boolean(stored.quizGenerated)     || materials.some((m) => studyMaterialMatchesAction(m, ['quiz'])),
+    revisionGenerated:  Boolean(stored.revisionGenerated) || materials.some((m) => studyMaterialMatchesAction(m, ['important_questions', 'important-questions'])),
     doubtResolved:      Boolean(stored.doubtResolved)     || threads.some((thread) => thread.status === 'resolved'),
     taskCreated:        Boolean(stored.taskCreated)       || tasks.length > 0,
     allTasksCompleted:  Boolean(stored.allTasksCompleted) || (tasks.length > 0 && tasks.every((task) => task.status === 'done'))
@@ -794,10 +910,10 @@ const markLectureMilestone = (docId, milestoneKey, { message = '', show = true }
   saveMilestonesForDoc(doc._id, newFlags);
   const progress = setLectureProgressSnapshot(doc._id);
   if (show && progress && progress.score > before) {
-    const mastered = progress.score >= 90 && before < 90;
-    showToast(mastered
-      ? `Congratulations! ${doc.category || doc.title || 'This lecture'} is now mastered (${progress.score}%).`
-      : `${message || 'Lecture progress updated'} — Lecture progress increased to ${progress.score}%.`);
+    const readyForRevision = progress.score >= 90 && before < 90;
+    showToast(readyForRevision
+      ? `${doc.category || doc.title || 'This lecture'} is ready for final revision (${progress.score}%).`
+      : `${message || 'Lecture progress updated'} — Revision progress is now ${progress.score}%.`);
   }
   return progress;
 };
@@ -808,10 +924,10 @@ const refreshLectureProgress = (docId = state.selectedDocumentId, { message = ''
   const before = Number(doc.progress || 0);
   const progress = setLectureProgressSnapshot(doc._id);
   if (show && progress && progress.score > before) {
-    const mastered = progress.score >= 90 && before < 90;
-    showToast(mastered
-      ? `Congratulations! ${doc.category || doc.title || 'This lecture'} is now mastered (${progress.score}%).`
-      : `${message || 'Lecture progress updated'} — Lecture progress increased to ${progress.score}%.`);
+    const readyForRevision = progress.score >= 90 && before < 90;
+    showToast(readyForRevision
+      ? `${doc.category || doc.title || 'This lecture'} is ready for final revision (${progress.score}%).`
+      : `${message || 'Lecture progress updated'} — Revision progress is now ${progress.score}%.`);
   }
   return progress;
 };
@@ -995,19 +1111,19 @@ const hydrateDemoWorkspace = ({ selectedDocumentId = state.selectedDocumentId } 
   }));
   state.channels = demo.channels.slice(0, 5);
   setDocuments(demo.documents.slice(0, 8));
-  state.messages = demo.messages.slice(0, 5);
+  state.messages = demo.messages.slice();
+  state.chatMessages = demo.messages.slice();
   state.documentMessages = demo.documentMessages.slice(0, 5);
   state.workspaceThreads = state.documentMessages
     .slice(0, 5)
     .map((thread) => ({ ...thread, documentTitle: 'Lecture 5: Deadlocks', documentId: 'demo-doc-os-deadlocks' }));
-  state.documentTasks = demo.documentTasks.slice(0, 5);
-  state.dashboardTasks = state.documentTasks;
   state.presence = demo.presence.slice(0, 3);
   state.activityItems = demo.activityItems.slice(0, 5);
   state.typingUsers = [{ userId: 'demo-user-priya', email: 'Priya Sharma' }];
   state.selectedWorkspaceId = DEMO_WORKSPACE_ID;
-  state.selectedChannelId = demo.channels[0]?.slug || '';
+  state.selectedChannelId = GENERAL_CHAT_CHANNEL;
   state.selectedDocumentId = documentId;
+  setWorkspaceTasks(demo.documentTasks.slice(0, 5), { workspaceId: DEMO_WORKSPACE_ID });
   state.errors = {};
   Object.keys(state.loading).forEach((key) => {
     state.loading[key] = false;
@@ -1081,8 +1197,7 @@ const exitDemoMode = () => {
   state.messages = [];
   state.documentMessages = [];
   state.workspaceThreads = [];
-  state.documentTasks = [];
-  state.dashboardTasks = [];
+  resetTaskStore();
   state.studyMaterials = [];
   state.demoStudyMaterials = [];
   state.activityItems = [];
@@ -1181,6 +1296,15 @@ const activateContextTab = (tab) => {
   });
   renderActiveContextPanel();
   ensureActiveContextData();
+};
+
+const focusNexusMentor = () => {
+  activateContextTab('ai');
+  window.setTimeout(() => {
+    const input = document.getElementById('aiPromptInput');
+    input?.focus();
+    input?.select?.();
+  }, 0);
 };
 
 function ensureActiveContextData({ force = false } = {}) {
@@ -1906,8 +2030,51 @@ const aiActionLabel = (action = '') => ({
   quiz: 'Quiz',
   flashcards: 'Flashcards',
   'simple-explanation': 'Simple Explanation',
-  'important-questions': 'Important Questions'
+  'important-questions': 'Revision Questions'
 }[action] || 'Study Material');
+
+const aiLoadingCopy = (action = 'summarize') => ({
+  summarize: {
+    title: 'Building your personalized summary...',
+    steps: ['Reading this lecture', 'Finding the main ideas', 'Connecting related concepts']
+  },
+  quiz: {
+    title: 'Preparing revision questions...',
+    steps: ['Reading this lecture', 'Choosing exam-worthy concepts', 'Checking for clear answers']
+  },
+  flashcards: {
+    title: 'Creating flashcards from key concepts...',
+    steps: ['Finding definitions and contrasts', 'Keeping cards focused', 'Preparing quick revision prompts']
+  },
+  'simple-explanation': {
+    title: 'Explaining this from the ground up...',
+    steps: ['Understanding today\'s topic', 'Finding prerequisites', 'Removing unnecessary jargon']
+  },
+  'important-questions': {
+    title: 'Preparing revision questions...',
+    steps: ['Finding likely exam areas', 'Connecting related concepts', 'Turning weak spots into questions']
+  }
+}[action] || {
+  title: 'Preparing your study material...',
+  steps: ['Reading this lecture', 'Checking learning context', 'Building a focused response']
+});
+
+const aiEvidenceItems = () => [
+  selectedAiSource() === 'selection' ? 'Selected text' : 'Current lecture',
+  state.studyMaterials?.length ? 'Saved study material' : '',
+  state.activityItems?.length ? 'Recent learning activity' : ''
+].filter(Boolean).slice(0, 3);
+
+const renderAiEvidence = () => {
+  const items = aiEvidenceItems();
+  if (!items.length) return '';
+  return `
+    <div class="study-context-evidence" aria-label="Context used by Nexus Mentor">
+      <span>Based on</span>
+      ${items.map((item) => `<strong>${escapeHtml(item)}</strong>`).join('')}
+    </div>
+  `;
+};
 
 const aiActionToMaterialType = (action = '') => ({
   summarize: 'summary',
@@ -1935,17 +2102,19 @@ const materialTypeLabel = (type = '') => ({
 
 const currentAiMaterialTitle = () => `${selectedDocumentTitle()} ${aiActionLabel(state.lastAiAction || 'summarize')}`;
 
-const setAiOutput = (action, output) => {
+const setAiOutput = (action, output, structured = null) => {
   state.lastAiAction = action;
   state.lastAiOutput = output;
-  state.aiStudySession = buildAiStudySession(action, output);
+  state.aiStructuredOutput = structured;
+  state.aiStudySession = buildAiStudySession(action, output, structured);
   state.currentAiResultSavedId = '';
   const milestoneKey = {
     summarize: 'summaryGenerated',
     'simple-explanation': 'aiExplanation',
     explain: 'aiExplanation',
     flashcards: 'flashcardsGenerated',
-    quiz: 'quizGenerated'
+    quiz: 'quizGenerated',
+    'important-questions': 'revisionGenerated'
   }[action];
   if (milestoneKey && state.selectedDocumentId) {
     markLectureMilestone(state.selectedDocumentId, milestoneKey, {
@@ -1956,10 +2125,19 @@ const setAiOutput = (action, output) => {
 };
 
 const updateLibrarySaveButton = () => {
+  const hasOutput = Boolean(state.lastAiOutput.trim());
+  if (els.copyAiOutputBtn) {
+    els.copyAiOutputBtn.disabled = !hasOutput;
+    els.copyAiOutputBtn.title = hasOutput ? 'Copy mentor output' : 'Generate mentor output first';
+  }
+  if (els.regenerateAiBtn) {
+    els.regenerateAiBtn.disabled = !hasOutput || aiGenerationInFlight;
+    els.regenerateAiBtn.title = hasOutput ? 'Regenerate this mentor output' : 'Generate mentor output first';
+  }
   if (!els.saveAiToLibraryBtn) return;
   const saved = Boolean(state.currentAiResultSavedId);
   const sessionType = state.aiStudySession?.type;
-  els.saveAiToLibraryBtn.disabled = state.studyMaterialSaving || !state.lastAiOutput.trim() || (saved && !['quiz', 'flashcards'].includes(sessionType));
+  els.saveAiToLibraryBtn.disabled = state.studyMaterialSaving || !hasOutput || (saved && !['quiz', 'flashcards'].includes(sessionType));
   if (state.studyMaterialSaving) {
     els.saveAiToLibraryBtn.textContent = 'Saving...';
   } else if (saved) {
@@ -1976,17 +2154,18 @@ const setAiGenerating = (generating) => {
     button.disabled = generating;
   });
   if (els.aiActionSelect) els.aiActionSelect.disabled = generating;
+  updateLibrarySaveButton();
 };
 
 const renderAiEmptyState = (doc = selectedDocument()) => {
   state.aiStudySession = null;
   els.aiOutput.innerHTML = emptyState({
-    title: doc ? 'Ready to study smarter?' : 'Open a note to use AI',
+    title: doc ? 'Ask Nexus Mentor' : 'Open a note to use Nexus Mentor',
     body: doc
-      ? 'Choose an AI action above, then run it to turn this note into study material.'
+      ? 'Ask a question about this lecture, or choose a study action when you want a summary, quiz, or flashcards.'
       : 'Select or create a document first. AI works best after you add lecture notes or a study outline.',
-    action: doc ? 'Run selected AI action' : 'Create a note',
-    actionId: doc ? 'emptyAiRunBtn' : 'emptyAiCreateNoteBtn',
+    action: doc ? 'Ask a question' : 'Create a note',
+    actionId: doc ? 'emptyAiAskBtn' : 'emptyAiCreateNoteBtn',
     secondaryAction: '',
     secondaryActionId: '',
     icon: '✦',
@@ -2083,11 +2262,13 @@ const getFlashcardProgressFromSession = (session = state.aiStudySession) => {
 const buildStudyMaterialPayload = () => {
   if (!state.lastAiOutput.trim() || !state.lastAiAction) return null;
   const action = state.lastAiAction;
-  const session = state.aiStudySession || buildAiStudySession(action, state.lastAiOutput);
-  let content = { action, output: state.lastAiOutput };
+  const session = state.aiStudySession || buildAiStudySession(action, state.lastAiOutput, state.aiStructuredOutput);
+  let content = { action, output: state.lastAiOutput, structured: state.aiStructuredOutput };
   if (session?.type === 'quiz') {
     content = {
       action,
+      output: state.lastAiOutput,
+      structured: state.aiStructuredOutput,
       session: {
         type: 'quiz',
         questions: session.questions || []
@@ -2096,6 +2277,8 @@ const buildStudyMaterialPayload = () => {
   } else if (session?.type === 'flashcards') {
     content = {
       action,
+      output: state.lastAiOutput,
+      structured: state.aiStructuredOutput,
       session: {
         type: 'flashcards',
         cards: session.cards || []
@@ -2105,6 +2288,7 @@ const buildStudyMaterialPayload = () => {
     content = {
       action,
       output: state.lastAiOutput,
+      structured: state.aiStructuredOutput,
       sections: session.sections || []
     };
   }
@@ -2358,7 +2542,7 @@ const renderWorkspace = () => {
       </button>
   `).join('') || emptyState({
       title: 'Create your first study workspace',
-      body: 'Bring notes, tasks, doubts, and AI study help into one place.',
+      body: 'Bring notes, tasks, doubts, and Nexus Mentor into one place.',
       action: 'Create Workspace',
       actionId: 'emptyCreateWorkspaceBtn',
       secondaryAction: 'Join Workspace',
@@ -2476,6 +2660,7 @@ const renderEditor = () => {
     setEditorText('');
     state.lastAiAction = '';
     state.lastAiOutput = '';
+    state.aiStructuredOutput = null;
     state.aiStudySession = null;
     renderAiEmptyState(null);
   } else {
@@ -2599,6 +2784,7 @@ const getFilteredTasks = async (...args) => (await lazyRouteModule('tasks')).get
 const renderTaskCardHtml = async (...args) => (await lazyRouteModule('tasks')).renderTaskCardHtml(...args);
 const showAddTaskModal = async (...args) => (await lazyRouteModule('tasks')).showAddTaskModal(...args);
 const showEditTaskModal = async (...args) => (await lazyRouteModule('tasks')).showEditTaskModal(...args);
+const renderTasksBoard = async (...args) => (await lazyRouteModule('tasks')).renderTasksBoard(...args);
 const renderTasksPage = async (...args) => (await lazyRouteModule('tasks')).renderTasksPage(...args);
 const renderMembersPage = async (...args) => (await lazyRouteModule('members')).renderMembersPage(...args);
 const renderSettingsContent = async (...args) => (await lazyRouteModule('settings')).renderSettingsContent(...args);
@@ -2631,7 +2817,8 @@ const formatChatTime = (dateValue) => {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 };
 
-const activeChatChannel = () => state.channels.find((channel) => channel.slug === GENERAL_CHAT_CHANNEL)
+const activeChatChannel = () => state.channels.find((channel) => channel.slug === state.selectedChannelId)
+  || state.channels.find((channel) => channel.slug === GENERAL_CHAT_CHANNEL)
   || state.channels[0]
   || { slug: GENERAL_CHAT_CHANNEL, name: 'General' };
 
@@ -2800,7 +2987,7 @@ const collaborationPeople = () => {
       id: member.user?._id || `demo-member-${index}`,
       name: getMemberName(member),
       email: member.user?.email || member.email || '',
-      status: index === 0 ? 'Editing ML Study Guide' : index === 1 ? 'Viewing CAP Theorem' : 'In Tasks',
+      status: index === 0 ? 'Editing Deadlocks notes' : index === 1 ? 'Reviewing Process Scheduling' : 'In Tasks',
       online: true
     }));
   }
@@ -3230,9 +3417,9 @@ const isMemberOnline = (member) => {
 const getMemberActivityText = (member) => {
   const userId = memberUserId(member);
   if (state.demoMode) {
-    if (userId === 'demo-user-priya') return 'Editing ML Study Guide';
+    if (userId === 'demo-user-priya') return 'Editing Deadlocks notes';
     if (userId === 'demo-user-sam') return 'In Tasks';
-    if (userId === 'demo-user-rohan') return 'Viewing CAP Theorem';
+    if (userId === 'demo-user-rohan') return 'Reviewing Process Scheduling';
   }
   const pres = state.presence.find(u => String(u.userId) === userId);
   if (pres) {
@@ -3288,6 +3475,166 @@ const updateSaveButtonState = () => {
   if (saveBtn) {
     saveBtn.disabled = settingsSaveInProgress || !isSettingsDirty();
   }
+};
+
+const refreshAccountSecurity = async () => {
+  if (!state.token || state.demoMode) return null;
+  state.accountSecurity.loading = true;
+  state.accountSecurity.error = '';
+  try {
+    state.accountSecurity.data = await request('/api/account/security');
+    state.accountSecurity.loaded = true;
+    return state.accountSecurity.data;
+  } catch (err) {
+    state.accountSecurity.error = err.message || 'Security details could not be loaded.';
+    throw err;
+  } finally {
+    state.accountSecurity.loading = false;
+  }
+};
+
+const closeAccountSecurityModal = () => {
+  document.getElementById('accountSecurityModal')?.remove();
+};
+
+const loadGoogleIdentityToken = async () => {
+  const clientId = state.accountSecurity?.data?.google?.clientId || '';
+  if (!clientId) {
+    throw new Error('Google verification is not configured for account deletion.');
+  }
+  if (!globalThis.google?.accounts?.id) {
+    await new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-google-identity]');
+      if (existing) {
+        existing.addEventListener('load', resolve, { once: true });
+        existing.addEventListener('error', () => reject(new Error('Google verification could not be loaded.')), { once: true });
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.dataset.googleIdentity = 'true';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Google verification could not be loaded.'));
+      document.head.appendChild(script);
+    });
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('Google verification timed out. Please try again.'));
+    }, 60000);
+    globalThis.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (response) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        if (response?.credential) resolve(response.credential);
+        else reject(new Error('Google verification did not return an identity token.'));
+      }
+    });
+    globalThis.google.accounts.id.prompt((notification) => {
+      if (settled) return;
+      if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
+        settled = true;
+        window.clearTimeout(timeout);
+        reject(new Error('Continue with Google to confirm your identity.'));
+      }
+    });
+  });
+};
+
+const showAccountPasswordModal = (mode = 'set') => {
+  const isChange = mode === 'change';
+  closeAccountSecurityModal();
+  els.routePage.insertAdjacentHTML('beforeend', `
+    <div class="account-security-modal" id="accountSecurityModal" role="dialog" aria-modal="true" aria-label="${isChange ? 'Change password' : 'Set password'}">
+      <form class="account-security-dialog" id="accountPasswordForm" data-password-mode="${isChange ? 'change' : 'set'}">
+        <div class="account-security-dialog-head">
+          <div>
+            <strong>${isChange ? 'Change Password' : 'Set Password'}</strong>
+            <small>${isChange ? 'Update your local password and revoke other sessions.' : 'Add email/password sign-in while keeping Google connected.'}</small>
+          </div>
+          <button class="ghost" data-account-security-close type="button">Close</button>
+        </div>
+        ${isChange ? `
+          <label>Current Password
+            <input id="accountCurrentPasswordInput" type="password" autocomplete="current-password" required />
+          </label>
+        ` : ''}
+        <label>New Password
+          <input id="accountNewPasswordInput" type="password" autocomplete="new-password" required minlength="8" />
+        </label>
+        <label>Confirm Password
+          <input id="accountConfirmPasswordInput" type="password" autocomplete="new-password" required minlength="8" />
+        </label>
+        <p class="security-inline-state">Use at least 8 characters with uppercase, lowercase, and a number.</p>
+        <div class="account-security-dialog-actions">
+          <button class="ghost" data-account-security-close type="button">Cancel</button>
+          <button class="primary" type="submit">${isChange ? 'Change Password' : 'Set Password'}</button>
+        </div>
+      </form>
+    </div>
+  `);
+};
+
+const showAccountDeleteModal = (step = 'primary') => {
+  const security = state.accountSecurity?.data || {};
+  const hasPassword = Boolean(security.password?.hasPassword ?? state.user?.hasPassword);
+  closeAccountSecurityModal();
+  const primaryMarkup = hasPassword ? `
+    <label>Current Password
+      <input id="accountDeletePasswordInput" type="password" autocomplete="current-password" required />
+    </label>
+  ` : `
+    <p class="security-inline-state">Google-only accounts must verify their Google identity before receiving a deletion code.</p>
+  `;
+  const body = step === 'primary' ? `
+    <form class="account-security-dialog" id="accountDeleteRequestForm">
+      <div class="account-security-dialog-head">
+        <div><strong>Delete Account</strong><small>Step 1 of 4: verify your identity.</small></div>
+        <button class="ghost" data-account-security-close type="button">Close</button>
+      </div>
+      ${primaryMarkup}
+      <div class="account-security-dialog-actions">
+        <button class="ghost" data-account-security-close type="button">Cancel</button>
+        <button class="danger-button" type="submit">${hasPassword ? 'Send OTP' : 'Continue with Google'}</button>
+      </div>
+    </form>
+  ` : `
+    <form class="account-security-dialog" id="accountDeleteConfirmForm">
+      <div class="account-security-dialog-head">
+        <div><strong>Final Account Deletion</strong><small>Steps 2-4: OTP, typed confirmation, final consent.</small></div>
+        <button class="ghost" data-account-security-close type="button">Close</button>
+      </div>
+      <label>Email OTP
+        <input id="accountDeleteOtpInput" inputmode="numeric" pattern="\\d{6}" maxlength="6" required />
+      </label>
+      <label>Type DELETE
+        <input id="accountDeleteConfirmationInput" autocomplete="off" required />
+      </label>
+      <label class="settings-toggle-row account-final-confirm">
+        <div>
+          <span>This cannot be undone</span>
+          <small>All sessions and account tokens will be invalidated.</small>
+        </div>
+        <input id="accountDeleteFinalInput" type="checkbox" required />
+      </label>
+      <div class="account-security-dialog-actions">
+        <button class="ghost" data-account-security-close type="button">Cancel</button>
+        <button class="danger-button" type="submit">Delete Account</button>
+      </div>
+    </form>
+  `;
+  els.routePage.insertAdjacentHTML('beforeend', `
+    <div class="account-security-modal" id="accountSecurityModal" role="dialog" aria-modal="true" aria-label="Delete account">
+      ${body}
+    </div>
+  `);
 };
 
 const renderInvitePage = async () => {
@@ -3621,7 +3968,36 @@ const sanitizeFlashcardText = (value = '') => String(value || '')
   .replace(/(?:\s*[-*_=]{2,}\s*)+$/g, '')
   .trim();
 
-const buildAiStudySession = (action = '', output = '') => {
+const buildAiStudySession = (action = '', output = '', structured = null) => {
+  if (structured?.type === 'quiz' && Array.isArray(structured.questions) && structured.questions.length) {
+    return {
+      type: 'quiz',
+      questions: structured.questions,
+      currentIndex: 0,
+      answers: {},
+      completed: false
+    };
+  }
+
+  if (structured?.type === 'flashcards' && Array.isArray(structured.cards) && structured.cards.length) {
+    return {
+      type: 'flashcards',
+      cards: structured.cards,
+      currentIndex: 0,
+      flipped: false,
+      progress: {}
+    };
+  }
+
+  if (structured?.type === 'structured' && Array.isArray(structured.sections)) {
+    return {
+      type: 'structured',
+      action,
+      sections: structured.sections,
+      output
+    };
+  }
+
   if (action === 'quiz') {
     const questions = parseQuizOutput(output);
     if (questions.length) {
@@ -3666,13 +4042,13 @@ const renderAiStudyOutput = () => {
   }
 
   if (session.type === 'quiz') {
-    els.aiOutput.innerHTML = renderQuizSession(session);
+    els.aiOutput.innerHTML = `${renderAiEvidence()}${renderQuizSession(session)}`;
     updateLibrarySaveButton();
     return;
   }
 
   if (session.type === 'flashcards') {
-    els.aiOutput.innerHTML = renderFlashcardSession(session);
+    els.aiOutput.innerHTML = `${renderAiEvidence()}${renderFlashcardSession(session)}`;
     updateLibrarySaveButton();
     return;
   }
@@ -3689,9 +4065,10 @@ const renderStructuredAiOutput = (session) => {
         <span>✦</span>
         <div>
           <strong>${escapeHtml(aiActionLabel(session.action))}</strong>
-          <small>Generated from ${escapeHtml(selectedAiSource() === 'selection' ? 'selected text' : 'the current document')}</small>
+          <small>${escapeHtml(selectedAiSource() === 'selection' ? 'Focused on selected text' : 'Built from the current lecture')}</small>
         </div>
       </header>
+      ${renderAiEvidence()}
       <div class="study-section-grid">
         ${sections.map((section) => `
           <article class="study-section-card">
@@ -4013,6 +4390,7 @@ const loadWorkspaces = async () => {
     state.channels = [];
     state.documents = [];
     state.chatMessages = [];
+    resetTaskStore();
   }
 
   render();
@@ -4020,8 +4398,12 @@ const loadWorkspaces = async () => {
 
 const loadChannels = async () => {
   if (state.demoMode) {
-    state.selectedChannelId = GENERAL_CHAT_CHANNEL;
-    state.chatMessages = state.messages.filter((message) => message.channelId === GENERAL_CHAT_CHANNEL);
+    if (!state.channels.some((channel) => channel.slug === state.selectedChannelId)) {
+      state.selectedChannelId = state.channels.some((channel) => channel.slug === GENERAL_CHAT_CHANNEL)
+        ? GENERAL_CHAT_CHANNEL
+        : state.channels[0]?.slug || '';
+    }
+    state.chatMessages = state.messages.slice();
     state.chatOnlineUsers = collaborationPeople().map((person) => ({
       userId: person.id,
       username: person.name,
@@ -4090,7 +4472,8 @@ const loadMessages = async () => {
 
 const ensureChatReady = async () => {
   if (state.demoMode) {
-    state.chatMessages = state.messages.filter((message) => message.channelId === GENERAL_CHAT_CHANNEL);
+    if (!state.selectedChannelId) state.selectedChannelId = GENERAL_CHAT_CHANNEL;
+    state.chatMessages = state.messages.slice();
     state.chatOnlineUsers = collaborationPeople().map((person) => ({
       userId: person.id,
       username: person.name,
@@ -4110,7 +4493,7 @@ const ensureChatReady = async () => {
 
 const loadChatMessages = async () => {
   if (state.demoMode) {
-    state.chatMessages = state.messages.filter((message) => message.channelId === GENERAL_CHAT_CHANNEL);
+    state.chatMessages = state.messages.slice();
     return;
   }
   const channel = activeChatChannel();
@@ -4261,10 +4644,11 @@ const getDocumentContextPath = () => {
 
 const loadDocumentTasks = async () => {
   if (state.demoMode) {
+    state.documentTasks = selectedDocumentTasks();
     renderTaskList();
     return;
   }
-  state.documentTasks = [];
+  state.documentTasks = selectedDocumentTasks();
   if (!state.selectedWorkspaceId || !state.selectedDocumentId) return;
   const workspaceId = state.selectedWorkspaceId;
   const documentId = state.selectedDocumentId;
@@ -4272,7 +4656,8 @@ const loadDocumentTasks = async () => {
   try {
     const tasks = await request(`/api/workspaces/${workspaceId}/documents/${documentId}/tasks`);
     if (workspaceId !== state.selectedWorkspaceId || documentId !== state.selectedDocumentId) return;
-    state.documentTasks = tasks;
+    tasks.forEach((task) => upsertTaskInStore(task));
+    state.documentTasks = selectedDocumentTasks();
     setError('tasks');
   } catch (err) {
     if (workspaceId !== state.selectedWorkspaceId || documentId !== state.selectedDocumentId) return;
@@ -4366,7 +4751,7 @@ const upsertStudyMaterial = (material) => {
 const saveCurrentAiResultToLibrary = async () => {
   if (!state.selectedDocumentId) return showToast('Open a document before saving study material', true);
   const payload = buildStudyMaterialPayload();
-  if (!payload) return showToast('Generate study material first', true);
+  if (!payload) return showToast('Generate mentor output first', true);
   if (state.studyMaterialSaving) return null;
 
   state.studyMaterialSaving = true;
@@ -4493,7 +4878,8 @@ const openStudyMaterial = (materialId) => {
   state.currentAiResultSavedId = material._id;
   state.lastAiAction = action;
   state.lastAiOutput = material.content?.output || material.title || '';
-  state.aiStudySession = material.content?.session || buildAiStudySession(action, state.lastAiOutput);
+  state.aiStructuredOutput = material.content?.structured || null;
+  state.aiStudySession = material.content?.session || buildAiStudySession(action, state.lastAiOutput, state.aiStructuredOutput);
   if (state.aiStudySession?.type === 'quiz') {
     state.aiStudySession.currentIndex = 0;
     state.aiStudySession.answers = {};
@@ -4548,21 +4934,47 @@ const backgroundDocumentBatch = (limit = 8) => {
 };
 
 const loadDashboardTasks = async ({ limit = 8, clear = false } = {}) => {
-  if (clear) state.dashboardTasks = [];
+  if (clear) {
+    resetTaskStore();
+    if (currentRoute() === 'tasks') renderTasksBoard();
+  }
   if (state.demoMode) {
-    state.dashboardTasks = state.documentTasks;
+    syncLegacyTaskViews();
     return;
   }
   if (!state.selectedWorkspaceId || state.documents.length === 0) return;
 
-  const docs = backgroundDocumentBatch(limit);
-  const taskResults = await Promise.allSettled(docs.map((doc) => (
-    request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${doc._id}/tasks`)
-  )));
+  const workspaceId = state.selectedWorkspaceId;
+  const cacheIsWarm = state.taskStore.loadedWorkspaceId === workspaceId
+    && state.taskStore.loadedAt
+    && (Date.now() - state.taskStore.loadedAt < TASK_CACHE_TTL_MS);
+  if (!clear && cacheIsWarm) {
+    syncLegacyTaskViews();
+    return;
+  }
 
-  state.dashboardTasks = taskResults
-    .filter((result) => result.status === 'fulfilled')
-    .flatMap((result) => result.value || []);
+  state.taskStore.loading = true;
+  state.taskStore.error = '';
+  try {
+    const tasks = await request(`/api/workspaces/${workspaceId}/tasks`);
+    if (workspaceId !== state.selectedWorkspaceId) return;
+    setWorkspaceTasks(tasks, { workspaceId });
+  } catch (err) {
+    const docs = backgroundDocumentBatch(limit);
+    const taskResults = await Promise.allSettled(docs.map((doc) => (
+      request(`/api/workspaces/${workspaceId}/documents/${doc._id}/tasks`)
+    )));
+    if (workspaceId !== state.selectedWorkspaceId) return;
+    const tasks = taskResults
+      .filter((result) => result.status === 'fulfilled')
+      .flatMap((result) => result.value || []);
+    setWorkspaceTasks(tasks, { workspaceId });
+    state.taskStore.error = err.message;
+  } finally {
+    if (workspaceId === state.selectedWorkspaceId) {
+      state.taskStore.loading = false;
+    }
+  }
 };
 
 const fetchWorkspaceThreadsForDocuments = async (docs = [], { limitPerDocument = 80 } = {}) => {
@@ -4676,7 +5088,7 @@ const scheduleDashboardDataLoad = () => {
       const currentRouteNow = currentRoute();
       if (currentRouteNow === 'home') renderHomePage();
       if (currentRouteNow === 'threads') renderThreadsPage();
-      if (currentRouteNow === 'tasks') renderTasksPage();
+      if (currentRouteNow === 'tasks') renderTasksBoard();
     } catch (err) {
       console.warn('Background dashboard refresh failed:', err);
     }
@@ -4710,7 +5122,7 @@ const loadDocuments = async () => {
 
   if (state.selectedDocumentId) {
     localStorage.setItem('documentId', state.selectedDocumentId);
-    state.dashboardTasks = [];
+    resetTaskStore();
     state.workspaceThreads = [];
     workspaceThreadsLoadedKey = '';
     workspaceThreadsLoadSeq += 1;
@@ -4719,7 +5131,7 @@ const loadDocuments = async () => {
   } else {
     localStorage.removeItem('documentId');
     teardownYDoc();
-    state.documentTasks = [];
+    resetTaskStore();
     state.documentMessages = [];
     state.studyMaterials = [];
     els.documentTitleInput.value = '';
@@ -4763,7 +5175,7 @@ const loadDocument = async (documentId) => {
   state.typingUsers = [];
   state.selectedThreadId = '';
   state.contextLoadedFor = { tasks: '', threads: '', library: '' };
-  state.documentTasks = [];
+  state.documentTasks = selectedDocumentTasks();
   state.documentMessages = [];
   state.studyMaterials = [];
   localStorage.setItem('documentId', doc._id);
@@ -4989,7 +5401,7 @@ const createDocumentAndOpen = async (title = 'Untitled Lecture') => {
   }
 };
 
-const runStudyAiAction = async (action) => {
+const runStudyAiAction = async (action, mentorPrompt = '') => {
   if (aiGenerationInFlight) {
     showToast('AI is already generating. Give it a moment.');
     return null;
@@ -5002,12 +5414,23 @@ const runStudyAiAction = async (action) => {
   if (!text) return showToast(selectedAiSource() === 'selection' ? 'Select some text first' : 'Add document text before running AI', true);
   if (text.length < 80) showToast('This note is short. Add more detail for better results.');
 
-  const label = aiActionLabel(action).toLowerCase();
   els.aiActionSelect.value = action;
   activateContextTab('ai');
   state.aiStudySession = null;
   setAiGenerating(true);
-  els.aiOutput.innerHTML = `<div class="ai-loading-card"><span>✦</span><strong>Creating ${escapeHtml(label)}...</strong><small>Nexus is turning your notes into active study material.</small></div>`;
+  const loadingCopy = mentorPrompt
+    ? {
+        title: 'Thinking through your question...',
+        steps: ['Reading your question', 'Checking this lecture', 'Preparing a focused answer']
+      }
+    : aiLoadingCopy(action);
+  els.aiOutput.innerHTML = `
+    <div class="ai-loading-card">
+      <span>✦</span>
+      <strong>${escapeHtml(loadingCopy.title)}</strong>
+      <small>${escapeHtml(loadingCopy.steps.join(' • '))}</small>
+    </div>
+  `;
 
   if (state.demoMode) {
     window.setTimeout(() => {
@@ -5019,19 +5442,21 @@ const runStudyAiAction = async (action) => {
   }
 
   try {
+    await saveCurrentDocument({ silent: true });
     const result = await request('/api/ai/document-action', {
       method: 'POST',
       body: JSON.stringify({
         action,
-        text,
+        selectedText: selectedAiSource() === 'selection' ? text : '',
         workspaceId: state.selectedWorkspaceId,
         documentId: state.selectedDocumentId,
         source: selectedAiSource(),
+        instructions: mentorPrompt,
         difficulty: 'medium',
         questionCount: 10
       })
     });
-    setAiOutput(action, result.response);
+    setAiOutput(action, result.response, result.structured || null);
     addActivity({ action: `generated ${aiActionLabel(action).toLowerCase()} from`, target: selectedDocumentTitle() });
     return result.response;
   } catch (err) {
@@ -5052,17 +5477,17 @@ const runStudyAiAction = async (action) => {
 };
 
 const saveAiOutputToDocument = async () => {
-  if (!state.selectedDocumentId || !state.lastAiOutput.trim()) return showToast('Generate study material first', true);
+  if (!state.selectedDocumentId || !state.lastAiOutput.trim()) return showToast('Generate mentor output first', true);
   const stamp = new Date().toLocaleDateString();
   const block = `\n\n---\nAI ${aiActionLabel(state.lastAiAction)}\nGenerated on ${stamp}\n\n${state.lastAiOutput.trim()}\n`;
   setEditorText(`${getEditorText()}${block}`);
   applyEditorInputToYDoc();
   await saveCurrentDocument();
-  showToast('AI result saved below your notes');
+  showToast('Mentor output saved below your notes');
 };
 
 const createAiOutputDocument = async () => {
-  if (!state.lastAiOutput.trim()) return showToast('Generate study material first', true);
+  if (!state.lastAiOutput.trim()) return showToast('Generate mentor output first', true);
   if (!state.selectedWorkspaceId) return showToast('Select a workspace first', true);
   const title = `${selectedDocumentTitle()} - ${aiActionLabel(state.lastAiAction)}`;
 
@@ -5070,7 +5495,7 @@ const createAiOutputDocument = async () => {
     const doc = {
       _id: `demo-ai-doc-${Date.now()}`,
       title,
-      category: 'AI Study Material',
+      category: 'Mentor Study Material',
       plainTextContent: state.lastAiOutput,
       updatedAt: new Date().toISOString()
     };
@@ -5140,6 +5565,57 @@ const bootstrapWorkspace = async () => {
   if (state.channels.length === 0) await createDefaultChannel();
   if (state.documents.length === 0) await createDefaultDocument();
   await Promise.all([loadMessages(), loadDocuments()]);
+};
+
+const createWorkspaceAndOpen = async (name, { closePanel = false, route = 'home' } = {}) => {
+  const workspaceName = String(name || '').trim();
+  if (!workspaceName) {
+    showToast('Workspace name is required', true);
+    return null;
+  }
+  if (state.demoMode) {
+    showToast('Demo mode uses the sample workspace. Sign up to create your own.');
+    return null;
+  }
+  if (workspaceCreateInFlight) {
+    showToast('Workspace is already being created');
+    return null;
+  }
+
+  workspaceCreateInFlight = true;
+  try {
+    window.clearTimeout(autosaveTimer);
+    if (state.selectedDocumentId) await saveCurrentDocumentIfDirty().catch(() => {});
+
+    const workspace = await request('/api/workspaces', {
+      method: 'POST',
+      body: JSON.stringify({ name: workspaceName })
+    });
+
+    state.selectedWorkspaceId = workspace._id;
+    state.selectedDocumentId = '';
+    state.selectedChannelId = '';
+    state.chatMessages = [];
+    resetTaskStore();
+    state.documentMessages = [];
+    state.workspaceThreads = [];
+    localStorage.setItem('workspaceId', workspace._id);
+    localStorage.removeItem('documentId');
+    localStorage.removeItem('channelId');
+    teardownYDoc();
+
+    if (closePanel) closeToolPanel();
+    await loadWorkspaces();
+    await bootstrapWorkspace();
+    navigate(route);
+    showToast('Workspace created');
+    return workspace;
+  } catch (err) {
+    showToast(friendlyUiMessage(err.message, { isError: true }), true);
+    return null;
+  } finally {
+    workspaceCreateInFlight = false;
+  }
 };
 
 const renderToolPanel = (html, title = 'Workspace Panel', subtitle = 'Manage focused actions without cluttering the sidebar') => {
@@ -5324,12 +5800,7 @@ const renderProfileTool = () => {
           </div>
         </div>
         <div class="profile-field-stack">
-          <button class="ghost profile-secondary-btn" id="requestVerifyBtn" type="button">Create verification token</button>
-          <label class="profile-input-field" for="verifyTokenInput">
-            <span>Verification token</span>
-            <input id="verifyTokenInput" placeholder="Paste verification token" />
-          </label>
-          <button class="primary profile-primary-btn" id="verifyEmailBtn" type="button">Verify email</button>
+          <p class="muted-copy">${state.user?.emailVerified ? 'Email verified.' : 'Email verification is required before signing in.'}</p>
         </div>
       </section>
       <section class="tool-card profile-tool-card">
@@ -5357,24 +5828,11 @@ const renderProfileTool = () => {
           <span class="profile-card-icon" aria-hidden="true">↺</span>
           <div>
             <strong>Reset password</strong>
-            <p>Create and use a reset token for this account.</p>
+            <p>Password recovery is handled through a secure email reset link.</p>
           </div>
         </div>
         <div class="profile-field-stack">
-          <label class="profile-input-field" for="forgotEmailInput">
-            <span>Account email</span>
-            <input id="forgotEmailInput" placeholder="Account email" value="${escapeHtml(state.user?.email || '')}" />
-          </label>
-          <button class="ghost profile-secondary-btn" id="forgotPasswordBtn" type="button">Create reset token</button>
-          <label class="profile-input-field" for="resetTokenInput">
-            <span>Reset token</span>
-            <input id="resetTokenInput" placeholder="Paste reset token" />
-          </label>
-          <label class="profile-input-field" for="resetPasswordInput">
-            <span>New password</span>
-            <input id="resetPasswordInput" type="password" placeholder="Enter new password" />
-          </label>
-          <button class="primary profile-primary-btn" id="resetPasswordBtn" type="button">Reset password</button>
+          <p class="muted-copy">Use the Forgot password link on the sign-in screen when you cannot access this account.</p>
         </div>
       </section>
     </div>
@@ -5573,6 +6031,7 @@ const handleEmptyStateAction = async (target) => {
     'emptyToolCreateWorkspaceBtn'
   ].includes(id)) {
     renderWorkspacesTool();
+    window.setTimeout(() => document.getElementById('toolWorkspaceNameInput')?.focus(), 0);
     return true;
   }
 
@@ -5641,6 +6100,7 @@ const handleEmptyStateAction = async (target) => {
     'emptyActivityInviteBtn'
   ].includes(id)) {
     generatedInviteResult = null;
+    inviteState.latestCreatedInvite = null;
     showInviteMemberModal();
     return true;
   }
@@ -5655,6 +6115,11 @@ const handleEmptyStateAction = async (target) => {
 
   if (id === 'emptyAiCreateNoteBtn') {
     els.newDocBtn.click();
+    return true;
+  }
+
+  if (id === 'emptyAiAskBtn') {
+    focusNexusMentor();
     return true;
   }
 
@@ -5735,6 +6200,12 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  const focusMentorButton = event.target.closest('[data-focus-ai-prompt]');
+  if (focusMentorButton) {
+    focusNexusMentor();
+    return;
+  }
+
   const aiStudyButton = event.target.closest('[data-ai-study-action]');
   if (aiStudyButton) {
     await runStudyAiAction(aiStudyButton.dataset.aiStudyAction);
@@ -5779,7 +6250,7 @@ document.addEventListener('click', async (event) => {
     localStorage.setItem('settingsTab', state.activeSettingsTab);
     applyPreferences();
     syncSettingsFormState(selectedWorkspace());
-    renderSettingsPage();
+    await renderSettingsPage();
     return;
   }
 
@@ -5935,13 +6406,51 @@ document.addEventListener('keydown', async (event) => {
     document.body.classList.remove('sidebar-open');
     if (activeTaskMoreMenuId) {
       activeTaskMoreMenuId = '';
-      renderTasksPage();
+      renderTasksBoard();
     }
   }
 });
 
 const refreshToolView = async (tool) => {
   await openTool(tool);
+};
+
+const rememberCreatedInvite = (result = {}) => {
+  const invite = result.invite || result.invitation || {};
+  const token = result.token || invite.token || '';
+  const code = result.code || invite.code || '';
+  const inviteLink = result.inviteLink
+    || (token ? `${location.origin}${location.pathname}#/invite?token=${encodeURIComponent(token)}` : '')
+    || (code ? `${location.origin}${location.pathname}#/invite?code=${encodeURIComponent(code)}` : '');
+
+  inviteState.latestCreatedInvite = {
+    ...result,
+    invite,
+    code,
+    inviteLink
+  };
+
+  const inviteId = String(invite._id || invite.id || result._id || result.id || '');
+  if (inviteId) {
+    const cachedInvite = {
+      ...invite,
+      _id: invite._id || invite.id || result._id || result.id,
+      token,
+      code,
+      createdAt: invite.createdAt || result.createdAt || new Date().toISOString()
+    };
+    const cachedEmail = String(cachedInvite.email || '').toLowerCase();
+    pendingWorkspaceInvites = [
+      cachedInvite,
+      ...pendingWorkspaceInvites.filter((item) => {
+        const itemId = String(item._id || item.id || '');
+        const itemEmail = String(item.email || '').toLowerCase();
+        return itemId !== inviteId && (!cachedEmail || itemEmail !== cachedEmail);
+      })
+    ];
+  }
+
+  return inviteState.latestCreatedInvite;
 };
 
 const handleToolPanelClick = async (event) => {
@@ -5953,18 +6462,34 @@ const handleToolPanelClick = async (event) => {
   }
 
   try {
+    const copyGeneratedInviteLink = target.closest('#copyGeneratedInviteLinkBtn');
+    if (copyGeneratedInviteLink) {
+      const value = document.getElementById('generatedInviteLinkInput')?.value || '';
+      await copyText(value, 'Invite link copied');
+      return;
+    }
+
+    const copyGeneratedInviteCode = target.closest('#copyGeneratedInviteCodeBtn');
+    if (copyGeneratedInviteCode) {
+      const value = document.getElementById('generatedInviteCodeInput')?.value || '';
+      await copyText(value, 'Invite code copied');
+      return;
+    }
+
     if (target.closest('[data-copy-invite-link]')) {
-      const invite = latestCreatedInvite?.invite || latestCreatedInvite?.invitation || {};
-      const token = latestCreatedInvite?.token || invite.token || '';
-      const inviteLink = token ? inviteLinkForToken(token) : latestCreatedInvite?.inviteLink || '';
+      const latestInvite = inviteState.latestCreatedInvite || {};
+      const invite = latestInvite.invite || latestInvite.invitation || {};
+      const token = latestInvite.token || invite.token || '';
+      const inviteLink = token ? inviteLinkForToken(token) : latestInvite.inviteLink || '';
       if (!inviteLink) return showToast('Invite link is not available', true);
       await copyText(inviteLink, 'Invite link copied');
       return;
     }
 
     if (target.closest('[data-copy-invite-code]')) {
-      const invite = latestCreatedInvite?.invite || latestCreatedInvite?.invitation || {};
-      const code = latestCreatedInvite?.code || invite.code || '';
+      const latestInvite = inviteState.latestCreatedInvite || {};
+      const invite = latestInvite.invite || latestInvite.invitation || {};
+      const code = latestInvite.code || invite.code || '';
       if (!code) return showToast('Invite code is not available', true);
       await copyText(code, 'Invite code copied');
       return;
@@ -5972,6 +6497,53 @@ const handleToolPanelClick = async (event) => {
 
     if (target.id === 'doneInviteResultBtn' || target.id === 'cancelJoinWorkspaceBtn') {
       closeToolPanel();
+      return;
+    }
+
+    const inviteCreateSubmit = target.closest('#inviteCreateSubmitBtn');
+    if (inviteCreateSubmit) {
+      if (state.demoMode) {
+        rememberCreatedInvite({
+          code: 'NEXUS-DEMO-CODE',
+          inviteLink: `${location.origin}${location.pathname}#/invite?code=NEXUS-DEMO-CODE`
+        });
+        showInviteMemberModal();
+        return;
+      }
+
+      const workspace = selectedWorkspace();
+      if (!workspace?._id) return showToast('Select a workspace first', true);
+      const email = document.getElementById('inviteEmailInput')?.value.trim();
+      const role = document.getElementById('inviteRoleInput')?.value || 'member';
+      if (inviteRequestInFlight) return;
+
+      inviteRequestInFlight = true;
+      inviteCreateSubmit.disabled = true;
+      inviteCreateSubmit.setAttribute('aria-busy', 'true');
+      try {
+        const result = await request(`/api/invites/${workspace._id}`, {
+          method: 'POST',
+          body: JSON.stringify({ email, role })
+        });
+        rememberCreatedInvite(result);
+        showInviteMemberModal();
+        showToast('Invite created');
+      } catch (err) {
+        showToast(friendlyUiMessage(err.message, { isError: true }), true);
+        inviteCreateSubmit.disabled = false;
+        inviteCreateSubmit.removeAttribute('aria-busy');
+      } finally {
+        inviteRequestInFlight = false;
+      }
+      return;
+    }
+
+    const inviteClose = target.closest('#inviteCloseBtn');
+    if (inviteClose) {
+      inviteState.latestCreatedInvite = null;
+      generatedInviteResult = null;
+      closeToolPanel();
+      if (currentRoute() === 'members') await renderMembersPage();
       return;
     }
 
@@ -6164,21 +6736,23 @@ const handleToolPanelClick = async (event) => {
     }
 
     if (target.id === 'toolCreateWorkspaceBtn') {
-      if (state.demoMode) return showToast('Demo mode uses the sample workspace. Sign up to create your own.');
+      clearInlineErrors(target.closest('.workspace-create-card'));
       const input = document.getElementById('toolWorkspaceNameInput');
       const name = input?.value.trim();
-      if (!name) return showToast('Workspace name is required', true);
-      const workspace = await request('/api/workspaces', {
-        method: 'POST',
-        body: JSON.stringify({ name })
-      });
-      state.selectedWorkspaceId = workspace._id;
-      localStorage.setItem('workspaceId', workspace._id);
-      closeToolPanel();
-      await loadWorkspaces();
-      await bootstrapWorkspace();
-      navigate('home');
-      return showToast('Workspace created');
+      if (!name) {
+        showInlineError(input, 'Name this workspace so you can find it later.');
+        input?.focus();
+        return showToast('Workspace name is required', true);
+      }
+      try {
+        target.disabled = true;
+        target.setAttribute('aria-busy', 'true');
+        await createWorkspaceAndOpen(name, { closePanel: true });
+      } finally {
+        target.disabled = false;
+        target.removeAttribute('aria-busy');
+      }
+      return;
     }
 
     if (target.id === 'renameWorkspaceBtn') {
@@ -6260,8 +6834,7 @@ const handleToolPanelClick = async (event) => {
           documentId: doc._id,
           assignee: { username: state.user?.username || 'Alex Rivera' }
         };
-        state.documentTasks.push(task);
-        state.dashboardTasks.push(task);
+        upsertTaskInStore(task);
         closeToolPanel();
         addActivity({ action: 'created task', target: title, documentId: doc._id });
         markLectureMilestone(doc._id, 'taskCreated', { message: 'Study task created' });
@@ -6273,8 +6846,7 @@ const handleToolPanelClick = async (event) => {
         method: 'POST',
         body: JSON.stringify({ title, priority, dueDate })
       });
-      state.dashboardTasks.push(task);
-      if (String(doc._id) === String(state.selectedDocumentId)) state.documentTasks.push(task);
+      upsertTaskInStore(task);
       closeToolPanel();
       addActivity({ action: 'created task', target: title, documentId: doc._id });
       markLectureMilestone(doc._id, 'taskCreated', { message: 'Study task created' });
@@ -6282,21 +6854,8 @@ const handleToolPanelClick = async (event) => {
       return showToast('Task created');
     }
 
-    if (target.id === 'requestVerifyBtn') {
-      const result = await request('/api/auth/verify-email/request', { method: 'POST', body: JSON.stringify({}) });
-      return showToast(result.verificationUrl ? `Verification link: ${result.verificationUrl}` : result.message);
-    }
-
-    if (target.id === 'verifyEmailBtn') {
-      await request('/api/auth/verify-email', {
-        method: 'POST',
-        body: JSON.stringify({ token: document.getElementById('verifyTokenInput').value })
-      });
-      return showToast('Email verified');
-    }
-
     if (target.id === 'changePasswordBtn') {
-      await request('/api/auth/password/change', {
+      await request('/api/account/change-password', {
         method: 'POST',
         body: JSON.stringify({
           currentPassword: document.getElementById('currentPasswordInput').value,
@@ -6304,25 +6863,6 @@ const handleToolPanelClick = async (event) => {
         })
       });
       return showToast('Password changed');
-    }
-
-    if (target.id === 'forgotPasswordBtn') {
-      const result = await request('/api/auth/password/forgot', {
-        method: 'POST',
-        body: JSON.stringify({ email: document.getElementById('forgotEmailInput').value })
-      });
-      return showToast(result.resetUrl ? `Reset link: ${result.resetUrl}` : result.message);
-    }
-
-    if (target.id === 'resetPasswordBtn') {
-      await request('/api/auth/password/reset', {
-        method: 'POST',
-        body: JSON.stringify({
-          token: document.getElementById('resetTokenInput').value,
-          password: document.getElementById('resetPasswordInput').value
-        })
-      });
-      return showToast('Password reset');
     }
 
     // Cancel settings changes
@@ -6506,10 +7046,10 @@ const handleToolPanelClick = async (event) => {
       if (!hasDocuments && !hasMessages) {
         document.getElementById('searchResults').innerHTML = emptyState({
           title: `No results for "${rawQuery}"`,
-          body: 'Try a shorter keyword, create a note for this topic, or ask AI from the current document.',
+          body: 'Try a shorter keyword, create a note for this topic, or ask Nexus Mentor from the current document.',
           action: 'Create Note',
           actionId: 'emptySearchCreateNoteBtn',
-          secondaryAction: 'Ask AI',
+          secondaryAction: 'Ask Mentor',
           secondaryActionId: 'emptySearchAskAiBtn',
           icon: '⌕'
         });
@@ -6644,46 +7184,46 @@ els.routePage.addEventListener('change', async (event) => {
 
   if (event.target.id === 'tasksSortSelect') {
     taskSortField = event.target.value;
-    renderTasksPage();
+    renderTasksBoard();
     return;
   }
 
   if (event.target.classList.contains('task-checkbox-v2')) {
     const taskId = event.target.dataset.checkTaskId;
     const checked = event.target.checked;
-    const task = state.dashboardTasks.find(t => t._id === taskId) || state.documentTasks.find(t => t._id === taskId);
+    const task = state.taskStore.byId[taskId]
+      || state.dashboardTasks.find(t => t._id === taskId)
+      || state.documentTasks.find(t => t._id === taskId);
     if (!task) return;
+    const previousTask = { ...task };
+    const optimisticTask = {
+      ...task,
+      status: checked ? 'done' : 'todo',
+      completedAt: checked ? new Date().toISOString() : null
+    };
+    upsertTaskInStore(optimisticTask);
+    if (checked) addActivity({ action: 'completed task', target: optimisticTask.title });
+    refreshLectureProgress(taskDocumentId(optimisticTask), {
+      message: 'All linked tasks completed',
+      show: checked
+    });
+    showToast(checked ? 'Task marked complete' : 'Task reopened');
+    await renderTasksBoard();
 
     if (state.demoMode) {
-      task.status = checked ? 'done' : 'todo';
-      task.completedAt = checked ? new Date().toISOString() : null;
-      if (checked) addActivity({ action: 'completed task', target: task.title });
-      refreshLectureProgress(taskDocumentId(task), {
-        message: 'All linked tasks completed',
-        show: checked
-      });
-      showToast(checked ? 'Task marked complete' : 'Task reopened');
-      renderTasksPage();
       return;
     }
 
     try {
-      const docId = task.documentId || task.document;
+      const docId = optimisticTask.documentId || optimisticTask.document;
       const updated = await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${docId}/tasks/${taskId}`, {
         method: 'PATCH',
         body: JSON.stringify({ status: checked ? 'done' : 'todo' })
       });
-      state.dashboardTasks = state.dashboardTasks.map(t => t._id === taskId ? updated : t);
-      state.documentTasks = state.documentTasks.map(t => t._id === taskId ? updated : t);
-      if (updated.status === 'done') addActivity({ action: 'completed task', target: updated.title });
-      refreshLectureProgress(taskDocumentId(updated), {
-        message: 'All linked tasks completed',
-        show: updated.status === 'done'
-      });
-      showToast(checked ? 'Task marked complete' : 'Task reopened');
-      renderTasksPage();
+      upsertTaskInStore(updated);
     } catch (err) {
-      event.target.checked = !checked;
+      upsertTaskInStore(previousTask);
+      await renderTasksBoard();
       showToast(err.message, true);
     }
     return;
@@ -6744,6 +7284,7 @@ els.routePage.addEventListener('click', async (event) => {
     if (action === 'new-task') return renderDashboardTaskTool();
     if (action === 'invite') {
       generatedInviteResult = null;
+      inviteState.latestCreatedInvite = null;
       return showInviteMemberModal();
     }
     if (action === 'activity') {
@@ -6760,8 +7301,8 @@ els.routePage.addEventListener('click', async (event) => {
       window.setTimeout(() => {
         activateContextTab('ai');
         setAiOutput('summarize', state.demoMode
-          ? 'Try: What should I study today? I would start with CAP theorem, then revise ML evaluation metrics, then close the project proposal task.'
-          : 'Ask AI is ready. Choose an action or select text in the document.');
+          ? 'Try: What should I study today? I would revise Deadlocks, answer the circular wait doubt, then take the OS scheduling quiz.'
+          : 'Nexus Mentor is ready. Ask a question or choose a study action for this lecture.');
       }, 0);
       return;
     }
@@ -6787,6 +7328,7 @@ els.routePage.addEventListener('click', async (event) => {
 
   if (event.target.closest('#dashboardEmptyInviteBtn')) {
     generatedInviteResult = null;
+    inviteState.latestCreatedInvite = null;
     showInviteMemberModal();
     return;
   }
@@ -6805,33 +7347,36 @@ els.routePage.addEventListener('click', async (event) => {
   if (dashboardTask && event.target.matches('input[type="checkbox"]')) {
     const taskId = dashboardTask.dataset.dashboardTaskId;
     const checked = event.target.checked;
-    const task = state.dashboardTasks.find((item) => item._id === taskId) || state.documentTasks.find((item) => item._id === taskId);
+    const task = state.taskStore.byId[taskId]
+      || state.dashboardTasks.find((item) => item._id === taskId)
+      || state.documentTasks.find((item) => item._id === taskId);
     if (!task) return;
+    const previousTask = { ...task };
+    const optimisticTask = {
+      ...task,
+      status: checked ? 'done' : 'todo',
+      completedAt: checked ? new Date().toISOString() : null
+    };
+    upsertTaskInStore(optimisticTask);
+    refreshLectureProgress(taskDocumentId(optimisticTask), {
+      message: 'All linked tasks completed',
+      show: checked
+    });
+    renderHomePage();
+
     if (state.demoMode) {
-      task.status = checked ? 'done' : 'todo';
-      task.completedAt = checked ? new Date().toISOString() : null;
-      refreshLectureProgress(taskDocumentId(task), {
-        message: 'All linked tasks completed',
-        show: checked
-      });
-      renderHomePage();
       return;
     }
     try {
-      const docId = task.documentId || state.selectedDocumentId || state.documents[0]?._id;
-      const updatedTask = await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${docId}/tasks/${task._id}`, {
+      const docId = optimisticTask.documentId || state.selectedDocumentId || state.documents[0]?._id;
+      const updatedTask = await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${docId}/tasks/${optimisticTask._id}`, {
         method: 'PATCH',
         body: JSON.stringify({ status: checked ? 'done' : 'todo' })
       });
-      state.dashboardTasks = state.dashboardTasks.map((item) => item._id === updatedTask._id ? updatedTask : item);
-      state.documentTasks = state.documentTasks.map((item) => item._id === updatedTask._id ? updatedTask : item);
-      refreshLectureProgress(taskDocumentId(updatedTask), {
-        message: 'All linked tasks completed',
-        show: updatedTask.status === 'done'
-      });
-      renderHomePage();
+      upsertTaskInStore(updatedTask);
     } catch (err) {
-      event.target.checked = !checked;
+      upsertTaskInStore(previousTask);
+      renderHomePage();
       showToast(err.message, true);
     }
     return;
@@ -6857,14 +7402,14 @@ els.routePage.addEventListener('click', async (event) => {
     window.setTimeout(() => {
       activateContextTab('ai');
       const responses = state.demoMode ? {
-        today: 'Study plan: revise CAP theorem, finish the ML quiz task, then review project proposal notes.',
+        today: 'Study plan: revise Deadlocks, review Banker algorithm, then answer five OS revision questions.',
         summarize: demoAiResponse('summarize'),
         quiz: demoAiResponse('quiz'),
-        'weak-topics': 'Weak topics to revisit: Paxos prepare phase, precision vs recall, and consistency tradeoffs during partitions.'
+        'weak-topics': 'Weak topics to revisit: circular wait, safe state, and the difference between deadlock prevention and avoidance.'
       } : {};
       setAiOutput(dashboardAi.dataset.dashboardAi, state.demoMode
         ? responses[dashboardAi.dataset.dashboardAi]
-        : 'Dashboard AI suggestion selected. Run AI from this document to generate a live response.');
+        : 'Nexus Mentor is ready for this lecture. Ask a question or choose a study action.');
     }, 0);
     return;
   }
@@ -6893,6 +7438,55 @@ els.routePage.addEventListener('click', async (event) => {
     state.threadFilter = 'all';
     navigate('workspace');
     window.setTimeout(() => activateContextTab('discussion'), 0);
+    return;
+  }
+
+  const authCreateWorkspaceCta = event.target.closest('[data-auth-create-workspace]');
+  if (authCreateWorkspaceCta) {
+    event.preventDefault();
+    if (state.token && !state.demoMode) {
+      await openTool('workspaces');
+      return;
+    }
+    if (state.demoMode) exitDemoMode();
+    if (currentRoute() !== 'signup') {
+      navigate('signup');
+      await renderRoute();
+    } else {
+      renderAuthPage('signup');
+    }
+    window.setTimeout(() => {
+      const firstSignupField = document.getElementById('pageUsernameInput')
+        || document.getElementById('pageEmailInput');
+      firstSignupField?.focus();
+      firstSignupField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+    return;
+  }
+
+  const resendOtpButton = event.target.closest('#pageResendOtpInlineBtn');
+  if (resendOtpButton) {
+    event.preventDefault();
+    const emailInput = document.getElementById('pageVerifyEmailInput');
+    clearInlineErrors(document.getElementById('pageVerifyEmailForm'));
+    const email = emailInput?.value.trim().toLowerCase() || '';
+    if (!email) {
+      showInlineError(emailInput, 'Enter the email address you used to create your account.');
+      emailInput?.focus();
+      return;
+    }
+    if (!emailInput.validity.valid) {
+      showInlineError(emailInput, 'Enter a valid email address.');
+      emailInput.focus();
+      return;
+    }
+    resendOtpButton.disabled = true;
+    try {
+      await requestVerificationOtp(email);
+    } catch (err) {
+      resendOtpButton.disabled = false;
+      showToast(friendlyUiMessage(err.message, { isError: true }), true);
+    }
     return;
   }
 
@@ -6928,7 +7522,7 @@ els.routePage.addEventListener('input', (event) => {
   }
   if (event.target.id === 'tasksSearchInput') {
     taskSearchQuery = event.target.value;
-    renderTasksPage();
+    renderTasksBoard();
     return;
   }
   if (event.target.id === 'threadsSearchInput') {
@@ -7040,6 +7634,61 @@ const completeOAuthCallback = async () => {
   }
 };
 
+const setPendingVerificationEmail = (email = '') => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (normalizedEmail) sessionStorage.setItem('nexusPendingVerificationEmail', normalizedEmail);
+  else sessionStorage.removeItem('nexusPendingVerificationEmail');
+};
+
+const startVerificationResendCountdown = (seconds = 60) => {
+  window.clearInterval(emailVerificationResendTimer);
+  const resendButtons = [
+    document.getElementById('pageResendOtpInlineBtn'),
+    document.getElementById('pageResendVerificationSubmit')
+  ].filter(Boolean);
+  const countdown = document.getElementById('verificationResendCountdown');
+  let remaining = seconds;
+
+  const renderCountdown = () => {
+    resendButtons.forEach((button) => {
+      button.disabled = remaining > 0;
+      button.setAttribute('aria-disabled', remaining > 0 ? 'true' : 'false');
+    });
+    if (countdown) {
+      countdown.classList.toggle('hidden', remaining <= 0);
+      countdown.textContent = remaining > 0
+        ? `You can resend OTP in ${remaining}s.`
+        : 'You can resend OTP now.';
+    }
+  };
+
+  renderCountdown();
+  emailVerificationResendTimer = window.setInterval(() => {
+    remaining -= 1;
+    renderCountdown();
+    if (remaining <= 0) {
+      window.clearInterval(emailVerificationResendTimer);
+      emailVerificationResendTimer = null;
+    }
+  }, 1000);
+};
+
+const requestVerificationOtp = async (email, { startCountdown = true } = {}) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail) {
+    showToast('Enter the email address for your Nexus account.', true);
+    return false;
+  }
+  await request('/api/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email: normalizedEmail })
+  }, false);
+  setPendingVerificationEmail(normalizedEmail);
+  if (startCountdown) startVerificationResendCountdown(60);
+  showToast('If the account is unverified, a new OTP has been sent.');
+  return true;
+};
+
 const handleAuthRouteSubmit = async (event) => {
   if (event.target.id === 'pageForgotPasswordForm') {
     event.preventDefault();
@@ -7059,10 +7708,7 @@ const handleAuthRouteSubmit = async (event) => {
       resultBox.classList.remove('hidden');
       resultBox.innerHTML = `
         <strong>${escapeHtml(result.message || 'Password reset requested')}</strong>
-        ${result.resetUrl ? `
-          <p>Development reset link:</p>
-          <a class="primary" href="${escapeHtml(result.resetUrl)}">Open reset link</a>
-        ` : '<p>Check your email for reset instructions.</p>'}
+        <p>Check your email for reset instructions.</p>
       `;
       showToast('Password reset email sent');
     } catch (err) {
@@ -7083,6 +7729,16 @@ const handleAuthRouteSubmit = async (event) => {
     const resultBox = document.getElementById('passwordRecoveryResult');
 
     try {
+      const resetToken = document.getElementById('pageResetTokenInput').value.trim();
+      const newPassword = document.getElementById('pageNewPasswordInput').value;
+      const confirmPassword = document.getElementById('pageConfirmNewPasswordInput').value;
+      if (!resetToken) {
+        throw new Error('Use the latest password reset link from your email.');
+      }
+      if (newPassword !== confirmPassword) {
+        throw new Error('Passwords do not match.');
+      }
+
       submitButton.disabled = true;
       submitButton.setAttribute('aria-busy', 'true');
       submitButton.querySelector('span').textContent = 'Resetting...';
@@ -7090,11 +7746,13 @@ const handleAuthRouteSubmit = async (event) => {
       await request('/api/auth/password/reset', {
         method: 'POST',
         body: JSON.stringify({
-          token: document.getElementById('pageResetTokenInput').value.trim(),
-          password: document.getElementById('pageNewPasswordInput').value
+          token: resetToken,
+          password: newPassword
         })
       }, false);
 
+      document.getElementById('pageResetTokenInput').value = '';
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/reset-password`);
       resultBox.classList.remove('hidden');
       resultBox.innerHTML = `
         <strong>Password reset successful</strong>
@@ -7118,6 +7776,28 @@ const handleAuthRouteSubmit = async (event) => {
     event.preventDefault();
     const submitButton = document.getElementById('pageVerifyEmailSubmit');
     const resultBox = document.getElementById('emailVerificationResult');
+    const emailInput = document.getElementById('pageVerifyEmailInput');
+    const otpInput = document.getElementById('pageVerifyOtpInput');
+    clearInlineErrors(event.target);
+
+    const email = emailInput?.value.trim().toLowerCase() || '';
+    const otp = otpInput?.value.trim() || '';
+    let hasError = false;
+    if (!email) {
+      showInlineError(emailInput, 'Enter the email address you used to create your account.');
+      hasError = true;
+    } else if (!emailInput.validity.valid) {
+      showInlineError(emailInput, 'Enter a valid email address.');
+      hasError = true;
+    }
+    if (!/^\d{6}$/.test(otp)) {
+      showInlineError(otpInput, 'Enter the 6-digit OTP from your email.');
+      hasError = true;
+    }
+    if (hasError) {
+      focusFirstInvalid(event.target);
+      return true;
+    }
 
     try {
       submitButton.disabled = true;
@@ -7125,9 +7805,11 @@ const handleAuthRouteSubmit = async (event) => {
       submitButton.querySelector('span').textContent = 'Verifying...';
       await request('/api/auth/verify-email', {
         method: 'POST',
-        body: JSON.stringify({ token: document.getElementById('pageVerifyTokenInput').value.trim() })
+        body: JSON.stringify({ email, otp })
       }, false);
 
+      setPendingVerificationEmail('');
+      window.clearInterval(emailVerificationResendTimer);
       resultBox.classList.remove('hidden');
       resultBox.innerHTML = `
         <strong>Email verified successfully</strong>
@@ -7141,7 +7823,7 @@ const handleAuthRouteSubmit = async (event) => {
       if (submitButton) {
         submitButton.disabled = false;
         submitButton.removeAttribute('aria-busy');
-        submitButton.querySelector('span').textContent = 'Verify email';
+        submitButton.querySelector('span').textContent = 'Verify OTP';
       }
     }
     return true;
@@ -7151,29 +7833,46 @@ const handleAuthRouteSubmit = async (event) => {
     event.preventDefault();
     const submitButton = document.getElementById('pageResendVerificationSubmit');
     const resultBox = document.getElementById('emailVerificationResult');
+    const emailInput = document.getElementById('pageResendEmailInput');
+    clearInlineErrors(event.target);
+
+    const email = emailInput?.value.trim().toLowerCase() || '';
+    if (!email) {
+      showInlineError(emailInput, 'Enter the email address you used to create your account.');
+      focusFirstInvalid(event.target);
+      return true;
+    }
+    if (!emailInput.validity.valid) {
+      showInlineError(emailInput, 'Enter a valid email address.');
+      focusFirstInvalid(event.target);
+      return true;
+    }
 
     try {
       submitButton.disabled = true;
       submitButton.setAttribute('aria-busy', 'true');
       submitButton.querySelector('span').textContent = 'Sending...';
-      const result = await request('/api/auth/verify-email/request', {
+      const result = await request('/api/auth/resend-verification', {
         method: 'POST',
-        body: JSON.stringify({ email: document.getElementById('pageResendEmailInput').value.trim() })
+        body: JSON.stringify({ email })
       }, false);
+      setPendingVerificationEmail(email);
+      startVerificationResendCountdown(60);
 
       resultBox.classList.remove('hidden');
       resultBox.innerHTML = `
-        <strong>${escapeHtml(result.message || 'Verification email sent.')}</strong>
-        ${result.verificationUrl ? `<p>Development verification link:</p><a class="primary" href="${escapeHtml(result.verificationUrl)}">Open verification link</a>` : '<p>Check your email for the latest link.</p>'}
+        <strong>${escapeHtml(result.message || 'If the account is unverified, a new OTP has been sent.')}</strong>
+        <p>Check your email for the latest 6-digit OTP.</p>
+        <a class="primary" href="#/verify-email">Enter OTP</a>
       `;
-      showToast('Verification email sent');
+      showToast('Verification OTP sent');
     } catch (err) {
       showToast(friendlyUiMessage(err.message, { isError: true }), true);
     } finally {
       if (submitButton) {
-        submitButton.disabled = false;
+        if (!emailVerificationResendTimer) submitButton.disabled = false;
         submitButton.removeAttribute('aria-busy');
-        submitButton.querySelector('span').textContent = 'Resend verification email';
+        submitButton.querySelector('span').textContent = 'Resend verification OTP';
       }
     }
     return true;
@@ -7214,14 +7913,17 @@ const handleAuthRouteSubmit = async (event) => {
       const usernameInput = document.getElementById('pageUsernameInput');
       const confirmPasswordInput = document.getElementById('pageConfirmPasswordInput');
       const confirmPassword = confirmPasswordInput.value;
-      payload.username = usernameInput.value.trim();
-      if (!payload.username) {
-        showInlineError(usernameInput, 'Choose a username for your profile.');
-        hasError = true;
-      }
-      if (payload.password !== confirmPassword) {
-        showInlineError(confirmPasswordInput, 'Passwords do not match.');
-        hasError = true;
+	      payload.username = usernameInput.value.trim();
+	      if (!payload.username) {
+	        showInlineError(usernameInput, 'Choose a username for your profile.');
+	        hasError = true;
+	      } else if (!isValidSignupUsername(payload.username)) {
+	        showInlineError(usernameInput, 'Use 3-50 letters, numbers, underscores, or hyphens.');
+	        hasError = true;
+	      }
+	      if (payload.password !== confirmPassword) {
+	        showInlineError(confirmPasswordInput, 'Passwords do not match.');
+	        hasError = true;
       }
     }
     if (hasError) {
@@ -7239,14 +7941,10 @@ const handleAuthRouteSubmit = async (event) => {
       body: JSON.stringify(payload)
     });
     if (mode === 'register') {
-      showToast('Account created. Check your email to verify your account.');
-      const resultBox = document.createElement('div');
-      resultBox.className = 'password-recovery-result';
-      resultBox.innerHTML = `
-        <strong>${escapeHtml(result.message || 'Account created.')}</strong>
-        ${result.verificationUrl ? `<p>Development verification link:</p><a class="primary" href="${escapeHtml(result.verificationUrl)}">Open verification link</a>` : '<p>Check your email for the verification link.</p>'}
-      `;
-      form.appendChild(resultBox);
+      setPendingVerificationEmail(payload.email);
+      showToast('Account created. Enter the OTP sent to your email.');
+      navigate('verify-email');
+      window.setTimeout(() => startVerificationResendCountdown(60), 0);
       return true;
     }
     completeAuthenticatedSession(result);
@@ -7255,8 +7953,26 @@ const handleAuthRouteSubmit = async (event) => {
     showToast(message, true);
     const emailInput = document.getElementById('pageEmailInput');
     const passwordInput = document.getElementById('pagePasswordInput');
-    if (/email|registered|credentials|password|sign in/i.test(message)) {
-      showInlineError(/password/i.test(message) ? passwordInput : emailInput, message);
+	    const usernameInput = document.getElementById('pageUsernameInput');
+	    if (/username/i.test(message) && usernameInput) {
+	      showInlineError(usernameInput, message);
+	    } else if (/email|registered|credentials|password|sign in/i.test(message)) {
+	      showInlineError(/password/i.test(message) ? passwordInput : emailInput, message);
+	    }
+    if (/verify your email/i.test(message) && emailInput?.value) {
+      setPendingVerificationEmail(emailInput.value);
+      let verifyAction = document.getElementById('authVerifyEmailAction');
+      if (!verifyAction) {
+        verifyAction = document.createElement('div');
+        verifyAction.id = 'authVerifyEmailAction';
+        verifyAction.className = 'password-recovery-result';
+        submitButton?.insertAdjacentElement('afterend', verifyAction);
+      }
+      verifyAction.innerHTML = `
+        <strong>Email verification required</strong>
+        <p>Enter the OTP sent to ${escapeHtml(emailInput.value.trim())} to finish setup.</p>
+        <a class="primary" href="#/verify-email">Verify Email</a>
+      `;
     }
   } finally {
     if (submitButton) {
@@ -7334,7 +8050,7 @@ els.routePage.addEventListener('click', async (event) => {
   if (tasksFilterChip) {
     event.preventDefault();
     taskFilterTab = tasksFilterChip.dataset.tasksFilterTab;
-    renderTasksPage();
+    await renderTasksBoard();
     return;
   }
 
@@ -7342,7 +8058,7 @@ els.routePage.addEventListener('click', async (event) => {
   if (tasksClearSearch) {
     event.preventDefault();
     taskSearchQuery = '';
-    renderTasksPage();
+    await renderTasksBoard();
     return;
   }
 
@@ -7350,7 +8066,7 @@ els.routePage.addEventListener('click', async (event) => {
   if (tasksToggleBoard) {
     event.preventDefault();
     taskViewMode = 'board';
-    renderTasksPage();
+    await renderTasksBoard();
     return;
   }
 
@@ -7358,7 +8074,7 @@ els.routePage.addEventListener('click', async (event) => {
   if (tasksToggleList) {
     event.preventDefault();
     taskViewMode = 'list';
-    renderTasksPage();
+    await renderTasksBoard();
     return;
   }
 
@@ -7367,7 +8083,7 @@ els.routePage.addEventListener('click', async (event) => {
     event.stopPropagation();
     const taskId = taskMenuBtn.dataset.toggleTaskMenu;
     activeTaskMoreMenuId = activeTaskMoreMenuId === taskId ? '' : taskId;
-    renderTasksPage();
+    await renderTasksBoard();
     return;
   }
 
@@ -7390,7 +8106,7 @@ els.routePage.addEventListener('click', async (event) => {
       showToast('Failed to copy.');
     });
     activeTaskMoreMenuId = '';
-    renderTasksPage();
+    await renderTasksBoard();
     return;
   }
 
@@ -7407,28 +8123,26 @@ els.routePage.addEventListener('click', async (event) => {
   if (taskDeleteBtn) {
     event.preventDefault();
     const taskId = taskDeleteBtn.dataset.deleteTaskId;
-    const task = [...state.dashboardTasks, ...state.documentTasks].find(t => t._id === taskId);
+    const task = state.taskStore.byId[taskId] || [...state.dashboardTasks, ...state.documentTasks].find(t => t._id === taskId);
     if (!task) return;
     
     if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
       const docId = task.documentId || task.document;
+      const previousTask = { ...task };
+      removeTaskFromStore(taskId);
+      activeTaskMoreMenuId = '';
+      await renderTasksBoard();
       if (state.demoMode) {
-        state.documentTasks = state.documentTasks.filter(t => t._id !== taskId);
-        state.dashboardTasks = state.dashboardTasks.filter(t => t._id !== taskId);
         showToast('Demo task deleted locally');
-        activeTaskMoreMenuId = '';
-        renderTasksPage();
       } else {
         try {
           await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${docId}/tasks/${taskId}`, {
             method: 'DELETE'
           });
-          state.documentTasks = state.documentTasks.filter(t => t._id !== taskId);
-          state.dashboardTasks = state.dashboardTasks.filter(t => t._id !== taskId);
           showToast('Task deleted successfully');
-          activeTaskMoreMenuId = '';
-          renderTasksPage();
         } catch (err) {
+          upsertTaskInStore(previousTask);
+          await renderTasksBoard();
           showToast(err.message, true);
         }
       }
@@ -7587,21 +8301,21 @@ els.routePage.addEventListener('click', async (event) => {
 
     const cardBody = event.target.closest('.ai-card-body');
     if (cardBody) {
-      cardBody.innerHTML = `<p style="display: flex; align-items: center; gap: 8px; font-weight: 500; color: var(--primary);">✦ AI is analyzing doubt and generating answer...</p>`;
+      cardBody.innerHTML = `<p style="display: flex; align-items: center; gap: 8px; font-weight: 500; color: var(--primary);">✦ Nexus Mentor is reading the linked lecture context...</p>`;
     }
 
     if (state.demoMode) {
       window.setTimeout(() => {
-        const responseText = `🤖 AI Companion:\n\nBased on model evaluation context, precision and recall target different errors:\n- **Precision** is key when false positives are costly (e.g. spam filters).\n- **Recall** is crucial when false negatives are dangerous (e.g. medical diagnoses).`;
+        const responseText = `Nexus Mentor:\n\nBased on the Deadlocks lecture, circular wait matters because each process holds one resource while waiting for the next process in the cycle.\n\n- If the cycle stays unbroken, no process can move forward.\n- Deadlock prevention breaks at least one necessary condition, such as circular wait.\n- Banker's algorithm is different: it avoids unsafe states before the cycle becomes permanent.`;
         const reply = {
           _id: `demo-doc-reply-${Date.now()}`,
-          sender: { _id: 'ai-companion', username: 'AI Companion', email: 'ai' },
+          sender: { _id: 'nexus-mentor', username: 'Nexus Mentor', email: 'mentor@nexus.local' },
           body: responseText,
           createdAt: new Date().toISOString()
         };
         thread.replies = [...(thread.replies || []), reply];
         state.documentMessages = state.documentMessages.map(item => item._id === threadId ? { ...item, ...thread } : item);
-        showToast('AI reply added locally');
+        showToast('Nexus Mentor added an answer');
         renderThreadsPage();
       }, 800);
       return;
@@ -7622,13 +8336,13 @@ els.routePage.addEventListener('click', async (event) => {
       const reply = await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${docId}/messages`, {
         method: 'POST',
         body: JSON.stringify({
-          body: `🤖 AI Companion:\n\n${explanationText}`,
+          body: `Nexus Mentor:\n\n${explanationText}`,
           parentMessageId: threadId
         })
       });
       thread.replies = [...(thread.replies || []), reply];
       state.documentMessages = state.documentMessages.map(item => item._id === threadId ? { ...item, ...thread } : item);
-      showToast('AI Tutor answered successfully!');
+      showToast('Nexus Mentor added an answer');
       renderThreadsPage();
     } catch (err) {
       showToast(err.message, true);
@@ -7744,17 +8458,23 @@ els.authForm.addEventListener('submit', async (event) => {
       showInlineError(els.emailInput, 'Enter a valid email address.');
       hasError = true;
     }
-    if (!payload.password) {
-      showInlineError(els.passwordInput, 'Enter your password.');
-      hasError = true;
-    }
-    if (state.authMode === 'register') {
-      payload.username = els.usernameInput.value.trim();
-      if (!payload.username) {
-        showInlineError(els.usernameInput, 'Choose a username.');
-        hasError = true;
-      }
-    }
+	    if (!payload.password) {
+	      showInlineError(els.passwordInput, 'Enter your password.');
+	      hasError = true;
+	    } else if (state.authMode === 'register' && payload.password.length < 8) {
+	      showInlineError(els.passwordInput, 'Use at least 8 characters.');
+	      hasError = true;
+	    }
+	    if (state.authMode === 'register') {
+	      payload.username = els.usernameInput.value.trim();
+	      if (!payload.username) {
+	        showInlineError(els.usernameInput, 'Choose a username.');
+	        hasError = true;
+	      } else if (!isValidSignupUsername(payload.username)) {
+	        showInlineError(els.usernameInput, 'Use 3-50 letters, numbers, underscores, or hyphens.');
+	        hasError = true;
+	      }
+	    }
     if (hasError) {
       focusFirstInvalid(event.target);
       return showToast('Please fix the highlighted fields.', true);
@@ -7770,13 +8490,25 @@ els.authForm.addEventListener('submit', async (event) => {
       body: JSON.stringify(payload)
     });
     if (mode === 'register') {
-      showToast('Account created. Check your email to verify your account.');
-      navigate('login');
+      setPendingVerificationEmail(payload.email);
+      showToast('Account created. Enter the OTP sent to your email.');
+      navigate('verify-email');
+      window.setTimeout(() => startVerificationResendCountdown(60), 0);
       return;
     }
     completeAuthenticatedSession(result);
-  } catch (err) {
-    showToast(friendlyUiMessage(err.message, { isError: true }), true);
+	  } catch (err) {
+	    const message = friendlyUiMessage(err.message, { isError: true });
+	    showToast(message, true);
+	    if (/username/i.test(message) && els.usernameInput) {
+	      showInlineError(els.usernameInput, message);
+	    } else if (/email|registered|credentials|password|sign in/i.test(message)) {
+	      showInlineError(/password/i.test(message) ? els.passwordInput : els.emailInput, message);
+	    }
+	    if (/verify your email/i.test(message) && els.emailInput?.value) {
+	      setPendingVerificationEmail(els.emailInput.value);
+	      navigate('verify-email');
+    }
   } finally {
     const authButton = event.target.querySelector('button[type="submit"]');
     if (authButton) {
@@ -7890,16 +8622,8 @@ els.workspaceForm.addEventListener('submit', async (event) => {
       createButton.disabled = true;
       createButton.setAttribute('aria-busy', 'true');
     }
-    const workspace = await request('/api/workspaces', {
-      method: 'POST',
-      body: JSON.stringify({ name: workspaceName })
-    });
-    els.workspaceNameInput.value = '';
-    state.selectedWorkspaceId = workspace._id;
-    localStorage.setItem('workspaceId', workspace._id);
-    await loadWorkspaces();
-    await bootstrapWorkspace();
-    showToast('Workspace created');
+    const workspace = await createWorkspaceAndOpen(workspaceName);
+    if (workspace) els.workspaceNameInput.value = '';
   } catch (err) {
     showToast(friendlyUiMessage(err.message, { isError: true }), true);
   } finally {
@@ -7957,7 +8681,7 @@ document.addEventListener('click', (event) => {
     const isMenuCard = event.target.closest('.chat-dropdown-menu');
     if (!isMenuToggle && !isMenuCard) {
       activeTaskMoreMenuId = '';
-      renderTasksPage();
+      renderTasksBoard();
     }
   }
 
@@ -8344,7 +9068,7 @@ els.taskForm.addEventListener('submit', (event) => {
   if (!state.selectedDocumentId || !els.taskInput.value.trim()) return;
 
   if (state.demoMode) {
-    state.documentTasks.push({
+    const task = {
       _id: `demo-task-${Date.now()}`,
       title: els.taskInput.value.trim(),
       status: 'todo',
@@ -8352,10 +9076,10 @@ els.taskForm.addEventListener('submit', (event) => {
       dueDate: new Date().toISOString(),
       documentId: state.selectedDocumentId,
       assignee: { username: state.user?.username || 'Alex Rivera' }
-    });
-    state.dashboardTasks = state.documentTasks;
+    };
+    upsertTaskInStore(task);
     els.taskInput.value = '';
-    addActivity({ action: 'created task', target: state.documentTasks.at(-1)?.title || 'Untitled task' });
+    addActivity({ action: 'created task', target: task.title || 'Untitled task' });
     markLectureMilestone(state.selectedDocumentId, 'taskCreated', { message: 'Study task created' });
     renderTaskList();
     return showToast('Demo task added locally');
@@ -8366,8 +9090,7 @@ els.taskForm.addEventListener('submit', (event) => {
     body: JSON.stringify({ title: els.taskInput.value.trim() })
   })
     .then((task) => {
-      state.documentTasks.push(task);
-      state.dashboardTasks.push(task);
+      upsertTaskInStore(task);
       els.taskInput.value = '';
       addActivity({ action: 'created task', target: task.title || 'Untitled task' });
       markLectureMilestone(state.selectedDocumentId, 'taskCreated', { message: 'Study task created' });
@@ -8381,25 +9104,29 @@ els.taskList.addEventListener('change', (event) => {
   const taskRow = event.target.closest('[data-task-id]');
   if (!checkbox || !taskRow || !state.selectedDocumentId) return;
 
-  const task = state.documentTasks.find((item) => item._id === taskRow.dataset.taskId);
+  const task = state.taskStore.byId[taskRow.dataset.taskId] || state.documentTasks.find((item) => item._id === taskRow.dataset.taskId);
   if (!task) return;
-  if (state.demoMode) {
-    task.status = checkbox.checked ? 'done' : 'todo';
-    task.completedAt = checkbox.checked ? new Date().toISOString() : null;
-    state.dashboardTasks = state.dashboardTasks.map((item) => item._id === task._id ? task : item);
-    if (checkbox.checked) addActivity({ action: 'completed task', target: task.title || 'Untitled task' });
-    refreshLectureProgress(state.selectedDocumentId, {
-      message: 'All linked tasks completed',
-      show: checkbox.checked
-    });
-    // FIX: explicitly persist allTasksCompleted when the last task is done
-    if (checkbox.checked) {
-      const docTasks = allKnownTasks().filter((t) => taskDocumentId(t) === state.selectedDocumentId);
-      if (docTasks.length > 0 && docTasks.every((t) => t.status === 'done')) {
-        markLectureMilestone(state.selectedDocumentId, 'allTasksCompleted', { message: 'All study tasks completed' });
-      }
+  const previousTask = { ...task };
+  const optimisticTask = {
+    ...task,
+    status: checkbox.checked ? 'done' : 'todo',
+    completedAt: checkbox.checked ? new Date().toISOString() : null
+  };
+  upsertTaskInStore(optimisticTask);
+  if (checkbox.checked) addActivity({ action: 'completed task', target: optimisticTask.title || 'Untitled task' });
+  refreshLectureProgress(state.selectedDocumentId, {
+    message: 'All linked tasks completed',
+    show: checkbox.checked
+  });
+  if (checkbox.checked) {
+    const docTasks = allKnownTasks().filter((t) => taskDocumentId(t) === state.selectedDocumentId);
+    if (docTasks.length > 0 && docTasks.every((t) => t.status === 'done')) {
+      markLectureMilestone(state.selectedDocumentId, 'allTasksCompleted', { message: 'All study tasks completed' });
     }
-    renderTaskList();
+  }
+  renderTaskList();
+
+  if (state.demoMode) {
     return;
   }
   request(`${getDocumentContextPath()}/tasks/${task._id}`, {
@@ -8407,24 +9134,12 @@ els.taskList.addEventListener('change', (event) => {
     body: JSON.stringify({ status: checkbox.checked ? 'done' : 'todo' })
   })
     .then((updatedTask) => {
-      state.documentTasks = state.documentTasks.map((item) => item._id === updatedTask._id ? updatedTask : item);
-      state.dashboardTasks = state.dashboardTasks.map((item) => item._id === updatedTask._id ? updatedTask : item);
-      if (updatedTask.status === 'done') addActivity({ action: 'completed task', target: updatedTask.title || 'Untitled task' });
-      refreshLectureProgress(state.selectedDocumentId, {
-        message: 'All linked tasks completed',
-        show: updatedTask.status === 'done'
-      });
-      // FIX: explicitly persist allTasksCompleted when the last task is done
-      if (updatedTask.status === 'done') {
-        const docTasks = allKnownTasks().filter((t) => taskDocumentId(t) === state.selectedDocumentId);
-        if (docTasks.length > 0 && docTasks.every((t) => t.status === 'done')) {
-          markLectureMilestone(state.selectedDocumentId, 'allTasksCompleted', { message: 'All study tasks completed' });
-        }
-      }
+      upsertTaskInStore(updatedTask);
       renderTaskList();
     })
     .catch((err) => {
-      checkbox.checked = !checkbox.checked;
+      upsertTaskInStore(previousTask);
+      renderTaskList();
       showToast(err.message, true);
     });
 });
@@ -8434,16 +9149,14 @@ els.taskList.addEventListener('click', (event) => {
   if (!deleteButton || !state.selectedDocumentId) return;
 
   if (state.demoMode) {
-    state.documentTasks = state.documentTasks.filter((task) => task._id !== deleteButton.dataset.deleteTask);
-    state.dashboardTasks = state.dashboardTasks.filter((task) => task._id !== deleteButton.dataset.deleteTask);
+    removeTaskFromStore(deleteButton.dataset.deleteTask);
     renderTaskList();
     return showToast('Demo task deleted locally');
   }
 
   request(`${getDocumentContextPath()}/tasks/${deleteButton.dataset.deleteTask}`, { method: 'DELETE' })
     .then(() => {
-      state.documentTasks = state.documentTasks.filter((task) => task._id !== deleteButton.dataset.deleteTask);
-      state.dashboardTasks = state.dashboardTasks.filter((task) => task._id !== deleteButton.dataset.deleteTask);
+      removeTaskFromStore(deleteButton.dataset.deleteTask);
       renderTaskList();
     })
     .catch((err) => showToast(err.message, true));
@@ -8469,8 +9182,7 @@ document.getElementById('aiPromptForm')?.addEventListener('submit', async (event
           ? 'simple-explanation'
           : 'summarize';
   input.value = '';
-  showToast(`Tutor prompt received: ${prompt.slice(0, 72)}${prompt.length > 72 ? '...' : ''}`);
-  await runStudyAiAction(action);
+  await runStudyAiAction(action, prompt);
 });
 
 els.aiOutput?.addEventListener('click', handleAiStudyOutputClick);
@@ -8484,10 +9196,10 @@ els.saveAiToLibraryBtn?.addEventListener('click', () => {
 });
 
 els.copyAiOutputBtn?.addEventListener('click', async () => {
-  if (!state.lastAiOutput.trim()) return showToast('Generate study material first', true);
+  if (!state.lastAiOutput.trim()) return showToast('Generate mentor output first', true);
   try {
     await navigator.clipboard.writeText(state.lastAiOutput);
-    showToast('AI result copied');
+    showToast('Mentor output copied');
   } catch (err) {
     showToast('Copy failed. Select the text manually.', true);
   }
@@ -8608,6 +9320,7 @@ els.routePage.addEventListener('click', async (event) => {
     event.stopPropagation();
     event.stopImmediatePropagation?.();
     generatedInviteResult = null;
+    inviteState.latestCreatedInvite = null;
     showInviteMemberModal();
     return;
   }
@@ -8639,10 +9352,10 @@ els.routePage.addEventListener('click', async (event) => {
     event.stopPropagation();
     event.stopImmediatePropagation?.();
     if (state.demoMode) {
-      generatedInviteResult = {
+      rememberCreatedInvite({
         code: 'NEXUS-DEMO-CODE',
         inviteLink: `${location.origin}${location.pathname}#/invite?code=NEXUS-DEMO-CODE`
-      };
+      });
       showInviteMemberModal();
       return;
     }
@@ -8659,10 +9372,7 @@ els.routePage.addEventListener('click', async (event) => {
         method: 'POST',
         body: JSON.stringify({ email, role })
       });
-      generatedInviteResult = {
-        code: result.code || result.invite?.code || '',
-        inviteLink: result.inviteLink || `${location.origin}${location.pathname}#/invite?token=${result.token}`
-      };
+      rememberCreatedInvite(result);
       showInviteMemberModal();
     } catch (err) {
       showToast(err.message, true);
@@ -8699,6 +9409,7 @@ els.routePage.addEventListener('click', async (event) => {
     event.stopPropagation();
     event.stopImmediatePropagation?.();
     generatedInviteResult = null;
+    inviteState.latestCreatedInvite = null;
     closeToolPanel();
     renderMembersPage();
     return;
@@ -8927,6 +9638,22 @@ els.routePage.addEventListener('change', (event) => {
 
 els.routePage.addEventListener('click', (event) => {
   const target = event.target;
+  if (target.closest('[data-account-security-close]')) {
+    event.preventDefault();
+    closeAccountSecurityModal();
+    return;
+  }
+  const passwordAction = target.closest('[data-account-password-action]');
+  if (passwordAction) {
+    event.preventDefault();
+    showAccountPasswordModal(passwordAction.dataset.accountPasswordAction);
+    return;
+  }
+  if (target.closest('[data-account-delete-start]')) {
+    event.preventDefault();
+    showAccountDeleteModal('primary');
+    return;
+  }
   const themeCard = target.closest('.theme-select-card');
   if (themeCard) {
     event.preventDefault();
@@ -8943,6 +9670,107 @@ els.routePage.addEventListener('click', (event) => {
     });
     
     updateSaveButtonState();
+  }
+});
+
+els.routePage.addEventListener('submit', async (event) => {
+  if (event.target.id === 'accountPasswordForm') {
+    event.preventDefault();
+    const form = event.target;
+    const mode = form.dataset.passwordMode || 'set';
+    const submitButton = form.querySelector('button[type="submit"]');
+    const newPassword = document.getElementById('accountNewPasswordInput')?.value || '';
+    const confirmPassword = document.getElementById('accountConfirmPasswordInput')?.value || '';
+    if (newPassword !== confirmPassword) {
+      return showToast('Passwords do not match.', true);
+    }
+    try {
+      submitButton.disabled = true;
+      if (mode === 'change') {
+        await request('/api/account/change-password', {
+          method: 'POST',
+          body: JSON.stringify({
+            currentPassword: document.getElementById('accountCurrentPasswordInput')?.value || '',
+            newPassword,
+            confirmPassword
+          })
+        });
+        showToast('Password changed. Other sessions were revoked.');
+      } else {
+        const result = await request('/api/account/set-password', {
+          method: 'POST',
+          body: JSON.stringify({ password: newPassword, confirmPassword })
+        });
+        if (result?.user) {
+          state.user = result.user;
+          localStorage.setItem('user', JSON.stringify(result.user));
+          renderSessionChrome();
+        }
+        showToast('Password set. Email/password sign-in is now enabled.');
+      }
+      closeAccountSecurityModal();
+      await refreshAccountSecurity();
+      await renderSettingsPage();
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+    return;
+  }
+
+  if (event.target.id === 'accountDeleteRequestForm') {
+    event.preventDefault();
+    const form = event.target;
+    const submitButton = form.querySelector('button[type="submit"]');
+    const security = state.accountSecurity?.data || {};
+    const hasPassword = Boolean(security.password?.hasPassword ?? state.user?.hasPassword);
+    try {
+      submitButton.disabled = true;
+      const googleIdToken = hasPassword ? '' : await loadGoogleIdentityToken();
+      await request('/api/account/delete/request', {
+        method: 'POST',
+        body: JSON.stringify({
+          currentPassword: document.getElementById('accountDeletePasswordInput')?.value || '',
+          googleIdToken
+        })
+      });
+      showToast('Deletion OTP sent to your email.');
+      showAccountDeleteModal('confirm');
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+    return;
+  }
+
+  if (event.target.id === 'accountDeleteConfirmForm') {
+    event.preventDefault();
+    const form = event.target;
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (!document.getElementById('accountDeleteFinalInput')?.checked) {
+      return showToast('Confirm that account deletion cannot be undone.', true);
+    }
+    try {
+      submitButton.disabled = true;
+      await request('/api/account/delete/confirm', {
+        method: 'POST',
+        body: JSON.stringify({
+          otp: document.getElementById('accountDeleteOtpInput')?.value.trim() || '',
+          confirmation: document.getElementById('accountDeleteConfirmationInput')?.value.trim() || ''
+        })
+      });
+      closeAccountSecurityModal();
+      clearSession();
+      navigate('login');
+      await renderRoute();
+      showToast('Account deleted.');
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
   }
 });
 
@@ -9064,6 +9892,14 @@ const exposeLazyRouteShellBindings = () => {
     LECTURE_PROGRESS_MILESTONES: { configurable: true, get: () => LECTURE_PROGRESS_MILESTONES },
     calculateLectureLearningProgress: { configurable: true, get: () => calculateLectureLearningProgress },
     calculateWorkspaceLearningProgress: { configurable: true, get: () => calculateWorkspaceLearningProgress },
+    taskId: { configurable: true, get: () => taskId },
+    normalizeTask: { configurable: true, get: () => normalizeTask },
+    workspaceTaskList: { configurable: true, get: () => workspaceTaskList },
+    syncLegacyTaskViews: { configurable: true, get: () => syncLegacyTaskViews },
+    setWorkspaceTasks: { configurable: true, get: () => setWorkspaceTasks },
+    upsertTaskInStore: { configurable: true, get: () => upsertTaskInStore },
+    removeTaskFromStore: { configurable: true, get: () => removeTaskFromStore },
+    selectedDocumentTasks: { configurable: true, get: () => selectedDocumentTasks },
     markLectureMilestone: { configurable: true, get: () => markLectureMilestone },
     refreshLectureProgress: { configurable: true, get: () => refreshLectureProgress },
     currentRoute: { configurable: true, get: () => currentRoute },
@@ -9164,6 +10000,7 @@ const exposeLazyRouteShellBindings = () => {
     renderTaskCardHtml: { configurable: true, get: () => renderTaskCardHtml },
     showAddTaskModal: { configurable: true, get: () => showAddTaskModal },
     showEditTaskModal: { configurable: true, get: () => showEditTaskModal },
+    renderTasksBoard: { configurable: true, get: () => renderTasksBoard },
     renderTasksPage: { configurable: true, get: () => renderTasksPage },
     renderMembersPage: { configurable: true, get: () => renderMembersPage },
     renderSettingsContent: { configurable: true, get: () => renderSettingsContent },

@@ -255,11 +255,11 @@ export const renderMembersPage = async () => {
     
     if (app().state.demoMode) {
       if (userId === 'demo-user-priya') {
-        documentId = 'demo-doc-ml-guide';
-        documentTitle = 'ML Study Guide';
+        documentId = 'demo-doc-os-deadlocks';
+        documentTitle = 'Lecture 5: Deadlocks';
       } else if (userId === 'demo-user-rohan') {
-        documentId = 'demo-doc-ds-lecture';
-        documentTitle = 'Lecture Notes';
+        documentId = 'demo-doc-os-scheduling';
+        documentTitle = 'Lecture 4: Process Scheduling';
       }
     } else {
       const pres = app().state.presence.find(u => String(u.userId) === userId);
@@ -336,8 +336,8 @@ export const renderMembersPage = async () => {
       </div>
 
       <div class="live-activity-container">
-        <h3>Live Activity</h3>
-        <p class="muted-copy" style="margin-top: 4px; margin-bottom: 12px;">See what members are doing right now.</p>
+        <h3>Current Activity</h3>
+        <p class="muted-copy" style="margin-top: 4px; margin-bottom: 12px;">See where members are working in this workspace.</p>
         <div class="live-activity-grid">
           ${activeSessions.map(session => {
             const initials = app().getInitials(session.displayName);
@@ -354,12 +354,12 @@ export const renderMembersPage = async () => {
                     ${session.documentTitle ? `Editing <em>${app().escapeHtml(session.documentTitle)}</em>` : app().escapeHtml(session.activity)}
                   </div>
                 </div>
-                <span class="live-activity-time">Live</span>
+                <span class="live-activity-time">Now</span>
               </div>
             `;
           }).join('') || `
             <div style="grid-column: 1 / -1; padding: 24px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius-lg); color: var(--muted); font-size: 13px;">
-              No live activity right now.
+              No current activity right now.
             </div>
           `}
         </div>

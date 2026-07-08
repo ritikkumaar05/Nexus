@@ -9,6 +9,7 @@ const {
   canViewWorkspace
 } = require('../utils/permissions');
 const { writeAuditLog } = require('../utils/audit');
+const LearningMemoryService = require('../services/LearningMemoryService');
 
 const VALID_STATUSES = new Set(['todo', 'in_progress', 'done']);
 const VALID_PRIORITIES = new Set(['low', 'medium', 'high']);
@@ -145,6 +146,11 @@ router.post('/', async (req, res) => {
       targetId: task._id,
       metadata: { documentId }
     });
+    LearningMemoryService.safeRecord(() => LearningMemoryService.recordTask({
+      userId: req.user.id,
+      task,
+      action: 'document_task.created'
+    }));
 
     res.status(201).json(cleanTask(task));
   } catch (err) {
@@ -183,6 +189,11 @@ router.patch('/:taskId', async (req, res) => {
       targetId: task._id,
       metadata: { documentId }
     });
+    LearningMemoryService.safeRecord(() => LearningMemoryService.recordTask({
+      userId: req.user.id,
+      task,
+      action: 'document_task.updated'
+    }));
 
     res.json(cleanTask(task));
   } catch (err) {

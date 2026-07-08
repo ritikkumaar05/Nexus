@@ -886,21 +886,21 @@ export const handleChatAction = async (action) => {
     if (state.demoMode) {
       window.setTimeout(() => {
         const topics = messages.map(m => m.content).filter(Boolean);
-        const isMLTopic = topics.some(t => t.toLowerCase().includes('ml') || t.toLowerCase().includes('study') || t.toLowerCase().includes('model'));
+        const isOsTopic = topics.some(t => /deadlock|scheduling|process|banker|memory|os|study/i.test(t || ''));
         let summaryHtml = '';
-        if (isMLTopic) {
+        if (isOsTopic) {
           summaryHtml = `
-            <p>✦ Here is the AI Chat Summary for <strong>#${escapeHtml(activeChatChannel().name || 'general')}</strong>:</p>
+            <p>✦ Here is the Nexus Mentor summary for <strong>#${escapeHtml(activeChatChannel().name || 'general')}</strong>:</p>
             <ul>
-              <li><strong>Focus:</strong> ML Study Guide and prep.</li>
-              <li><strong>Discussion:</strong> Teammates are coordinating document edits and tasks.</li>
-              <li><strong>Action Item:</strong> Complete the ML document review.</li>
+              <li><strong>Focus:</strong> Operating Systems revision, especially Deadlocks and Scheduling.</li>
+              <li><strong>Discussion:</strong> Teammates are coordinating lecture review and unresolved doubts.</li>
+              <li><strong>Next step:</strong> Review Banker algorithm, then answer the Deadlocks quiz.</li>
             </ul>
           `;
         } else {
           const recent = messages.slice(-4).map(m => `"${escapeHtml(m.content?.substring(0, 40))}${m.content?.length > 40 ? '...' : ''}"`).join(', ');
           summaryHtml = `
-            <p>✦ Here is the AI Chat Summary for <strong>#${escapeHtml(activeChatChannel().name || 'general')}</strong>:</p>
+            <p>✦ Here is the Nexus Mentor summary for <strong>#${escapeHtml(activeChatChannel().name || 'general')}</strong>:</p>
             <ul>
               <li><strong>Discussion Point:</strong> General coordination in the workspace.</li>
               <li><strong>Recent topics:</strong> ${recent || 'No text content found.'}</li>

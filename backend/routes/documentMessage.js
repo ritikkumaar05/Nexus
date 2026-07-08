@@ -9,6 +9,7 @@ const {
   canViewWorkspace
 } = require('../utils/permissions');
 const { writeAuditLog } = require('../utils/audit');
+const LearningMemoryService = require('../services/LearningMemoryService');
 
 const MAX_MESSAGE_CHARS = 4000;
 const MAX_LINKED_TEXT_CHARS = 1000;
@@ -162,6 +163,13 @@ router.post('/', async (req, res) => {
       targetId: message._id,
       metadata: { documentId, parentMessageId }
     });
+    if (!parentMessageId) {
+      LearningMemoryService.safeRecord(() => LearningMemoryService.recordDoubt({
+        userId: req.user.id,
+        message,
+        action: 'document_doubt.created'
+      }));
+    }
 
     res.status(201).json(cleanMessage(message));
   } catch (err) {
@@ -222,6 +230,13 @@ router.patch('/:messageId', async (req, res) => {
       targetId: message._id,
       metadata: { documentId }
     });
+    if (!message.parentMessage) {
+      LearningMemoryService.safeRecord(() => LearningMemoryService.recordDoubt({
+        userId: req.user.id,
+        message,
+        action: message.status === 'resolved' ? 'document_doubt.resolved' : 'document_doubt.updated'
+      }));
+    }
 
     res.json(cleanMessage(message));
   } catch (err) {

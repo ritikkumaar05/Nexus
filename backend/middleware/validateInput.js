@@ -38,8 +38,9 @@ const objectIdRequired = z
  */
 const emailSchema = z
   .string()
+  .trim()
+  .toLowerCase()
   .email('Invalid email format')
-  .transform((val) => val.toLowerCase().trim());
 
 /**
  * Username validation
@@ -58,6 +59,10 @@ const passwordSchema = z
   .string()
   .min(VALIDATION.PASSWORD_MIN_LENGTH, `Password must be at least ${VALIDATION.PASSWORD_MIN_LENGTH} characters`)
   .max(128, 'Password must not exceed 128 characters');
+
+const emailOtpSchema = z
+  .string()
+  .regex(/^\d{6}$/, 'OTP must be a 6-digit code');
 
 /**
  * Workspace name validation
@@ -194,6 +199,51 @@ const schemas = {
   login: z.object({
     email: emailSchema,
     password: z.string()
+  }),
+
+  verifyEmailOtp: z.object({
+    email: emailSchema,
+    otp: emailOtpSchema
+  }),
+
+  resendVerification: z.object({
+    email: emailSchema
+  }),
+
+  forgotPassword: z.object({
+    email: emailSchema
+  }),
+
+  resetPassword: z.object({
+    token: z.string().min(1, 'Reset link is required'),
+    password: passwordSchema
+  }),
+
+  setPassword: z.object({
+    password: passwordSchema,
+    confirmPassword: passwordSchema.optional()
+  }).refine(
+    (data) => !data.confirmPassword || data.password === data.confirmPassword,
+    { message: 'Passwords do not match', path: ['confirmPassword'] }
+  ),
+
+  changePassword: z.object({
+    currentPassword: z.string().min(1, 'Current password is required'),
+    newPassword: passwordSchema,
+    confirmPassword: passwordSchema.optional()
+  }).refine(
+    (data) => !data.confirmPassword || data.newPassword === data.confirmPassword,
+    { message: 'Passwords do not match', path: ['confirmPassword'] }
+  ),
+
+  requestAccountDelete: z.object({
+    currentPassword: z.string().optional(),
+    googleIdToken: z.string().optional()
+  }),
+
+  confirmAccountDelete: z.object({
+    otp: emailOtpSchema,
+    confirmation: z.string().min(1, 'Confirmation text is required')
   }),
 
   refresh: z.object({

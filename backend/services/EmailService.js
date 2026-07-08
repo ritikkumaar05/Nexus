@@ -25,22 +25,27 @@ const sendViaHttpProvider = async ({ to, subject, text, html }) => {
         : {})
     },
     body: JSON.stringify({
-      from: process.env.EMAIL_FROM || 'Nexus <no-reply@nexus.local>',
-      to,
-      subject,
-      text,
-      html
-    })
+  from: process.env.EMAIL_FROM,
+  to: [to],
+  subject,
+  html,
+  text
+})
+
+
   });
 
   if (!response.ok) {
-    throw new Error(`Email provider rejected message with ${response.status}`);
-  }
+  const error = await response.text();
+  throw new Error(
+    `Resend error ${response.status}: ${error}`
+  );
+}
 
   return true;
 };
 
-const logDevelopmentEmail = ({ to, subject, text }) => {
+const logDevelopmentEmail = ({ to, subject }) => {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('EMAIL_PROVIDER_URL is required to send email in production');
   }
@@ -50,34 +55,33 @@ const logDevelopmentEmail = ({ to, subject, text }) => {
     message: 'Development email generated',
     to,
     subject,
-    text
+    note: 'Email body is intentionally redacted to avoid logging sensitive verification data.'
   }));
 };
 
 const sendEmail = async (message) => {
   const sent = await sendViaHttpProvider(message);
   if (!sent) logDevelopmentEmail(message);
+  return sent;
 };
 
-const sendVerificationEmail = async ({ user, token }) => {
-  const verificationUrl = buildHashUrl('verify-email', { token });
-  await sendEmail({
+const sendVerificationOtpEmail = async ({ user, otp, expiresInMinutes = 10 }) => {
+  return sendEmail({
     to: user.email,
-    subject: 'Verify your Nexus email',
-    text: `Welcome to Nexus. Verify your email to finish setup: ${verificationUrl}`,
+    subject: 'Your Nexus verification OTP',
+    text: `Your Nexus email verification OTP is ${otp}. It expires in ${expiresInMinutes} minutes. If you did not request this, ignore this email.`,
     html: `
       <p>Welcome to Nexus.</p>
-      <p>Verify your email to finish setup:</p>
-      <p><a href="${verificationUrl}">Verify email</a></p>
-      <p>This link expires soon. If it expires, request a new one from the sign-in page.</p>
+      <p>Your email verification OTP is:</p>
+      <p style="font-size: 24px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
+      <p>This OTP expires in ${expiresInMinutes} minutes. If you did not request this, you can ignore this email.</p>
     `
   });
-  return verificationUrl;
 };
 
 const sendPasswordResetEmail = async ({ user, token }) => {
   const resetUrl = buildHashUrl('reset-password', { token });
-  await sendEmail({
+  const delivered = await sendEmail({
     to: user.email,
     subject: 'Reset your Nexus password',
     text: `Reset your Nexus password here: ${resetUrl}`,
@@ -87,11 +91,38 @@ const sendPasswordResetEmail = async ({ user, token }) => {
       <p>If you did not request this, you can ignore this email.</p>
     `
   });
-  return resetUrl;
+  return { delivered };
+};
+
+const sendPasswordChangedEmail = async ({ user }) => {
+  return sendEmail({
+    to: user.email,
+    subject: 'Your Nexus password was changed',
+    text: 'Your Nexus password was changed. If this was not you, reset your password immediately and contact support.',
+    html: `
+      <p>Your Nexus password was changed.</p>
+      <p>If this was not you, reset your password immediately and contact support.</p>
+    `
+  });
+};
+
+const sendAccountDeleteOtpEmail = async ({ user, otp, expiresInMinutes = 10 }) => {
+  return sendEmail({
+    to: user.email,
+    subject: 'Confirm Nexus account deletion',
+    text: `Your Nexus account deletion code is ${otp}. It expires in ${expiresInMinutes} minutes. If you did not request this, secure your account immediately.`,
+    html: `
+      <p>Your Nexus account deletion code is:</p>
+      <p style="font-size: 24px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
+      <p>This code expires in ${expiresInMinutes} minutes. If you did not request this, secure your account immediately.</p>
+    `
+  });
 };
 
 module.exports = {
   buildHashUrl,
+  sendAccountDeleteOtpEmail,
+  sendPasswordChangedEmail,
   sendPasswordResetEmail,
-  sendVerificationEmail
+  sendVerificationOtpEmail
 };
