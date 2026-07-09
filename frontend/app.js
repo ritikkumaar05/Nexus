@@ -13,6 +13,7 @@ import {
   state,
   upsertDocument
 } from './state/store.js';
+import { uiState } from './state/uiState.js';
 import {
   socketState,
   loadYjs,
@@ -120,15 +121,6 @@ let settingsDiscussionNotifications = false;
 let settingsMentionNotifications = false;
 let settingsInviteNotifications = false;
 let settingsSaveInProgress = false;
-
-let selectedCommandIndex = 0;
-let threadFilterTab = 'all';
-let threadSearchQuery = '';
-let taskSearchQuery = '';
-let taskFilterTab = 'all';
-let taskSortField = 'priority';
-let taskViewMode = 'board';
-let activeTaskMoreMenuId = '';
 
 const AUTOSAVE_DELAY_MS = 2800;
 const CURSOR_PUBLISH_INTERVAL_MS = 300;
@@ -1311,7 +1303,7 @@ const openCommandPalette = () => {
   els.commandPalette.classList.remove('hidden');
   syncOverlayScrollLock();
   els.commandInput.value = '';
-  selectedCommandIndex = 0;
+  uiState.selectedCommandIndex = 0;
   renderCommandResults();
   window.setTimeout(() => els.commandInput.focus(), 0);
 };
@@ -1357,11 +1349,11 @@ const renderCommandResults = () => {
 
   const items = [...docMatches, ...channelMatches, ...actions];
   
-  if (selectedCommandIndex >= items.length) {
-    selectedCommandIndex = 0;
+  if (uiState.selectedCommandIndex >= items.length) {
+    uiState.selectedCommandIndex = 0;
   }
-  if (selectedCommandIndex < 0) {
-    selectedCommandIndex = Math.max(0, items.length - 1);
+  if (uiState.selectedCommandIndex < 0) {
+    uiState.selectedCommandIndex = Math.max(0, items.length - 1);
   }
 
   if (items.length === 0) {
@@ -1398,7 +1390,7 @@ const renderCommandResults = () => {
       lastGroup = groupName;
     }
 
-    const isSelected = index === selectedCommandIndex;
+    const isSelected = index === uiState.selectedCommandIndex;
     const selectedClass = isSelected ? 'selected' : '';
     
     let iconSvg = '';
@@ -3249,11 +3241,11 @@ const getFilteredWorkspaceThreads = () => {
   let list = state.workspaceThreads || [];
 
   // 1. Filter by tab
-  if (threadFilterTab === 'unresolved') {
+  if (uiState.threadFilterTab === 'unresolved') {
     list = list.filter(t => t.status !== 'resolved');
-  } else if (threadFilterTab === 'resolved') {
+  } else if (uiState.threadFilterTab === 'resolved') {
     list = list.filter(t => t.status === 'resolved');
-  } else if (threadFilterTab === 'mine') {
+  } else if (uiState.threadFilterTab === 'mine') {
     const currentUserId = state.user?.id || state.user?._id;
     list = list.filter(t => {
       const senderId = t.sender?._id || t.sender;
@@ -3262,8 +3254,8 @@ const getFilteredWorkspaceThreads = () => {
   }
 
   // 2. Filter by search query
-  if (threadSearchQuery.trim()) {
-    const q = threadSearchQuery.toLowerCase().trim();
+  if (uiState.threadSearchQuery.trim()) {
+    const q = uiState.threadSearchQuery.toLowerCase().trim();
     list = list.filter(t => {
       const titleMatch = (t.body || '').toLowerCase().includes(q);
       const docMatch = (t.documentTitle || '').toLowerCase().includes(q);
@@ -6216,7 +6208,7 @@ document.addEventListener('click', async (event) => {
 });
 
 els.commandInput.addEventListener('input', () => {
-  selectedCommandIndex = 0;
+  uiState.selectedCommandIndex = 0;
   renderCommandResults();
 });
 
@@ -6247,13 +6239,13 @@ els.commandInput.addEventListener('keydown', async (event) => {
   if (event.key === 'ArrowDown') {
     event.preventDefault();
     if (totalLength > 0) {
-      selectedCommandIndex = (selectedCommandIndex + 1) % totalLength;
+      uiState.selectedCommandIndex = (uiState.selectedCommandIndex + 1) % totalLength;
       renderCommandResults();
     }
   } else if (event.key === 'ArrowUp') {
     event.preventDefault();
     if (totalLength > 0) {
-      selectedCommandIndex = (selectedCommandIndex - 1 + totalLength) % totalLength;
+      uiState.selectedCommandIndex = (uiState.selectedCommandIndex - 1 + totalLength) % totalLength;
       renderCommandResults();
     }
   } else if (event.key === 'Enter') {
@@ -6269,11 +6261,11 @@ els.commandResults.addEventListener('mouseover', (event) => {
   const item = event.target.closest('.command-item');
   if (item && item.dataset.index !== undefined) {
     const idx = parseInt(item.dataset.index, 10);
-    if (idx !== selectedCommandIndex) {
-      selectedCommandIndex = idx;
+    if (idx !== uiState.selectedCommandIndex) {
+      uiState.selectedCommandIndex = idx;
       const activeItems = els.commandResults.querySelectorAll('.command-item');
       activeItems.forEach((el, index) => {
-        el.classList.toggle('selected', index === selectedCommandIndex);
+        el.classList.toggle('selected', index === uiState.selectedCommandIndex);
       });
     }
   }
@@ -6349,8 +6341,8 @@ document.addEventListener('keydown', async (event) => {
     closeCommandPalette();
     closeToolPanel();
     document.body.classList.remove('sidebar-open');
-    if (activeTaskMoreMenuId) {
-      activeTaskMoreMenuId = '';
+    if (uiState.activeTaskMoreMenuId) {
+      uiState.activeTaskMoreMenuId = '';
       renderTasksBoard();
     }
   }
@@ -7128,7 +7120,7 @@ els.routePage.addEventListener('change', async (event) => {
   }
 
   if (event.target.id === 'tasksSortSelect') {
-    taskSortField = event.target.value;
+    uiState.taskSortField = event.target.value;
     renderTasksBoard();
     return;
   }
@@ -7466,12 +7458,12 @@ els.routePage.addEventListener('input', (event) => {
     return;
   }
   if (event.target.id === 'tasksSearchInput') {
-    taskSearchQuery = event.target.value;
+    uiState.taskSearchQuery = event.target.value;
     renderTasksBoard();
     return;
   }
   if (event.target.id === 'threadsSearchInput') {
-    threadSearchQuery = event.target.value;
+    uiState.threadSearchQuery = event.target.value;
     renderThreadsPage();
     return;
   }
@@ -7994,7 +7986,7 @@ els.routePage.addEventListener('click', async (event) => {
   const tasksFilterChip = event.target.closest('[data-tasks-filter-tab]');
   if (tasksFilterChip) {
     event.preventDefault();
-    taskFilterTab = tasksFilterChip.dataset.tasksFilterTab;
+    uiState.taskFilterTab = tasksFilterChip.dataset.tasksFilterTab;
     await renderTasksBoard();
     return;
   }
@@ -8002,7 +7994,7 @@ els.routePage.addEventListener('click', async (event) => {
   const tasksClearSearch = event.target.closest('#tasksClearSearchBtn');
   if (tasksClearSearch) {
     event.preventDefault();
-    taskSearchQuery = '';
+    uiState.taskSearchQuery = '';
     await renderTasksBoard();
     return;
   }
@@ -8010,7 +8002,7 @@ els.routePage.addEventListener('click', async (event) => {
   const tasksToggleBoard = event.target.closest('#tasksViewToggleBoardBtn');
   if (tasksToggleBoard) {
     event.preventDefault();
-    taskViewMode = 'board';
+    uiState.taskViewMode = 'board';
     await renderTasksBoard();
     return;
   }
@@ -8018,7 +8010,7 @@ els.routePage.addEventListener('click', async (event) => {
   const tasksToggleList = event.target.closest('#tasksViewToggleListBtn');
   if (tasksToggleList) {
     event.preventDefault();
-    taskViewMode = 'list';
+    uiState.taskViewMode = 'list';
     await renderTasksBoard();
     return;
   }
@@ -8027,7 +8019,7 @@ els.routePage.addEventListener('click', async (event) => {
   if (taskMenuBtn) {
     event.stopPropagation();
     const taskId = taskMenuBtn.dataset.toggleTaskMenu;
-    activeTaskMoreMenuId = activeTaskMoreMenuId === taskId ? '' : taskId;
+    uiState.activeTaskMoreMenuId = uiState.activeTaskMoreMenuId === taskId ? '' : taskId;
     await renderTasksBoard();
     return;
   }
@@ -8036,7 +8028,7 @@ els.routePage.addEventListener('click', async (event) => {
   if (taskEditBtn) {
     event.preventDefault();
     const taskId = taskEditBtn.dataset.editTaskId;
-    activeTaskMoreMenuId = '';
+    uiState.activeTaskMoreMenuId = '';
     await showEditTaskModal(taskId);
     return;
   }
@@ -8050,7 +8042,7 @@ els.routePage.addEventListener('click', async (event) => {
     }).catch(() => {
       showToast('Failed to copy.');
     });
-    activeTaskMoreMenuId = '';
+    uiState.activeTaskMoreMenuId = '';
     await renderTasksBoard();
     return;
   }
@@ -8075,7 +8067,7 @@ els.routePage.addEventListener('click', async (event) => {
       const docId = task.documentId || task.document;
       const previousTask = { ...task };
       removeTaskFromStore(taskId);
-      activeTaskMoreMenuId = '';
+      uiState.activeTaskMoreMenuId = '';
       await renderTasksBoard();
       if (state.demoMode) {
         showToast('Demo task deleted locally');
@@ -8106,7 +8098,7 @@ els.routePage.addEventListener('click', async (event) => {
   const threadsTabBtn = event.target.closest('[data-threads-tab]');
   if (threadsTabBtn) {
     event.preventDefault();
-    threadFilterTab = threadsTabBtn.dataset.threadsTab;
+    uiState.threadFilterTab = threadsTabBtn.dataset.threadsTab;
     renderThreadsPage();
     return;
   }
@@ -8114,7 +8106,7 @@ els.routePage.addEventListener('click', async (event) => {
   const clearThreadsSearch = event.target.closest('#threadsClearSearchBtn');
   if (clearThreadsSearch) {
     event.preventDefault();
-    threadSearchQuery = '';
+    uiState.threadSearchQuery = '';
     renderThreadsPage();
     return;
   }
@@ -8621,11 +8613,11 @@ if (els.emptyActionPaste) {
 els.mobileSidebarOpenBtn.addEventListener('click', () => document.body.classList.add('sidebar-open'));
 els.mobileSidebarCloseBtn.addEventListener('click', () => document.body.classList.remove('sidebar-open'));
 document.addEventListener('click', (event) => {
-  if (activeTaskMoreMenuId) {
+  if (uiState.activeTaskMoreMenuId) {
     const isMenuToggle = event.target.closest('[data-toggle-task-menu]');
     const isMenuCard = event.target.closest('.chat-dropdown-menu');
     if (!isMenuToggle && !isMenuCard) {
-      activeTaskMoreMenuId = '';
+      uiState.activeTaskMoreMenuId = '';
       renderTasksBoard();
     }
   }
@@ -9777,14 +9769,14 @@ const exposeLazyRouteShellBindings = () => {
     settingsMentionNotifications: { configurable: true, get: () => settingsMentionNotifications, set: (value) => { settingsMentionNotifications = value; } },
     settingsInviteNotifications: { configurable: true, get: () => settingsInviteNotifications, set: (value) => { settingsInviteNotifications = value; } },
     settingsSaveInProgress: { configurable: true, get: () => settingsSaveInProgress, set: (value) => { settingsSaveInProgress = value; } },
-    selectedCommandIndex: { configurable: true, get: () => selectedCommandIndex, set: (value) => { selectedCommandIndex = value; } },
-    threadFilterTab: { configurable: true, get: () => threadFilterTab, set: (value) => { threadFilterTab = value; } },
-    threadSearchQuery: { configurable: true, get: () => threadSearchQuery, set: (value) => { threadSearchQuery = value; } },
-    taskSearchQuery: { configurable: true, get: () => taskSearchQuery, set: (value) => { taskSearchQuery = value; } },
-    taskFilterTab: { configurable: true, get: () => taskFilterTab, set: (value) => { taskFilterTab = value; } },
-    taskSortField: { configurable: true, get: () => taskSortField, set: (value) => { taskSortField = value; } },
-    taskViewMode: { configurable: true, get: () => taskViewMode, set: (value) => { taskViewMode = value; } },
-    activeTaskMoreMenuId: { configurable: true, get: () => activeTaskMoreMenuId, set: (value) => { activeTaskMoreMenuId = value; } },
+    selectedCommandIndex: { configurable: true, get: () => uiState.selectedCommandIndex, set: (value) => { uiState.selectedCommandIndex = value; } },
+    threadFilterTab: { configurable: true, get: () => uiState.threadFilterTab, set: (value) => { uiState.threadFilterTab = value; } },
+    threadSearchQuery: { configurable: true, get: () => uiState.threadSearchQuery, set: (value) => { uiState.threadSearchQuery = value; } },
+    taskSearchQuery: { configurable: true, get: () => uiState.taskSearchQuery, set: (value) => { uiState.taskSearchQuery = value; } },
+    taskFilterTab: { configurable: true, get: () => uiState.taskFilterTab, set: (value) => { uiState.taskFilterTab = value; } },
+    taskSortField: { configurable: true, get: () => uiState.taskSortField, set: (value) => { uiState.taskSortField = value; } },
+    taskViewMode: { configurable: true, get: () => uiState.taskViewMode, set: (value) => { uiState.taskViewMode = value; } },
+    activeTaskMoreMenuId: { configurable: true, get: () => uiState.activeTaskMoreMenuId, set: (value) => { uiState.activeTaskMoreMenuId = value; } },
     AUTOSAVE_DELAY_MS: { configurable: true, get: () => AUTOSAVE_DELAY_MS },
     CURSOR_PUBLISH_INTERVAL_MS: { configurable: true, get: () => CURSOR_PUBLISH_INTERVAL_MS },
     TYPING_PUBLISH_INTERVAL_MS: { configurable: true, get: () => TYPING_PUBLISH_INTERVAL_MS },
