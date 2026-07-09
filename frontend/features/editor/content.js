@@ -67,3 +67,16 @@ export const htmlToPlainText = (html = '') => {
   const parsed = new DOMParser().parseFromString(html, 'text/html');
   return parsed.body?.textContent || '';
 };
+
+export const getEditorStudyStats = ({
+  text = '',
+  scrollHeight = 0,
+  clientHeight = 0,
+  scrollTop = 0
+} = {}) => {
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const readTime = Math.max(1, Math.ceil(words / 220));
+  const maxScroll = Math.max(1, (scrollHeight || 0) - (clientHeight || 0));
+  const progress = !text.trim() ? 0 : Math.min(100, Math.max(0, Math.round(((scrollTop || 0) / maxScroll) * 100)));
+  return { words, readTime, progress };
+};

@@ -60,6 +60,7 @@ import {
   acceptActiveInvite
 } from './services/invites.js';
 import {
+  getEditorStudyStats,
   htmlToPlainText,
   sanitizeEditorHtml
 } from './features/editor/content.js';
@@ -1791,11 +1792,13 @@ const insertEditorInline = (text) => {
 
 const updateEditorStudyStats = () => {
   const text = getEditorText();
-  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-  const readTime = Math.max(1, Math.ceil(words / 220));
   const scrollContainer = document.querySelector('.editor-pane') || els.documentEditor;
-  const maxScroll = Math.max(1, (scrollContainer?.scrollHeight || 0) - (scrollContainer?.clientHeight || 0));
-  const progress = !text.trim() ? 0 : Math.min(100, Math.max(0, Math.round(((scrollContainer?.scrollTop || 0) / maxScroll) * 100)));
+  const { words, readTime, progress } = getEditorStudyStats({
+    text,
+    scrollHeight: scrollContainer?.scrollHeight || 0,
+    clientHeight: scrollContainer?.clientHeight || 0,
+    scrollTop: scrollContainer?.scrollTop || 0
+  });
   if (els.editorWordCount) els.editorWordCount.textContent = `${words} ${words === 1 ? 'word' : 'words'}`;
   if (els.editorReadingTime) els.editorReadingTime.textContent = `${readTime} min read`;
   if (els.editorReadingProgress) els.editorReadingProgress.textContent = `${progress}% read`;
