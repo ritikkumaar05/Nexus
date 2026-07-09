@@ -65,6 +65,11 @@ import {
   sanitizeEditorHtml
 } from './features/editor/content.js';
 import {
+  focusEditorTextRange,
+  getEditorSelectionRange,
+  getSelectedTextFromEditor
+} from './features/editor/selection.js';
+import {
   escapeHtml,
   formatChatTime,
   formatRelativeTime,
@@ -1595,31 +1600,11 @@ const insertStarterOutline = () => {
 };
 
 const getEditorSelection = () => {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0 || !els.documentEditor.contains(selection.anchorNode)) {
-    const length = getEditorText().length;
-    return { start: length, end: length };
-  }
-
-  const range = selection.getRangeAt(0);
-  const startRange = range.cloneRange();
-  startRange.selectNodeContents(els.documentEditor);
-  startRange.setEnd(range.startContainer, range.startOffset);
-
-  const endRange = range.cloneRange();
-  endRange.selectNodeContents(els.documentEditor);
-  endRange.setEnd(range.endContainer, range.endOffset);
-
-  return {
-    start: startRange.toString().length,
-    end: endRange.toString().length
-  };
+  return getEditorSelectionRange(els.documentEditor, getEditorText().length);
 };
 
 const getSelectedEditorText = () => {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0 || !els.documentEditor.contains(selection.anchorNode)) return '';
-  return selection.toString().trim();
+  return getSelectedTextFromEditor(els.documentEditor);
 };
 
 const selectedAiSource = () => document.querySelector('input[name="aiSource"]:checked')?.value || 'document';
@@ -1655,36 +1640,7 @@ const editorSelectionRange = () => {
 };
 
 const focusEditorRange = (start, end = start) => {
-  if (!els.documentEditor) return;
-  els.documentEditor.focus();
-  const range = document.createRange();
-  const walker = document.createTreeWalker(els.documentEditor, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode();
-  let consumed = 0;
-  let startNode = null;
-  let endNode = null;
-  let startOffset = 0;
-  let endOffset = 0;
-  while (node) {
-    const nextConsumed = consumed + node.textContent.length;
-    if (!startNode && start <= nextConsumed) {
-      startNode = node;
-      startOffset = Math.max(0, start - consumed);
-    }
-    if (!endNode && end <= nextConsumed) {
-      endNode = node;
-      endOffset = Math.max(0, end - consumed);
-      break;
-    }
-    consumed = nextConsumed;
-    node = walker.nextNode();
-  }
-  if (!startNode || !endNode) return;
-  range.setStart(startNode, startOffset);
-  range.setEnd(endNode, endOffset);
-  const selection = window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(range);
+  focusEditorTextRange(els.documentEditor, start, end);
 };
 
 const replaceEditorRange = (start, end, replacement, { selectInserted = false } = {}) => {
