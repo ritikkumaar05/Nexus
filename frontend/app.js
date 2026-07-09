@@ -4723,7 +4723,7 @@ const deleteStudyMaterial = async (materialId) => {
     updateLibrarySaveButton();
     showToast('Study material deleted');
   } catch (err) {
-    inviteRequestInFlight = false;
+    inviteState.inviteRequestInFlight = false;
     if (['workspaceInviteCreateBtn', 'inviteMemberBtn'].includes(target.id)) {
       target.disabled = false;
     }
@@ -6321,9 +6321,9 @@ const handleToolPanelClick = async (event) => {
       if (!workspace?._id) return showToast('Select a workspace first', true);
       const email = document.getElementById('inviteEmailInput')?.value.trim();
       const role = document.getElementById('inviteRoleInput')?.value || 'member';
-      if (inviteRequestInFlight) return;
+      if (inviteState.inviteRequestInFlight) return;
 
-      inviteRequestInFlight = true;
+      inviteState.inviteRequestInFlight = true;
       inviteCreateSubmit.disabled = true;
       inviteCreateSubmit.setAttribute('aria-busy', 'true');
       try {
@@ -6339,7 +6339,7 @@ const handleToolPanelClick = async (event) => {
         inviteCreateSubmit.disabled = false;
         inviteCreateSubmit.removeAttribute('aria-busy');
       } finally {
-        inviteRequestInFlight = false;
+        inviteState.inviteRequestInFlight = false;
       }
       return;
     }
@@ -6413,14 +6413,14 @@ const handleToolPanelClick = async (event) => {
       if (!workspace?._id) return showToast('Select a workspace first', true);
       const email = document.getElementById('workspaceInviteEmailInput')?.value.trim();
       const role = document.getElementById('workspaceInviteRoleInput')?.value || 'member';
-      if (inviteRequestInFlight) return;
-      inviteRequestInFlight = true;
+      if (inviteState.inviteRequestInFlight) return;
+      inviteState.inviteRequestInFlight = true;
       target.disabled = true;
       const result = await request(`/api/invites/${workspace._id}`, {
         method: 'POST',
         body: JSON.stringify({ email, role })
       });
-      inviteRequestInFlight = false;
+      inviteState.inviteRequestInFlight = false;
       await renderWorkspaceSettingsPage();
       renderInviteResultTool(result);
       return;
@@ -6579,8 +6579,8 @@ const handleToolPanelClick = async (event) => {
       if (state.demoMode) {
         return showToast('Demo members are examples. Sign up to invite real collaborators.');
       }
-      if (inviteRequestInFlight) return;
-      inviteRequestInFlight = true;
+      if (inviteState.inviteRequestInFlight) return;
+      inviteState.inviteRequestInFlight = true;
       target.disabled = true;
       const result = await request(`/api/invites/${state.selectedWorkspaceId}`, {
         method: 'POST',
@@ -6589,7 +6589,7 @@ const handleToolPanelClick = async (event) => {
           role: document.getElementById('inviteRoleInput').value
         })
       });
-      inviteRequestInFlight = false;
+      inviteState.inviteRequestInFlight = false;
       renderInviteResultTool(result);
       return;
     }
@@ -9170,8 +9170,8 @@ els.routePage.addEventListener('click', async (event) => {
     const email = document.getElementById('inviteEmailInput')?.value.trim();
     const role = document.getElementById('inviteRoleInput')?.value || 'member';
     
-    if (inviteRequestInFlight) return;
-    inviteRequestInFlight = true;
+    if (inviteState.inviteRequestInFlight) return;
+    inviteState.inviteRequestInFlight = true;
     target.disabled = true;
     try {
       const result = await request(`/api/invites/${workspace._id}`, {
@@ -9183,7 +9183,7 @@ els.routePage.addEventListener('click', async (event) => {
     } catch (err) {
       showToast(err.message, true);
     } finally {
-      inviteRequestInFlight = false;
+      inviteState.inviteRequestInFlight = false;
     }
     return;
   }
