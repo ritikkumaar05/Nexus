@@ -70,6 +70,12 @@ import {
   getSelectedTextFromEditor
 } from './features/editor/selection.js';
 import {
+  demoAiResponse,
+  demoRuntime,
+  loadDemoWorkspaceModule,
+  requireDemoWorkspaceModule
+} from './features/demo/runtime.js';
+import {
   escapeHtml,
   formatChatTime,
   formatRelativeTime,
@@ -82,8 +88,6 @@ import {
 const API_BASE = localStorage.getItem('apiBase') || import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 const Y_TEXT_KEY = 'content';
 let request;
-let demoWorkspacePromise = null;
-let demoWorkspaceModule = null;
 
 let autosaveTimer = null;
 let dashboardHydrationTimer = null;
@@ -173,21 +177,6 @@ const focusFirstInvalid = (form) => {
 };
 
 
-
-const loadDemoWorkspaceModule = async () => {
-  if (!demoWorkspacePromise) {
-    demoWorkspacePromise = import('./features/demoWorkspace.js');
-  }
-  demoWorkspaceModule = demoWorkspaceModule || await demoWorkspacePromise;
-  return demoWorkspaceModule;
-};
-
-const requireDemoWorkspaceModule = () => {
-  if (!demoWorkspaceModule) {
-    throw new Error('Demo workspace is still loading. Try again in a moment.');
-  }
-  return demoWorkspaceModule;
-};
 
 const startDocumentOpenProfile = (documentId) => {
   activeDocumentOpenProfile = {
@@ -1235,19 +1224,6 @@ const createDemoDocument = () => {
   loadDemoDocument(doc._id);
   addActivity({ action: 'created lecture', target: doc.title, documentId: doc._id });
   showToast('Demo lecture created locally');
-};
-
-const demoAiResponse = (action) => {
-  const { DEMO_AI_OUTPUTS } = requireDemoWorkspaceModule();
-  const mappedAction = {
-    'extract-tasks': 'exam',
-    expand: 'explain',
-    quiz: 'quiz',
-    flashcards: 'flashcards',
-    'simple-explanation': 'simple-explanation',
-    'important-questions': 'important-questions'
-  }[action] || action;
-  return DEMO_AI_OUTPUTS[mappedAction] || DEMO_AI_OUTPUTS.summarize;
 };
 
 const setRouteChrome = (route) => {
@@ -9613,10 +9589,10 @@ const exposeLazyRouteShellBindings = () => {
     Y_TEXT_KEY: { configurable: true, get: () => Y_TEXT_KEY },
     yjsModulePromise: { configurable: true, get: () => socketState.yjsModulePromise, set: (value) => { socketState.yjsModulePromise = value; } },
     socketClientPromise: { configurable: true, get: () => socketState.socketClientPromise, set: (value) => { socketState.socketClientPromise = value; } },
-    demoWorkspacePromise: { configurable: true, get: () => demoWorkspacePromise, set: (value) => { demoWorkspacePromise = value; } },
+    demoWorkspacePromise: { configurable: true, get: () => demoRuntime.workspacePromise, set: (value) => { demoRuntime.workspacePromise = value; } },
     Y: { configurable: true, get: () => socketState.Y, set: (value) => { socketState.Y = value; } },
     socketIo: { configurable: true, get: () => socketState.socketIo, set: (value) => { socketState.socketIo = value; } },
-    demoWorkspaceModule: { configurable: true, get: () => demoWorkspaceModule, set: (value) => { demoWorkspaceModule = value; } },
+    demoWorkspaceModule: { configurable: true, get: () => demoRuntime.workspaceModule, set: (value) => { demoRuntime.workspaceModule = value; } },
     autosaveTimer: { configurable: true, get: () => autosaveTimer, set: (value) => { autosaveTimer = value; } },
     typingTimer: { configurable: true, get: () => socketState.typingTimer, set: (value) => { socketState.typingTimer = value; } },
     chatTypingTimer: { configurable: true, get: () => socketState.chatTypingTimer, set: (value) => { socketState.chatTypingTimer = value; } },
