@@ -1,6 +1,19 @@
 import { selectedWorkspace, state } from '../state/store.js';
 import { settingsRuntime } from '../features/settings/runtime.js';
 
+let routerRuntime = null;
+
+export const configureRouterRuntime = (runtime) => {
+  routerRuntime = runtime;
+};
+
+const appRoute = () => {
+  if (!routerRuntime) {
+    throw new Error('Router runtime has not been configured.');
+  }
+  return routerRuntime;
+};
+
 export const currentRoute = () => (location.hash.replace(/^#\/?/, '') || ((state.token || state.demoMode) ? 'home' : 'login')).split('?')[0];
 
 export const routeQuery = () => {
@@ -28,13 +41,14 @@ export const renderRoute = async () => {
   const runRouteUpdate = async () => {
     const route = currentRoute();
     routeAtStart = route;
+    const runtime = appRoute();
 
     if (route === 'invite') {
-      return globalThis.renderInvitePage();
+      return runtime.routes.renderInvitePage();
     }
 
     if (state.demoMode && ['login', 'signup'].includes(route)) {
-      globalThis.exitDemoMode();
+      runtime.demo.exitDemoMode();
     }
 
     if (!state.token && !state.demoMode && !['login', 'signup', 'forgot-password', 'reset-password', 'verify-email', 'resend-verification', 'oauth-callback'].includes(route)) {
@@ -47,66 +61,66 @@ export const renderRoute = async () => {
       return false;
     }
 
-    globalThis.render();
+    runtime.shell.render();
 
     if (route === 'login' || route === 'signup') {
-      return globalThis.renderAuthPage(route);
+      return runtime.auth.renderAuthPage(route);
     }
 
     if (route === 'forgot-password' || route === 'reset-password') {
-      return globalThis.renderPasswordRecoveryPage(route);
+      return runtime.auth.renderPasswordRecoveryPage(route);
     }
 
     if (route === 'verify-email' || route === 'resend-verification') {
-      return globalThis.renderEmailVerificationPage(route);
+      return runtime.auth.renderEmailVerificationPage(route);
     }
 
     if (route === 'oauth-callback') {
-      globalThis.renderOAuthCallbackPage();
-      return globalThis.completeOAuthCallback();
+      runtime.auth.renderOAuthCallbackPage();
+      return runtime.auth.completeOAuthCallback();
     }
 
     if (route === 'home') {
-      return globalThis.renderHomePage();
+      return runtime.routes.renderHomePage();
     }
 
     if (route === 'chat') {
-      return globalThis.renderChatPage();
+      return runtime.routes.renderChatPage();
     }
 
     if (route === 'threads') {
-      globalThis.loadWorkspaceThreads({
+      runtime.data.loadWorkspaceThreads({
         limit: state.documents.length || 8,
         clear: !state.workspaceThreads.length
-      }).catch((err) => globalThis.showToast(err.message, true));
-      return globalThis.renderThreadsPage();
+      }).catch((err) => runtime.shell.showToast(err.message, true));
+      return runtime.routes.renderThreadsPage();
     }
 
     if (route === 'tasks') {
-      globalThis.loadDashboardTasks({ limit: state.documents.length }).then(() => {
-        if (currentRoute() === 'tasks') globalThis.renderTasksBoard();
+      runtime.data.loadDashboardTasks({ limit: state.documents.length }).then(() => {
+        if (currentRoute() === 'tasks') runtime.routes.renderTasksBoard();
       });
-      return globalThis.renderTasksPage();
+      return runtime.routes.renderTasksPage();
     }
 
     if (route === 'members') {
       if (!state.demoMode && state.token && !state.workspaces.length) {
-        await globalThis.loadWorkspaces().catch((err) => globalThis.showToast(err.message, true));
+        await runtime.data.loadWorkspaces().catch((err) => runtime.shell.showToast(err.message, true));
       }
-      return globalThis.renderMembersPage();
+      return runtime.routes.renderMembersPage();
     }
 
     if (route === 'settings') {
       settingsRuntime().syncSettingsFormState(selectedWorkspace());
-      return globalThis.renderSettingsPage();
+      return runtime.routes.renderSettingsPage();
     }
 
     if (route === 'workspace-settings') {
-      return globalThis.renderWorkspaceSettingsPage();
+      return runtime.routes.renderWorkspaceSettingsPage();
     }
 
     if (route === 'workspace' || route === 'documents') {
-      return globalThis.renderWorkspacePage();
+      return runtime.routes.renderWorkspacePage();
     }
 
     navigate('home');
@@ -114,7 +128,7 @@ export const renderRoute = async () => {
   };
 
   const completeRouteUpdate = (result) => {
-    globalThis.resolveStartupSurface({
+    appRoute().shell.resolveStartupSurface({
       routeAtStart,
       routeCompleted: result !== false
     });
@@ -138,5 +152,5 @@ export const renderRoute = async () => {
 };
 
 window.addEventListener('hashchange', () => {
-  renderRoute().catch((err) => globalThis.showToast(err.message, true));
+  renderRoute().catch((err) => appRoute().shell.showToast(err.message, true));
 });

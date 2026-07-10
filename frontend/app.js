@@ -1,7 +1,7 @@
 // import './styles/workspace.css';
 import './styles/shared-shell.css';
 import { createApiClient } from './services/api.js';
-import { currentRoute, routeQuery, navigate, renderRoute } from './services/router.js';
+import { configureRouterRuntime, currentRoute, routeQuery, navigate, renderRoute } from './services/router.js';
 import {
   collab,
   documentKey,
@@ -7805,6 +7805,41 @@ els.routePage.addEventListener('submit', async (event) => {
   }
 });
 
+
+configureRouterRuntime({
+  shell: {
+    render,
+    resolveStartupSurface,
+    showToast
+  },
+  auth: {
+    renderAuthPage,
+    renderPasswordRecoveryPage,
+    renderEmailVerificationPage,
+    renderOAuthCallbackPage,
+    completeOAuthCallback
+  },
+  routes: {
+    renderInvitePage,
+    renderHomePage,
+    renderChatPage,
+    renderThreadsPage,
+    renderTasksPage,
+    renderTasksBoard,
+    renderMembersPage,
+    renderSettingsPage,
+    renderWorkspaceSettingsPage,
+    renderWorkspacePage
+  },
+  data: {
+    loadWorkspaceThreads,
+    loadDashboardTasks,
+    loadWorkspaces
+  },
+  demo: {
+    exitDemoMode
+  }
+});
 
 const exposeLazyRouteShellBindings = () => {
   Object.defineProperties(globalThis, {
