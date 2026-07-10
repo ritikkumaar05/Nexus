@@ -265,6 +265,7 @@ export const createThreadPanel = ({
   return {
     bindThreadPanelHandlers,
     filteredThreads,
+    isMine,
     renderMessageFormContext,
     renderThreadList,
     selectedThread,

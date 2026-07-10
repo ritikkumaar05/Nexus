@@ -1793,6 +1793,7 @@ const renderAiEmptyState = (doc = selectedDocument()) => {
 const {
   bindThreadPanelHandlers,
   filteredThreads,
+  isMine,
   renderMessageFormContext,
   renderThreadList,
   selectedThread,
