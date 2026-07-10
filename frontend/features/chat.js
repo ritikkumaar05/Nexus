@@ -1,4 +1,5 @@
 // Lazily loaded route module. Shared shell bindings are exposed by app.js.
+import { searchState } from './chat/runtime.js';
 
 export const renderChatPage = async ({ skipEnsure = false } = {}) => {
   setMainMode('feature');
@@ -572,13 +573,6 @@ export const applyComposerFormat = (formatType) => {
   input.setSelectionRange(newStart, newEnd);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
-
-const searchState = {
-  matches: [],
-  currentIndex: -1,
-  query: ''
-};
-
 
 export const showChatModal = (title, contentHtml) => {
   let modal = document.getElementById('chatOverlayModal');

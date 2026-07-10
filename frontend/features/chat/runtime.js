@@ -1,3 +1,9 @@
+export const searchState = {
+  matches: [],
+  currentIndex: -1,
+  query: ''
+};
+
 export const createChatRuntime = ({
   state,
   els,

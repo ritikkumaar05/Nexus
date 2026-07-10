@@ -71,7 +71,7 @@ import {
 } from './features/editor/selection.js';
 import { createEditorCommands } from './features/editor/commands.js';
 import { createAiStudyOutput } from './features/ai/studyOutput.js';
-import { createChatRuntime } from './features/chat/runtime.js';
+import { createChatRuntime, searchState } from './features/chat/runtime.js';
 import { createChatSession } from './features/chat/session.js';
 import { createTaskPanel } from './features/tasks/panel.js';
 import { createThreadPanel } from './features/threads/panel.js';
