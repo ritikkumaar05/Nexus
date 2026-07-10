@@ -1,4 +1,7 @@
-import { state } from '../state/store.js';
+import { selectedWorkspace, state } from '../state/store.js';
+import { membersRuntime } from '../features/members/runtime.js';
+import { membersState } from '../features/members/state.js';
+import { escapeHtml, getInitials } from '../utils/text.js';
 
 export const modalState = {
   overlayScrollLocked: false,
@@ -39,12 +42,13 @@ export const syncOverlayScrollLock = () => {
 export const showMemberDetailsModal = (member) => {
   const existing = document.getElementById('membersDetailsModal');
   if (existing) existing.remove();
-  const workspace = globalThis.selectedWorkspace();
-  const displayName = globalThis.getMemberDisplayName(member);
+  const memberRuntime = membersRuntime();
+  const workspace = selectedWorkspace();
+  const displayName = memberRuntime.getMemberDisplayName(member);
   const email = member.user?.email || member.email || 'No email';
-  const role = globalThis.displayWorkspaceRole(workspace, member);
-  const isOnline = globalThis.isMemberOnline(member);
-  const activity = globalThis.getMemberActivityText(member);
+  const role = memberRuntime.displayWorkspaceRole(workspace, member);
+  const isOnline = memberRuntime.isMemberOnline(member);
+  const activity = memberRuntime.getMemberActivityText(member);
   const modal = document.createElement('div');
   modal.id = 'membersDetailsModal';
   modal.className = 'members-modal-backdrop';
@@ -52,18 +56,18 @@ export const showMemberDetailsModal = (member) => {
     <div class="members-modal-card" role="dialog" aria-modal="true" aria-label="Member profile">
       <div class="members-modal-header">
         <div class="members-profile-title">
-          <span class="avatar-dot large">${globalThis.escapeHtml(globalThis.getInitials(displayName))}</span>
+          <span class="avatar-dot large">${escapeHtml(getInitials(displayName))}</span>
           <div>
-            <h3>${globalThis.escapeHtml(displayName)}</h3>
-            <p>${globalThis.escapeHtml(email)}</p>
+            <h3>${escapeHtml(displayName)}</h3>
+            <p>${escapeHtml(email)}</p>
           </div>
         </div>
         <button class="members-modal-close" type="button" data-close-members-modal aria-label="Close member profile">×</button>
       </div>
       <div class="members-profile-grid">
-        <div><span>Role</span><strong>${globalThis.escapeHtml(role)}</strong></div>
+        <div><span>Role</span><strong>${escapeHtml(role)}</strong></div>
         <div><span>Status</span><strong>${isOnline ? 'Online' : 'Offline'}</strong></div>
-        <div><span>Current activity</span><strong>${globalThis.escapeHtml(activity)}</strong></div>
+        <div><span>Current activity</span><strong>${escapeHtml(activity)}</strong></div>
       </div>
     </div>
   `;
@@ -73,11 +77,12 @@ export const showMemberDetailsModal = (member) => {
 export const showRemoveMemberModal = (memberId) => {
   const existing = document.getElementById('membersRemoveModal');
   if (existing) existing.remove();
-  const workspace = globalThis.selectedWorkspace();
-  const member = workspace?.members?.find((item) => globalThis.memberUserId(item) === memberId);
+  const memberRuntime = membersRuntime();
+  const workspace = selectedWorkspace();
+  const member = workspace?.members?.find((item) => memberRuntime.memberUserId(item) === memberId);
   if (!member) return;
-  const displayName = globalThis.getMemberDisplayName(member);
-  globalThis.membersRemoveCandidateId = memberId;
+  const displayName = memberRuntime.getMemberDisplayName(member);
+  membersState.removeCandidateId = memberId;
   const modal = document.createElement('div');
   modal.id = 'membersRemoveModal';
   modal.className = 'members-modal-backdrop';
@@ -86,14 +91,14 @@ export const showRemoveMemberModal = (memberId) => {
       <div class="members-modal-header">
         <div>
           <p class="auth-kicker">Remove Member</p>
-          <h3>Remove "${globalThis.escapeHtml(displayName)}"?</h3>
+          <h3>Remove "${escapeHtml(displayName)}"?</h3>
         </div>
         <button class="members-modal-close" type="button" data-close-members-modal aria-label="Close remove member confirmation">×</button>
       </div>
       <p class="members-remove-copy">They will lose access to documents, chat, tasks, and workspace activity.</p>
       <div class="members-modal-actions">
         <button type="button" class="ghost" data-close-members-modal>Cancel</button>
-        <button type="button" class="danger-button" id="confirmRemoveMemberBtn" data-confirm-remove-member="${globalThis.escapeHtml(memberId)}">Remove Member</button>
+        <button type="button" class="danger-button" id="confirmRemoveMemberBtn" data-confirm-remove-member="${escapeHtml(memberId)}">Remove Member</button>
       </div>
     </div>
   `;

@@ -1,3 +1,17 @@
+let activeSettingsRuntime = null;
+
+export const setSettingsRuntime = (runtime) => {
+  activeSettingsRuntime = runtime;
+  return activeSettingsRuntime;
+};
+
+export const settingsRuntime = () => {
+  if (!activeSettingsRuntime) {
+    throw new Error('Settings runtime has not been initialized.');
+  }
+  return activeSettingsRuntime;
+};
+
 export const createSettingsRuntime = ({
   state,
   settingsForm,

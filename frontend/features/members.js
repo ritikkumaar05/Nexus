@@ -1,3 +1,9 @@
+import { state } from '../state/store.js';
+import { currentRoute } from '../services/router.js';
+import { membersRuntime } from './members/runtime.js';
+import { membersState } from './members/state.js';
+import { workspaceUiState } from './workspaces/state.js';
+
 // Lazily loaded route module. Shared shell bindings are exposed by app.js.
 
 const app = () => globalThis;
@@ -5,6 +11,7 @@ let loadedInvitesWorkspaceId = '';
 let loadingInvitesWorkspaceId = '';
 
 export const renderMembersPage = async () => {
+  const memberRuntime = membersRuntime();
   app().setMainMode('feature');
   app().setRouteChrome('members');
   const workspace = app().selectedWorkspace();
@@ -17,23 +24,23 @@ export const renderMembersPage = async () => {
     return;
   }
 
-  const canManage = app().isCurrentUserWorkspaceAdmin(workspace);
-  const canOwnerManage = app().isWorkspaceOwner(workspace);
-  const workspaceId = String(app().state.selectedWorkspaceId || workspace._id || '');
-  let invites = loadedInvitesWorkspaceId === workspaceId ? app().pendingWorkspaceInvites : [];
-  if (!app().state.demoMode && canManage) {
+  const canManage = memberRuntime.isCurrentUserWorkspaceAdmin(workspace);
+  const canOwnerManage = memberRuntime.isWorkspaceOwner(workspace);
+  const workspaceId = String(state.selectedWorkspaceId || workspace._id || '');
+  let invites = loadedInvitesWorkspaceId === workspaceId ? workspaceUiState.pendingWorkspaceInvites : [];
+  if (!state.demoMode && canManage) {
     if (loadedInvitesWorkspaceId !== workspaceId && loadingInvitesWorkspaceId !== workspaceId) {
       loadingInvitesWorkspaceId = workspaceId;
       app().request(`/api/invites/workspace/${workspaceId}`)
         .then((result) => {
-          app().pendingWorkspaceInvites = Array.isArray(result) ? result : [];
+          workspaceUiState.pendingWorkspaceInvites = Array.isArray(result) ? result : [];
           loadedInvitesWorkspaceId = workspaceId;
-          if (app().currentRoute() === 'members' && String(app().state.selectedWorkspaceId || '') === workspaceId) {
+          if (currentRoute() === 'members' && String(state.selectedWorkspaceId || '') === workspaceId) {
             renderMembersPage();
           }
         })
         .catch(() => {
-          if (loadedInvitesWorkspaceId !== workspaceId) app().pendingWorkspaceInvites = [];
+          if (loadedInvitesWorkspaceId !== workspaceId) workspaceUiState.pendingWorkspaceInvites = [];
         })
         .finally(() => {
           if (loadingInvitesWorkspaceId === workspaceId) loadingInvitesWorkspaceId = '';
@@ -45,26 +52,26 @@ export const renderMembersPage = async () => {
 
   // Calculations
   const totalCount = workspace.members?.length || 0;
-  const onlineCount = (workspace.members || []).filter(app().isMemberOnline).length;
+  const onlineCount = (workspace.members || []).filter(memberRuntime.isMemberOnline).length;
   const pendingCount = invites.length;
-  const adminsCount = (workspace.members || []).filter(member => member.role === 'admin' || app().isWorkspaceOwner(workspace, app().memberUserId(member))).length;
+  const adminsCount = (workspace.members || []).filter(member => member.role === 'admin' || memberRuntime.isWorkspaceOwner(workspace, memberRuntime.memberUserId(member))).length;
 
   // Filter members
   const filteredMembers = (workspace.members || []).filter(member => {
-    const displayName = app().getMemberDisplayName(member);
+    const displayName = memberRuntime.getMemberDisplayName(member);
     const email = member.user?.email || member.email || '';
     const role = member.role || 'member';
-    const isOnline = app().isMemberOnline(member);
+    const isOnline = memberRuntime.isMemberOnline(member);
     const statusText = isOnline ? 'online' : 'offline';
     
-    const q = (app().membersSearchQuery || '').trim().toLowerCase();
+    const q = (membersState.searchQuery || '').trim().toLowerCase();
     const matchesSearch = !q || displayName.toLowerCase().includes(q) 
       || email.toLowerCase().includes(q) 
       || role.toLowerCase().includes(q)
       || statusText.includes(q);
       
-    const roleFilter = app().membersRoleFilter || 'all';
-    const statusFilter = app().membersStatusFilter || 'all';
+    const roleFilter = membersState.roleFilter || 'all';
+    const statusFilter = membersState.statusFilter || 'all';
     const matchesRole = roleFilter === 'all' 
       || (roleFilter === 'admin' && role === 'admin')
       || (roleFilter === 'member' && role === 'member')
@@ -80,10 +87,10 @@ export const renderMembersPage = async () => {
   // Render Layout
   let tabContentHtml = '';
 
-  const activeMembersTab = app().membersActiveTab || 'members';
-  const searchQuery = app().membersSearchQuery || '';
-  const roleFilter = app().membersRoleFilter || 'all';
-  const statusFilter = app().membersStatusFilter || 'all';
+  const activeMembersTab = membersState.activeTab || 'members';
+  const searchQuery = membersState.searchQuery || '';
+  const roleFilter = membersState.roleFilter || 'all';
+  const statusFilter = membersState.statusFilter || 'all';
 
   if (activeMembersTab === 'members') {
     tabContentHtml = `
@@ -116,15 +123,15 @@ export const renderMembersPage = async () => {
             <span>Actions</span>
           </div>
           ${filteredMembers.map((member) => {
-            const displayName = app().getMemberDisplayName(member);
+            const displayName = memberRuntime.getMemberDisplayName(member);
             const email = member.user?.email || member.email || 'No email';
             const role = member.role || 'member';
-            const userId = app().memberUserId(member);
-            const isOnline = app().isMemberOnline(member);
-            const activityText = app().getMemberActivityText(member);
-            const isSelf = userId === String(app().state.user?.id);
-            const isOwner = app().isWorkspaceOwner(workspace, userId);
-            const actionPolicy = app().memberActionPolicy(workspace, member);
+            const userId = memberRuntime.memberUserId(member);
+            const isOnline = memberRuntime.isMemberOnline(member);
+            const activityText = memberRuntime.getMemberActivityText(member);
+            const isSelf = userId === String(state.user?.id);
+            const isOwner = memberRuntime.isWorkspaceOwner(workspace, userId);
+            const actionPolicy = memberRuntime.memberActionPolicy(workspace, member);
 
             // Generate initials
             const initials = app().getInitials(displayName);
@@ -134,7 +141,7 @@ export const renderMembersPage = async () => {
             const roleClass = isOwner ? 'owner' : role;
 
             return `
-              <div class="members-table-row ${app().membersActiveMenuMemberId === userId ? 'is-menu-open' : ''}">
+              <div class="members-table-row ${membersState.activeMenuMemberId === userId ? 'is-menu-open' : ''}">
                 <div data-label="Member" class="members-member-cell">
                   <span class="avatar-dot">${app().escapeHtml(initials)}</span>
                   <span class="members-member-copy">
@@ -154,7 +161,7 @@ export const renderMembersPage = async () => {
                 </span>
                 <span data-label="Current Activity" class="members-activity-cell muted-copy">${app().escapeHtml(activityText)}</span>
                 <div data-label="Actions" class="member-action-menu-container">
-                  <button class="members-menu-trigger-btn" data-trigger-menu-for="${userId}" aria-haspopup="menu" aria-expanded="${app().membersActiveMenuMemberId === userId ? 'true' : 'false'}" aria-label="Member actions for ${app().escapeHtml(displayName)}" type="button">
+                  <button class="members-menu-trigger-btn" data-trigger-menu-for="${userId}" aria-haspopup="menu" aria-expanded="${membersState.activeMenuMemberId === userId ? 'true' : 'false'}" aria-label="Member actions for ${app().escapeHtml(displayName)}" type="button">
                     <span aria-hidden="true">•••</span>
                   </button>
                 </div>
@@ -245,15 +252,15 @@ export const renderMembersPage = async () => {
 
   // Active Sessions / Live Activity
   const activeSessions = (workspace.members || []).map(member => {
-    const userId = app().memberUserId(member);
-    const isOnline = app().isMemberOnline(member);
+    const userId = memberRuntime.memberUserId(member);
+    const isOnline = memberRuntime.isMemberOnline(member);
     if (!isOnline) return null;
     
     // Find active doc
     let documentId = '';
     let documentTitle = '';
     
-    if (app().state.demoMode) {
+    if (state.demoMode) {
       if (userId === 'demo-user-priya') {
         documentId = 'demo-doc-os-deadlocks';
         documentTitle = 'Lecture 5: Deadlocks';
@@ -262,18 +269,18 @@ export const renderMembersPage = async () => {
         documentTitle = 'Lecture 4: Process Scheduling';
       }
     } else {
-      const pres = app().state.presence.find(u => String(u.userId) === userId);
-      if (pres && app().state.selectedDocumentId) {
-        documentId = app().state.selectedDocumentId;
+      const pres = state.presence.find(u => String(u.userId) === userId);
+      if (pres && state.selectedDocumentId) {
+        documentId = state.selectedDocumentId;
         documentTitle = app().selectedDocumentTitle();
       }
     }
     
     return {
       userId,
-      displayName: app().getMemberDisplayName(member),
+      displayName: memberRuntime.getMemberDisplayName(member),
       email: member.user?.email || member.email || '',
-      activity: app().getMemberActivityText(member),
+      activity: memberRuntime.getMemberActivityText(member),
       documentId,
       documentTitle
     };

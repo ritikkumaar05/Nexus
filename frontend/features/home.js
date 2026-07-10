@@ -1,6 +1,8 @@
 // Lazily loaded route module. Shared shell bindings are exposed by app.js.
+import { membersRuntime } from './members/runtime.js';
 
 export const getDashboardData = () => {
+  const memberRuntime = membersRuntime();
   const demo = state.demoMode;
   const workspace = selectedWorkspace();
   const recentDocuments = [...state.documents]
@@ -12,8 +14,8 @@ export const getDashboardData = () => {
   const completedTasks = [...(state.dashboardTasks.length ? state.dashboardTasks : state.documentTasks)]
     .filter((task) => task.status === 'done')
     .slice(0, 2);
-  const members = getWorkspaceMembers();
-  const activeMembers = collaborationPeople().filter((person) => person.online).slice(0, 5);
+  const members = memberRuntime.getWorkspaceMembers();
+  const activeMembers = memberRuntime.collaborationPeople().filter((person) => person.online).slice(0, 5);
   const chatPreview = demo
     ? { sender: 'Priya Sharma', content: 'Class starts at 10 AM. I uploaded the notes from yesterday.', time: new Date().toISOString() }
     : currentChatPreview();

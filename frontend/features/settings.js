@@ -1,9 +1,17 @@
+import { selectedWorkspace, state } from '../state/store.js';
+import { escapeHtml, getInitials } from '../utils/text.js';
+import { membersRuntime } from './members/runtime.js';
+import { settingsRuntime } from './settings/runtime.js';
+import { settingsState } from './settings/state.js';
+import { workspaceUiState } from './workspaces/state.js';
+
 // Lazily loaded route module. Shared shell bindings are exposed by app.js.
 
 export const renderSettingsContent = (tab, workspace) => {
-  const canManage = workspace ? isCurrentUserWorkspaceAdmin(workspace) : false;
-  const canOwnerManage = workspace ? isWorkspaceOwner(workspace) : false;
-  const isDirty = isSettingsDirty();
+  const memberRuntime = membersRuntime();
+  const canManage = workspace ? memberRuntime.isCurrentUserWorkspaceAdmin(workspace) : false;
+  const canOwnerManage = workspace ? memberRuntime.isWorkspaceOwner(workspace) : false;
+  const isDirty = settingsRuntime().isSettingsDirty();
   const security = state.accountSecurity?.data || {};
   const password = security.password || {
     hasPassword: Boolean(state.user?.hasPassword),
@@ -45,15 +53,15 @@ export const renderSettingsContent = (tab, workspace) => {
             </div>
           </div>
           <div class="settings-profile-row">
-            <span class="workspace-avatar big">${escapeHtml(getInitials(settingsWorkspaceName || 'S'))}</span>
+            <span class="workspace-avatar big">${escapeHtml(getInitials(settingsState.workspaceName || 'S'))}</span>
             <div class="settings-field" style="flex:1;">
               <label class="settings-field-label">Workspace Name</label>
-              <input id="settingsWorkspaceNameInput" value="${escapeHtml(settingsWorkspaceName)}" ${canManage ? '' : 'readonly'} placeholder="Workspace Name" />
+              <input id="settingsWorkspaceNameInput" value="${escapeHtml(settingsState.workspaceName)}" ${canManage ? '' : 'readonly'} placeholder="Workspace Name" />
             </div>
           </div>
           <div class="settings-field">
             <label class="settings-field-label">Workspace Description</label>
-            <textarea id="settingsWorkspaceDescriptionInput" ${canManage ? '' : 'readonly'} placeholder="Describe this workspace...">${escapeHtml(settingsWorkspaceDescription)}</textarea>
+            <textarea id="settingsWorkspaceDescriptionInput" ${canManage ? '' : 'readonly'} placeholder="Describe this workspace...">${escapeHtml(settingsState.workspaceDescription)}</textarea>
           </div>
           <div class="settings-meta-grid">
             <div class="settings-meta-item">
@@ -106,8 +114,8 @@ export const renderSettingsContent = (tab, workspace) => {
 
         <div class="settings-save-footer">
           <button class="ghost" id="settingsCancelBtn" type="button">Cancel</button>
-          <button class="primary" id="settingsSaveBtn" type="button" ${settingsSaveInProgress || !isDirty ? 'disabled' : ''}>
-            ${settingsSaveInProgress ? 'Saving…' : 'Save Changes'}
+          <button class="primary" id="settingsSaveBtn" type="button" ${settingsState.saveInProgress || !isDirty ? 'disabled' : ''}>
+            ${settingsState.saveInProgress ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </section>
@@ -128,17 +136,17 @@ export const renderSettingsContent = (tab, workspace) => {
             </div>
           </div>
           <div class="theme-selector-grid">
-            <div class="theme-select-card ${settingsTheme === 'light' ? 'active' : ''}" data-theme-val="light">
+            <div class="theme-select-card ${settingsState.theme === 'light' ? 'active' : ''}" data-theme-val="light">
               <span class="theme-card-icon">☀️</span>
               <strong>Light</strong>
               <span class="theme-card-desc">Sleek, bright palette</span>
             </div>
-            <div class="theme-select-card ${settingsTheme === 'dark' ? 'active' : ''}" data-theme-val="dark">
+            <div class="theme-select-card ${settingsState.theme === 'dark' ? 'active' : ''}" data-theme-val="dark">
               <span class="theme-card-icon">🌙</span>
               <strong>Dark</strong>
               <span class="theme-card-desc">Deep, contrast palette</span>
             </div>
-            <div class="theme-select-card ${settingsTheme === 'system' ? 'active' : ''}" data-theme-val="system">
+            <div class="theme-select-card ${settingsState.theme === 'system' ? 'active' : ''}" data-theme-val="system">
               <span class="theme-card-icon">🖥️</span>
               <strong>System</strong>
               <span class="theme-card-desc">Match device settings</span>
@@ -157,8 +165,8 @@ export const renderSettingsContent = (tab, workspace) => {
           <div class="settings-field">
             <label class="settings-field-label">Density Level</label>
             <select id="settingsDensitySelect">
-              <option value="comfortable" ${settingsDensity === 'comfortable' ? 'selected' : ''}>Comfortable (default)</option>
-              <option value="compact" ${settingsDensity === 'compact' ? 'selected' : ''}>Compact (high density)</option>
+              <option value="comfortable" ${settingsState.density === 'comfortable' ? 'selected' : ''}>Comfortable (default)</option>
+              <option value="compact" ${settingsState.density === 'compact' ? 'selected' : ''}>Compact (high density)</option>
             </select>
           </div>
         </div>
@@ -173,15 +181,15 @@ export const renderSettingsContent = (tab, workspace) => {
             </div>
           </div>
           <label class="toggle-switch-wrapper">
-            <input type="checkbox" id="settingsReduceMotionInput" ${settingsReduceMotion ? 'checked' : ''} />
+            <input type="checkbox" id="settingsReduceMotionInput" ${settingsState.reduceMotion ? 'checked' : ''} />
             <span class="toggle-switch-slider"></span>
           </label>
         </div>
 
         <div class="settings-save-footer">
           <button class="ghost" id="settingsCancelBtn" type="button">Cancel</button>
-          <button class="primary" id="settingsSaveBtn" type="button" ${settingsSaveInProgress || !isDirty ? 'disabled' : ''}>
-            ${settingsSaveInProgress ? 'Saving…' : 'Save Changes'}
+          <button class="primary" id="settingsSaveBtn" type="button" ${settingsState.saveInProgress || !isDirty ? 'disabled' : ''}>
+            ${settingsState.saveInProgress ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </section>
@@ -210,7 +218,7 @@ export const renderSettingsContent = (tab, workspace) => {
               </div>
             </div>
             <label class="toggle-switch-wrapper">
-              <input type="checkbox" id="settingsEmailNotificationsInput" ${settingsEmailNotifications ? 'checked' : ''} />
+              <input type="checkbox" id="settingsEmailNotificationsInput" ${settingsState.emailNotifications ? 'checked' : ''} />
               <span class="toggle-switch-slider"></span>
             </label>
           </div>
@@ -224,7 +232,7 @@ export const renderSettingsContent = (tab, workspace) => {
               </div>
             </div>
             <label class="toggle-switch-wrapper">
-              <input type="checkbox" id="settingsTaskNotificationsInput" ${settingsTaskNotifications ? 'checked' : ''} />
+              <input type="checkbox" id="settingsTaskNotificationsInput" ${settingsState.taskNotifications ? 'checked' : ''} />
               <span class="toggle-switch-slider"></span>
             </label>
           </div>
@@ -238,7 +246,7 @@ export const renderSettingsContent = (tab, workspace) => {
               </div>
             </div>
             <label class="toggle-switch-wrapper">
-              <input type="checkbox" id="settingsDiscussionNotificationsInput" ${settingsDiscussionNotifications ? 'checked' : ''} />
+              <input type="checkbox" id="settingsDiscussionNotificationsInput" ${settingsState.discussionNotifications ? 'checked' : ''} />
               <span class="toggle-switch-slider"></span>
             </label>
           </div>
@@ -252,7 +260,7 @@ export const renderSettingsContent = (tab, workspace) => {
               </div>
             </div>
             <label class="toggle-switch-wrapper">
-              <input type="checkbox" id="settingsMentionNotificationsInput" ${settingsMentionNotifications ? 'checked' : ''} />
+              <input type="checkbox" id="settingsMentionNotificationsInput" ${settingsState.mentionNotifications ? 'checked' : ''} />
               <span class="toggle-switch-slider"></span>
             </label>
           </div>
@@ -266,7 +274,7 @@ export const renderSettingsContent = (tab, workspace) => {
               </div>
             </div>
             <label class="toggle-switch-wrapper">
-              <input type="checkbox" id="settingsInviteNotificationsInput" ${settingsInviteNotifications ? 'checked' : ''} />
+              <input type="checkbox" id="settingsInviteNotificationsInput" ${settingsState.inviteNotifications ? 'checked' : ''} />
               <span class="toggle-switch-slider"></span>
             </label>
           </div>
@@ -274,8 +282,8 @@ export const renderSettingsContent = (tab, workspace) => {
 
         <div class="settings-save-footer">
           <button class="ghost" id="settingsCancelBtn" type="button">Cancel</button>
-          <button class="primary" id="settingsSaveBtn" type="button" ${settingsSaveInProgress || !isDirty ? 'disabled' : ''}>
-            ${settingsSaveInProgress ? 'Saving…' : 'Save Changes'}
+          <button class="primary" id="settingsSaveBtn" type="button" ${settingsState.saveInProgress || !isDirty ? 'disabled' : ''}>
+            ${settingsState.saveInProgress ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </section>
@@ -576,6 +584,7 @@ export const renderSettingsPage = async () => {
 
 
 export const renderWorkspaceSettingsPage = async () => {
+  const memberRuntime = membersRuntime();
   setMainMode('feature');
   setRouteChrome('settings');
   const workspace = selectedWorkspace();
@@ -590,19 +599,19 @@ export const renderWorkspaceSettingsPage = async () => {
     return;
   }
 
-  const canManage = isCurrentUserWorkspaceAdmin(workspace);
-  const canOwnerManage = isWorkspaceOwner(workspace);
+  const canManage = memberRuntime.isCurrentUserWorkspaceAdmin(workspace);
+  const canOwnerManage = memberRuntime.isWorkspaceOwner(workspace);
   if (!state.demoMode && canManage) {
-    pendingWorkspaceInvites = await request(`/api/invites/workspace/${state.selectedWorkspaceId}`).catch(() => []);
+    workspaceUiState.pendingWorkspaceInvites = await request(`/api/invites/workspace/${state.selectedWorkspaceId}`).catch(() => []);
   } else {
-    pendingWorkspaceInvites = [];
+    workspaceUiState.pendingWorkspaceInvites = [];
   }
 
   const members = workspace.members || [];
   const createdDate = workspace.createdAt ? new Date(workspace.createdAt).toLocaleDateString() : 'Not available';
   const inviteLink = `${location.origin}${location.pathname}#/invite`;
   const canDeleteWorkspace = state.workspaces.length > 1 && canOwnerManage;
-  const deleteTarget = pendingWorkspaceDeleteId === workspace._id ? workspace : null;
+  const deleteTarget = workspaceUiState.pendingWorkspaceDeleteId === workspace._id ? workspace : null;
 
   els.routePage.innerHTML = `
     <div class="workspace-settings-page page-shell-v2">
@@ -654,8 +663,8 @@ export const renderWorkspaceSettingsPage = async () => {
             ${members.map((member) => {
               const name = member.user?.username || member.user?.email || String(member.user || 'Member');
               const email = member.user?.email || '';
-              const userId = memberUserId(member);
-              const isOwner = isWorkspaceOwner(workspace, userId);
+              const userId = memberRuntime.memberUserId(member);
+              const isOwner = memberRuntime.isWorkspaceOwner(workspace, userId);
               const isSelf = userId === String(state.user?.id);
               return `
                 <article class="workspace-member-row">
@@ -695,7 +704,7 @@ export const renderWorkspaceSettingsPage = async () => {
             <button class="primary" id="workspaceInviteCreateBtn" type="button" ${canManage ? '' : 'disabled'}>Create Invite</button>
           </div>
           <div class="pending-invite-list">
-            ${pendingWorkspaceInvites.length ? pendingWorkspaceInvites.map((invite) => `
+            ${workspaceUiState.pendingWorkspaceInvites.length ? workspaceUiState.pendingWorkspaceInvites.map((invite) => `
               <article>
                 <span><strong>${escapeHtml(invite.email)}</strong><small>${escapeHtml(String(invite.role || 'member').toUpperCase())} · Pending · ${invite.createdAt ? new Date(invite.createdAt).toLocaleDateString() : 'recent'}</small></span>
                 <button class="ghost" data-revoke-invite-id="${invite._id || invite.id}" type="button" ${canManage ? '' : 'disabled'}>Revoke</button>

@@ -74,8 +74,11 @@ import { createAiStudyOutput } from './features/ai/studyOutput.js';
 import { createChatRuntime, searchState } from './features/chat/runtime.js';
 import { createChatSession } from './features/chat/session.js';
 import { createAccountSecurity } from './features/settings/accountSecurity.js';
-import { createSettingsRuntime } from './features/settings/runtime.js';
-import { createMembersRuntime } from './features/members/runtime.js';
+import { settingsState } from './features/settings/state.js';
+import { createSettingsRuntime, setSettingsRuntime } from './features/settings/runtime.js';
+import { membersState } from './features/members/state.js';
+import { createMembersRuntime, setMembersRuntime } from './features/members/runtime.js';
+import { workspaceUiState } from './features/workspaces/state.js';
 import { createTaskPanel } from './features/tasks/panel.js';
 import { createThreadPanel } from './features/threads/panel.js';
 import {
@@ -117,34 +120,9 @@ let workspaceThreadsLoadedKey = '';
 
 let activeWorkspaceMenuId = '';
 let activeWorkspaceRenameId = '';
-let pendingWorkspaceDeleteId = '';
-let pendingWorkspaceInvites = [];
 let generatedInviteResult = null;
 let activeDocumentLoadToken = 0;
 const deletingDocumentIds = new Set();
-
-let membersActiveTab = 'members';
-let membersSearchQuery = '';
-let membersRoleFilter = 'all';
-let membersStatusFilter = 'all';
-let membersActiveMenuMemberId = '';
-let membersActionMenuRect = null;
-let membersDetailsModalMemberId = '';
-let membersRemoveCandidateId = '';
-let membersRemovingMemberId = '';
-let inviteExpiryOption = '7';
-
-let settingsWorkspaceName = '';
-let settingsWorkspaceDescription = 'Shared workspace for notes, projects, tasks, and discussions.';
-let settingsTheme = '';
-let settingsDensity = '';
-let settingsReduceMotion = false;
-let settingsEmailNotifications = false;
-let settingsTaskNotifications = false;
-let settingsDiscussionNotifications = false;
-let settingsMentionNotifications = false;
-let settingsInviteNotifications = false;
-let settingsSaveInProgress = false;
 
 const AUTOSAVE_DELAY_MS = 2800;
 const CURSOR_PUBLISH_INTERVAL_MS = 300;
@@ -2377,10 +2355,10 @@ const formatTaskDue = (task = {}) => {
 };
 
 const membersUi = {
-  get activeMenuMemberId() { return membersActiveMenuMemberId; },
-  set activeMenuMemberId(value) { membersActiveMenuMemberId = value; },
-  get actionMenuRect() { return membersActionMenuRect; },
-  set actionMenuRect(value) { membersActionMenuRect = value; }
+  get activeMenuMemberId() { return membersState.activeMenuMemberId; },
+  set activeMenuMemberId(value) { membersState.activeMenuMemberId = value; },
+  get actionMenuRect() { return membersState.actionMenuRect; },
+  set actionMenuRect(value) { membersState.actionMenuRect = value; }
 };
 
 const {
@@ -2400,7 +2378,7 @@ const {
   handleMembersMenuAction,
   isMemberOnline,
   getMemberActivityText
-} = createMembersRuntime({
+} = setMembersRuntime(createMembersRuntime({
   state,
   membersUi,
   selectedWorkspace,
@@ -2413,7 +2391,7 @@ const {
   showMemberDetailsModal,
   showRemoveMemberModal,
   showToast
-});
+}));
 
 const addActivity = ({ actor = state.user?.username || state.user?.email || 'You', action, target, documentId = state.selectedDocumentId }) => {
   if (!action || !target) return;
@@ -2612,28 +2590,28 @@ const getTaskStats = (tasks) => {
 };
 
 const settingsForm = {
-  get workspaceName() { return settingsWorkspaceName; },
-  set workspaceName(value) { settingsWorkspaceName = value; },
-  get workspaceDescription() { return settingsWorkspaceDescription; },
-  set workspaceDescription(value) { settingsWorkspaceDescription = value; },
-  get theme() { return settingsTheme; },
-  set theme(value) { settingsTheme = value; },
-  get density() { return settingsDensity; },
-  set density(value) { settingsDensity = value; },
-  get reduceMotion() { return settingsReduceMotion; },
-  set reduceMotion(value) { settingsReduceMotion = value; },
-  get emailNotifications() { return settingsEmailNotifications; },
-  set emailNotifications(value) { settingsEmailNotifications = value; },
-  get taskNotifications() { return settingsTaskNotifications; },
-  set taskNotifications(value) { settingsTaskNotifications = value; },
-  get discussionNotifications() { return settingsDiscussionNotifications; },
-  set discussionNotifications(value) { settingsDiscussionNotifications = value; },
-  get mentionNotifications() { return settingsMentionNotifications; },
-  set mentionNotifications(value) { settingsMentionNotifications = value; },
-  get inviteNotifications() { return settingsInviteNotifications; },
-  set inviteNotifications(value) { settingsInviteNotifications = value; },
-  get saveInProgress() { return settingsSaveInProgress; },
-  set saveInProgress(value) { settingsSaveInProgress = value; }
+  get workspaceName() { return settingsState.workspaceName; },
+  set workspaceName(value) { settingsState.workspaceName = value; },
+  get workspaceDescription() { return settingsState.workspaceDescription; },
+  set workspaceDescription(value) { settingsState.workspaceDescription = value; },
+  get theme() { return settingsState.theme; },
+  set theme(value) { settingsState.theme = value; },
+  get density() { return settingsState.density; },
+  set density(value) { settingsState.density = value; },
+  get reduceMotion() { return settingsState.reduceMotion; },
+  set reduceMotion(value) { settingsState.reduceMotion = value; },
+  get emailNotifications() { return settingsState.emailNotifications; },
+  set emailNotifications(value) { settingsState.emailNotifications = value; },
+  get taskNotifications() { return settingsState.taskNotifications; },
+  set taskNotifications(value) { settingsState.taskNotifications = value; },
+  get discussionNotifications() { return settingsState.discussionNotifications; },
+  set discussionNotifications(value) { settingsState.discussionNotifications = value; },
+  get mentionNotifications() { return settingsState.mentionNotifications; },
+  set mentionNotifications(value) { settingsState.mentionNotifications = value; },
+  get inviteNotifications() { return settingsState.inviteNotifications; },
+  set inviteNotifications(value) { settingsState.inviteNotifications = value; },
+  get saveInProgress() { return settingsState.saveInProgress; },
+  set saveInProgress(value) { settingsState.saveInProgress = value; }
 };
 
 const {
@@ -2641,7 +2619,7 @@ const {
   isSettingsDirty,
   updateSaveButtonState,
   saveSettings
-} = createSettingsRuntime({
+} = setSettingsRuntime(createSettingsRuntime({
   state,
   settingsForm,
   selectedWorkspace,
@@ -2651,7 +2629,7 @@ const {
   loadWorkspaces: (...args) => loadWorkspaces(...args),
   renderSettingsPage: (...args) => renderSettingsPage(...args),
   showToast
-});
+}));
 
 const {
   refreshAccountSecurity,
@@ -4036,7 +4014,7 @@ const closeToolPanel = () => {
   els.toolPanel.classList.remove('open');
   activeWorkspaceMenuId = '';
   activeWorkspaceRenameId = '';
-  pendingWorkspaceDeleteId = '';
+  workspaceUiState.pendingWorkspaceDeleteId = '';
   syncOverlayScrollLock();
 };
 
@@ -4831,9 +4809,9 @@ const rememberCreatedInvite = (result = {}) => {
       createdAt: invite.createdAt || result.createdAt || new Date().toISOString()
     };
     const cachedEmail = String(cachedInvite.email || '').toLowerCase();
-    pendingWorkspaceInvites = [
+    workspaceUiState.pendingWorkspaceInvites = [
       cachedInvite,
-      ...pendingWorkspaceInvites.filter((item) => {
+      ...workspaceUiState.pendingWorkspaceInvites.filter((item) => {
         const itemId = String(item._id || item.id || '');
         const itemEmail = String(item.email || '').toLowerCase();
         return itemId !== inviteId && (!cachedEmail || itemEmail !== cachedEmail);
@@ -4959,7 +4937,7 @@ const handleToolPanelClick = async (event) => {
       const workspaceId = workspaceMenuButton.dataset.workspaceMenuId;
       activeWorkspaceMenuId = activeWorkspaceMenuId === workspaceId ? '' : workspaceId;
       activeWorkspaceRenameId = '';
-      pendingWorkspaceDeleteId = '';
+      workspaceUiState.pendingWorkspaceDeleteId = '';
       renderWorkspacesTool();
       return;
     }
@@ -5038,7 +5016,7 @@ const handleToolPanelClick = async (event) => {
       if (state.demoMode) return showToast('Demo workspace settings are temporary. Sign up to create your own workspace.');
       activeWorkspaceRenameId = renameWorkspaceButton.dataset.renameWorkspaceId;
       activeWorkspaceMenuId = '';
-      pendingWorkspaceDeleteId = '';
+      workspaceUiState.pendingWorkspaceDeleteId = '';
       renderWorkspacesTool();
       window.setTimeout(() => document.querySelector('.workspace-rename-form input')?.focus(), 0);
       return;
@@ -5054,7 +5032,7 @@ const handleToolPanelClick = async (event) => {
     if (deleteWorkspaceButton) {
       if (deleteWorkspaceButton.disabled) return showToast('Create or join another workspace before deleting this one.', true);
       if (state.demoMode) return showToast('Demo workspace settings are temporary. Sign up to create your own workspace.');
-      pendingWorkspaceDeleteId = deleteWorkspaceButton.dataset.deleteWorkspaceId;
+      workspaceUiState.pendingWorkspaceDeleteId = deleteWorkspaceButton.dataset.deleteWorkspaceId;
       activeWorkspaceMenuId = '';
       activeWorkspaceRenameId = '';
       if (currentRoute() === 'workspace-settings') await renderWorkspaceSettingsPage();
@@ -5063,7 +5041,7 @@ const handleToolPanelClick = async (event) => {
     }
 
     if (target.closest('[data-cancel-workspace-delete]')) {
-      pendingWorkspaceDeleteId = '';
+      workspaceUiState.pendingWorkspaceDeleteId = '';
       if (currentRoute() === 'workspace-settings') await renderWorkspaceSettingsPage();
       else renderWorkspacesTool();
       return;
@@ -5098,7 +5076,7 @@ const handleToolPanelClick = async (event) => {
         teardownYDoc();
         await Promise.all([loadChannels(), loadDocuments()]);
       }
-      pendingWorkspaceDeleteId = '';
+      workspaceUiState.pendingWorkspaceDeleteId = '';
       activeWorkspaceMenuId = '';
       activeWorkspaceRenameId = '';
       closeToolPanel();
@@ -5512,13 +5490,13 @@ els.toolPanel.addEventListener('submit', async (event) => {
 els.routePage.addEventListener('click', handleToolPanelClick);
 els.routePage.addEventListener('change', async (event) => {
   if (event.target.id === 'membersRoleFilterSelect') {
-    membersRoleFilter = event.target.value;
+    membersState.roleFilter = event.target.value;
     renderMembersPage();
     return;
   }
 
   if (event.target.id === 'membersStatusFilterSelect') {
-    membersStatusFilter = event.target.value;
+    membersState.statusFilter = event.target.value;
     renderMembersPage();
     return;
   }
@@ -5857,7 +5835,7 @@ els.routePage.addEventListener('click', async (event) => {
 
 els.routePage.addEventListener('input', (event) => {
   if (event.target.id === 'membersSearchInput') {
-    membersSearchQuery = event.target.value;
+    membersState.searchQuery = event.target.value;
     renderMembersPage();
     return;
   }
@@ -7360,7 +7338,7 @@ els.routePage.addEventListener('click', async (event) => {
   const tabBtn = target.closest('[data-members-tab]');
   if (tabBtn) {
     event.preventDefault();
-    membersActiveTab = tabBtn.dataset.membersTab;
+    membersState.activeTab = tabBtn.dataset.membersTab;
     closeMembersActionMenu();
     renderMembersPage();
     return;
@@ -7544,8 +7522,8 @@ els.routePage.addEventListener('click', async (event) => {
     const workspace = selectedWorkspace();
     const member = workspace?.members?.find((item) => memberUserId(item) === memberId);
     const displayName = member ? getMemberDisplayName(member) : 'Member';
-    if (!member || membersRemovingMemberId) return;
-    membersRemovingMemberId = memberId;
+    if (!member || membersState.removingMemberId) return;
+    membersState.removingMemberId = memberId;
     confirmRemoveBtn.disabled = true;
     confirmRemoveBtn.setAttribute('aria-busy', 'true');
     confirmRemoveBtn.textContent = 'Removing...';
@@ -7553,7 +7531,7 @@ els.routePage.addEventListener('click', async (event) => {
       await request(`/api/workspaces/${state.selectedWorkspaceId}/members/${memberId}`, { method: 'DELETE' });
       await loadWorkspaces();
       document.getElementById('membersRemoveModal')?.remove();
-      membersRemoveCandidateId = '';
+      membersState.removeCandidateId = '';
       showToast(`${displayName} removed from workspace.`);
       renderMembersPage();
     } catch (err) {
@@ -7562,7 +7540,7 @@ els.routePage.addEventListener('click', async (event) => {
       confirmRemoveBtn.removeAttribute('aria-busy');
       confirmRemoveBtn.textContent = 'Remove Member';
     } finally {
-      membersRemovingMemberId = '';
+      membersState.removingMemberId = '';
     }
     return;
   }
@@ -7570,16 +7548,16 @@ els.routePage.addEventListener('click', async (event) => {
   if (target.closest('[data-close-members-modal]') || target.classList.contains('members-modal-backdrop')) {
     document.getElementById('membersDetailsModal')?.remove();
     document.getElementById('membersRemoveModal')?.remove();
-    membersRemoveCandidateId = '';
+    membersState.removeCandidateId = '';
   }
 });
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
-    if (membersActiveMenuMemberId) closeMembersActionMenu();
+    if (membersState.activeMenuMemberId) closeMembersActionMenu();
     document.getElementById('membersDetailsModal')?.remove();
     document.getElementById('membersRemoveModal')?.remove();
-    membersRemoveCandidateId = '';
+    membersState.removeCandidateId = '';
   }
 });
 
@@ -7591,8 +7569,8 @@ document.addEventListener('click', async (event) => {
     const workspace = selectedWorkspace();
     const member = workspace?.members?.find((item) => memberUserId(item) === memberId);
     const displayName = member ? getMemberDisplayName(member) : 'Member';
-    if (!member || membersRemovingMemberId) return;
-    membersRemovingMemberId = memberId;
+    if (!member || membersState.removingMemberId) return;
+    membersState.removingMemberId = memberId;
     confirmRemoveBtn.disabled = true;
     confirmRemoveBtn.setAttribute('aria-busy', 'true');
     confirmRemoveBtn.textContent = 'Removing...';
@@ -7600,7 +7578,7 @@ document.addEventListener('click', async (event) => {
       await request(`/api/workspaces/${state.selectedWorkspaceId}/members/${memberId}`, { method: 'DELETE' });
       await loadWorkspaces();
       document.getElementById('membersRemoveModal')?.remove();
-      membersRemoveCandidateId = '';
+      membersState.removeCandidateId = '';
       showToast(`${displayName} removed from workspace.`);
       renderMembersPage();
     } catch (err) {
@@ -7609,7 +7587,7 @@ document.addEventListener('click', async (event) => {
       confirmRemoveBtn.removeAttribute('aria-busy');
       confirmRemoveBtn.textContent = 'Remove Member';
     } finally {
-      membersRemovingMemberId = '';
+      membersState.removingMemberId = '';
     }
     return;
   }
@@ -7617,7 +7595,7 @@ document.addEventListener('click', async (event) => {
   if (event.target.closest('[data-close-members-modal]') || event.target.classList.contains('members-modal-backdrop')) {
     document.getElementById('membersDetailsModal')?.remove();
     document.getElementById('membersRemoveModal')?.remove();
-    membersRemoveCandidateId = '';
+    membersState.removeCandidateId = '';
     return;
   }
 
@@ -7629,7 +7607,7 @@ document.addEventListener('click', async (event) => {
   }
 
   if (
-    membersActiveMenuMemberId
+    membersState.activeMenuMemberId
     && !event.target.closest('#membersActionPortal')
     && !event.target.closest('.members-menu-trigger-btn')
   ) {
@@ -7638,11 +7616,11 @@ document.addEventListener('click', async (event) => {
 });
 
 window.addEventListener('resize', () => {
-  if (membersActiveMenuMemberId) closeMembersActionMenu();
+  if (membersState.activeMenuMemberId) closeMembersActionMenu();
 });
 
 window.addEventListener('scroll', () => {
-  if (membersActiveMenuMemberId) closeMembersActionMenu();
+  if (membersState.activeMenuMemberId) closeMembersActionMenu();
 }, true);
 
 els.routePage.addEventListener('click', (event) => {
@@ -7655,10 +7633,10 @@ els.routePage.addEventListener('click', (event) => {
 els.routePage.addEventListener('input', (event) => {
   const target = event.target;
   if (target.id === 'settingsWorkspaceNameInput') {
-    settingsWorkspaceName = target.value;
+    settingsState.workspaceName = target.value;
     updateSaveButtonState();
   } else if (target.id === 'settingsWorkspaceDescriptionInput') {
-    settingsWorkspaceDescription = target.value;
+    settingsState.workspaceDescription = target.value;
     updateSaveButtonState();
   }
 });
@@ -7666,25 +7644,25 @@ els.routePage.addEventListener('input', (event) => {
 els.routePage.addEventListener('change', (event) => {
   const target = event.target;
   if (target.id === 'settingsDensitySelect') {
-    settingsDensity = target.value;
+    settingsState.density = target.value;
     updateSaveButtonState();
   } else if (target.id === 'settingsReduceMotionInput') {
-    settingsReduceMotion = target.checked;
+    settingsState.reduceMotion = target.checked;
     updateSaveButtonState();
   } else if (target.id === 'settingsEmailNotificationsInput') {
-    settingsEmailNotifications = target.checked;
+    settingsState.emailNotifications = target.checked;
     updateSaveButtonState();
   } else if (target.id === 'settingsTaskNotificationsInput') {
-    settingsTaskNotifications = target.checked;
+    settingsState.taskNotifications = target.checked;
     updateSaveButtonState();
   } else if (target.id === 'settingsDiscussionNotificationsInput') {
-    settingsDiscussionNotifications = target.checked;
+    settingsState.discussionNotifications = target.checked;
     updateSaveButtonState();
   } else if (target.id === 'settingsMentionNotificationsInput') {
-    settingsMentionNotifications = target.checked;
+    settingsState.mentionNotifications = target.checked;
     updateSaveButtonState();
   } else if (target.id === 'settingsInviteNotificationsInput') {
-    settingsInviteNotifications = target.checked;
+    settingsState.inviteNotifications = target.checked;
     updateSaveButtonState();
   }
 });
@@ -7711,7 +7689,7 @@ els.routePage.addEventListener('click', (event) => {
   if (themeCard) {
     event.preventDefault();
     const val = themeCard.dataset.themeVal;
-    settingsTheme = val;
+    settingsState.theme = val;
     state.preferences.theme = val;
     localStorage.setItem('theme', val);
     persistPreferences();
@@ -7857,34 +7835,11 @@ const exposeLazyRouteShellBindings = () => {
     overlayScrollY: { configurable: true, get: () => modalState.overlayScrollY, set: (value) => { modalState.overlayScrollY = value; } },
     activeWorkspaceMenuId: { configurable: true, get: () => activeWorkspaceMenuId, set: (value) => { activeWorkspaceMenuId = value; } },
     activeWorkspaceRenameId: { configurable: true, get: () => activeWorkspaceRenameId, set: (value) => { activeWorkspaceRenameId = value; } },
-    pendingWorkspaceDeleteId: { configurable: true, get: () => pendingWorkspaceDeleteId, set: (value) => { pendingWorkspaceDeleteId = value; } },
-    pendingWorkspaceInvites: { configurable: true, get: () => pendingWorkspaceInvites, set: (value) => { pendingWorkspaceInvites = value; } },
     latestCreatedInvite: { configurable: true, get: () => inviteState.latestCreatedInvite, set: (value) => { inviteState.latestCreatedInvite = value; } },
     activeJoinInvite: { configurable: true, get: () => inviteState.activeJoinInvite, set: (value) => { inviteState.activeJoinInvite = value; } },
     inviteRequestInFlight: { configurable: true, get: () => inviteState.inviteRequestInFlight, set: (value) => { inviteState.inviteRequestInFlight = value; } },
     activeDocumentLoadToken: { configurable: true, get: () => activeDocumentLoadToken, set: (value) => { activeDocumentLoadToken = value; } },
     deletingDocumentIds: { configurable: true, get: () => deletingDocumentIds },
-    membersActiveTab: { configurable: true, get: () => membersActiveTab, set: (value) => { membersActiveTab = value; } },
-    membersSearchQuery: { configurable: true, get: () => membersSearchQuery, set: (value) => { membersSearchQuery = value; } },
-    membersRoleFilter: { configurable: true, get: () => membersRoleFilter, set: (value) => { membersRoleFilter = value; } },
-    membersStatusFilter: { configurable: true, get: () => membersStatusFilter, set: (value) => { membersStatusFilter = value; } },
-    membersActiveMenuMemberId: { configurable: true, get: () => membersActiveMenuMemberId, set: (value) => { membersActiveMenuMemberId = value; } },
-    membersActionMenuRect: { configurable: true, get: () => membersActionMenuRect, set: (value) => { membersActionMenuRect = value; } },
-    membersDetailsModalMemberId: { configurable: true, get: () => membersDetailsModalMemberId, set: (value) => { membersDetailsModalMemberId = value; } },
-    membersRemoveCandidateId: { configurable: true, get: () => membersRemoveCandidateId, set: (value) => { membersRemoveCandidateId = value; } },
-    membersRemovingMemberId: { configurable: true, get: () => membersRemovingMemberId, set: (value) => { membersRemovingMemberId = value; } },
-    inviteExpiryOption: { configurable: true, get: () => inviteExpiryOption, set: (value) => { inviteExpiryOption = value; } },
-    settingsWorkspaceName: { configurable: true, get: () => settingsWorkspaceName, set: (value) => { settingsWorkspaceName = value; } },
-    settingsWorkspaceDescription: { configurable: true, get: () => settingsWorkspaceDescription, set: (value) => { settingsWorkspaceDescription = value; } },
-    settingsTheme: { configurable: true, get: () => settingsTheme, set: (value) => { settingsTheme = value; } },
-    settingsDensity: { configurable: true, get: () => settingsDensity, set: (value) => { settingsDensity = value; } },
-    settingsReduceMotion: { configurable: true, get: () => settingsReduceMotion, set: (value) => { settingsReduceMotion = value; } },
-    settingsEmailNotifications: { configurable: true, get: () => settingsEmailNotifications, set: (value) => { settingsEmailNotifications = value; } },
-    settingsTaskNotifications: { configurable: true, get: () => settingsTaskNotifications, set: (value) => { settingsTaskNotifications = value; } },
-    settingsDiscussionNotifications: { configurable: true, get: () => settingsDiscussionNotifications, set: (value) => { settingsDiscussionNotifications = value; } },
-    settingsMentionNotifications: { configurable: true, get: () => settingsMentionNotifications, set: (value) => { settingsMentionNotifications = value; } },
-    settingsInviteNotifications: { configurable: true, get: () => settingsInviteNotifications, set: (value) => { settingsInviteNotifications = value; } },
-    settingsSaveInProgress: { configurable: true, get: () => settingsSaveInProgress, set: (value) => { settingsSaveInProgress = value; } },
     selectedCommandIndex: { configurable: true, get: () => uiState.selectedCommandIndex, set: (value) => { uiState.selectedCommandIndex = value; } },
     threadFilterTab: { configurable: true, get: () => uiState.threadFilterTab, set: (value) => { uiState.threadFilterTab = value; } },
     threadSearchQuery: { configurable: true, get: () => uiState.threadSearchQuery, set: (value) => { uiState.threadSearchQuery = value; } },
@@ -8078,22 +8033,6 @@ const exposeLazyRouteShellBindings = () => {
     getTimeGreeting: { configurable: true, get: () => getTimeGreeting },
     isDueToday: { configurable: true, get: () => isDueToday },
     formatTaskDue: { configurable: true, get: () => formatTaskDue },
-    getWorkspaceMembers: { configurable: true, get: () => getWorkspaceMembers },
-    getUserDisplayName: { configurable: true, get: () => getUserDisplayName },
-    getMemberDisplayName: { configurable: true, get: () => getMemberDisplayName },
-    getMemberName: { configurable: true, get: () => getMemberName },
-    collaborationPeople: { configurable: true, get: () => collaborationPeople },
-    memberUserId: { configurable: true, get: () => memberUserId },
-    isWorkspaceOwner: { configurable: true, get: () => isWorkspaceOwner },
-    isCurrentUserWorkspaceAdmin: { configurable: true, get: () => isCurrentUserWorkspaceAdmin },
-    displayWorkspaceRole: { configurable: true, get: () => displayWorkspaceRole },
-    memberActionPolicy: { configurable: true, get: () => memberActionPolicy },
-    closeMembersActionMenu: { configurable: true, get: () => closeMembersActionMenu },
-    renderMembersActionMenu: { configurable: true, get: () => renderMembersActionMenu },
-    openMembersActionMenu: { configurable: true, get: () => openMembersActionMenu },
-    showMemberDetailsModal: { configurable: true, get: () => showMemberDetailsModal },
-    showRemoveMemberModal: { configurable: true, get: () => showRemoveMemberModal },
-    handleMembersMenuAction: { configurable: true, get: () => handleMembersMenuAction },
     addActivity: { configurable: true, get: () => addActivity },
     renderActivityList: { configurable: true, get: () => renderActivityList },
     updateTypingStatus: { configurable: true, get: () => updateTypingStatus },
@@ -8103,11 +8042,6 @@ const exposeLazyRouteShellBindings = () => {
     renderEmptyDetailHtml: { configurable: true, get: () => renderEmptyDetailHtml },
     sortTasks: { configurable: true, get: () => sortTasks },
     getTaskStats: { configurable: true, get: () => getTaskStats },
-    isMemberOnline: { configurable: true, get: () => isMemberOnline },
-    getMemberActivityText: { configurable: true, get: () => getMemberActivityText },
-    syncSettingsFormState: { configurable: true, get: () => syncSettingsFormState },
-    isSettingsDirty: { configurable: true, get: () => isSettingsDirty },
-    updateSaveButtonState: { configurable: true, get: () => updateSaveButtonState },
     renderInvitePage: { configurable: true, get: () => renderInvitePage },
     renderRoute: { configurable: true, get: () => renderRoute },
     setRouteChrome: { configurable: true, get: () => setRouteChrome },

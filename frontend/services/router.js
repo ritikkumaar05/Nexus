@@ -1,4 +1,5 @@
-import { state } from '../state/store.js';
+import { selectedWorkspace, state } from '../state/store.js';
+import { settingsRuntime } from '../features/settings/runtime.js';
 
 export const currentRoute = () => (location.hash.replace(/^#\/?/, '') || ((state.token || state.demoMode) ? 'home' : 'login')).split('?')[0];
 
@@ -96,7 +97,7 @@ export const renderRoute = async () => {
     }
 
     if (route === 'settings') {
-      globalThis.syncSettingsFormState(globalThis.selectedWorkspace());
+      settingsRuntime().syncSettingsFormState(selectedWorkspace());
       return globalThis.renderSettingsPage();
     }
 

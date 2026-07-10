@@ -1,3 +1,17 @@
+let activeMembersRuntime = null;
+
+export const setMembersRuntime = (runtime) => {
+  activeMembersRuntime = runtime;
+  return activeMembersRuntime;
+};
+
+export const membersRuntime = () => {
+  if (!activeMembersRuntime) {
+    throw new Error('Members runtime has not been initialized.');
+  }
+  return activeMembersRuntime;
+};
+
 export const createMembersRuntime = ({
   state,
   membersUi,

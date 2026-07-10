@@ -1,4 +1,5 @@
 // Lazily loaded route module. Shared shell bindings are exposed by app.js.
+import { membersRuntime } from './members/runtime.js';
 import { searchState } from './chat/runtime.js';
 
 export const renderChatPage = async ({ skipEnsure = false } = {}) => {
@@ -699,7 +700,7 @@ export const handleChatDropdownAction = (action) => {
 
   if (action === 'info') {
     const onlineCount = chatOnlineCount();
-    const totalCount = collaborationPeople().length || state.chatOnlineUsers.length || 1;
+    const totalCount = membersRuntime().collaborationPeople().length || state.chatOnlineUsers.length || 1;
     const infoHtml = `
       <div class="channel-info-modal-content">
         <div class="channel-info-row">
@@ -726,7 +727,7 @@ export const handleChatDropdownAction = (action) => {
     `;
     showChatModal('Channel Info', infoHtml);
   } else if (action === 'members') {
-    const members = collaborationPeople();
+    const members = membersRuntime().collaborationPeople();
     const membersHtml = `
       <div class="members-view-modal-content">
         ${members.map(member => {
@@ -814,7 +815,7 @@ export const handleChatAction = async (action) => {
       if (!popover.classList.contains('hidden')) {
         const body = document.getElementById('chatMembersPopoverBody');
         if (body) {
-          const members = collaborationPeople();
+          const members = membersRuntime().collaborationPeople();
           body.innerHTML = members.map(member => {
             const initials = getInitials(member.name);
             return `
