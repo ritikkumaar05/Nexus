@@ -74,6 +74,7 @@ import { createAiStudyOutput } from './features/ai/studyOutput.js';
 import { createChatRuntime, searchState } from './features/chat/runtime.js';
 import { createChatSession } from './features/chat/session.js';
 import { createAccountSecurity } from './features/settings/accountSecurity.js';
+import { createSettingsRuntime } from './features/settings/runtime.js';
 import { createMembersRuntime } from './features/members/runtime.js';
 import { createTaskPanel } from './features/tasks/panel.js';
 import { createThreadPanel } from './features/threads/panel.js';
@@ -2610,50 +2611,47 @@ const getTaskStats = (tasks) => {
   };
 };
 
-const syncSettingsFormState = (workspace) => {
-  const preferences = state.preferences;
-  settingsWorkspaceName = workspace?.name || '';
-  settingsWorkspaceDescription = workspace ? (localStorage.getItem(`nexusWorkspaceDescription_${workspace._id}`) || 'Shared workspace for notes, projects, tasks, and discussions.') : '';
-  settingsTheme = localStorage.getItem('theme') || preferences.theme || 'light';
-  settingsDensity = preferences.density || 'comfortable';
-  settingsReduceMotion = Boolean(preferences.reduceMotion);
-  settingsEmailNotifications = preferences.emailNotifications !== false;
-  settingsTaskNotifications = preferences.taskNotifications !== false;
-  settingsDiscussionNotifications = preferences.discussionNotifications !== false;
-  settingsMentionNotifications = preferences.mentionNotifications !== false;
-  settingsInviteNotifications = preferences.inviteNotifications !== false;
-  settingsSaveInProgress = false;
+const settingsForm = {
+  get workspaceName() { return settingsWorkspaceName; },
+  set workspaceName(value) { settingsWorkspaceName = value; },
+  get workspaceDescription() { return settingsWorkspaceDescription; },
+  set workspaceDescription(value) { settingsWorkspaceDescription = value; },
+  get theme() { return settingsTheme; },
+  set theme(value) { settingsTheme = value; },
+  get density() { return settingsDensity; },
+  set density(value) { settingsDensity = value; },
+  get reduceMotion() { return settingsReduceMotion; },
+  set reduceMotion(value) { settingsReduceMotion = value; },
+  get emailNotifications() { return settingsEmailNotifications; },
+  set emailNotifications(value) { settingsEmailNotifications = value; },
+  get taskNotifications() { return settingsTaskNotifications; },
+  set taskNotifications(value) { settingsTaskNotifications = value; },
+  get discussionNotifications() { return settingsDiscussionNotifications; },
+  set discussionNotifications(value) { settingsDiscussionNotifications = value; },
+  get mentionNotifications() { return settingsMentionNotifications; },
+  set mentionNotifications(value) { settingsMentionNotifications = value; },
+  get inviteNotifications() { return settingsInviteNotifications; },
+  set inviteNotifications(value) { settingsInviteNotifications = value; },
+  get saveInProgress() { return settingsSaveInProgress; },
+  set saveInProgress(value) { settingsSaveInProgress = value; }
 };
 
-const isSettingsDirty = () => {
-  const workspace = selectedWorkspace();
-  const preferences = state.preferences;
-  if (state.activeSettingsTab === 'general') {
-    const currentDesc = workspace ? (localStorage.getItem(`nexusWorkspaceDescription_${workspace._id}`) || 'Shared workspace for notes, projects, tasks, and discussions.') : '';
-    return settingsWorkspaceName !== (workspace?.name || '') ||
-           settingsWorkspaceDescription !== currentDesc;
-  }
-  if (state.activeSettingsTab === 'appearance') {
-    return settingsTheme !== (preferences.theme || 'light') ||
-           settingsDensity !== (preferences.density || 'comfortable') ||
-           settingsReduceMotion !== Boolean(preferences.reduceMotion);
-  }
-  if (state.activeSettingsTab === 'notifications') {
-    return settingsEmailNotifications !== (preferences.emailNotifications !== false) ||
-           settingsTaskNotifications !== (preferences.taskNotifications !== false) ||
-           settingsDiscussionNotifications !== (preferences.discussionNotifications !== false) ||
-           settingsMentionNotifications !== (preferences.mentionNotifications !== false) ||
-           settingsInviteNotifications !== (preferences.inviteNotifications !== false);
-  }
-  return false;
-};
-
-const updateSaveButtonState = () => {
-  const saveBtn = document.getElementById('settingsSaveBtn');
-  if (saveBtn) {
-    saveBtn.disabled = settingsSaveInProgress || !isSettingsDirty();
-  }
-};
+const {
+  syncSettingsFormState,
+  isSettingsDirty,
+  updateSaveButtonState,
+  saveSettings
+} = createSettingsRuntime({
+  state,
+  settingsForm,
+  selectedWorkspace,
+  applyPreferences,
+  persistPreferences,
+  request: (...args) => request(...args),
+  loadWorkspaces: (...args) => loadWorkspaces(...args),
+  renderSettingsPage: (...args) => renderSettingsPage(...args),
+  showToast
+});
 
 const {
   refreshAccountSecurity,
@@ -5270,57 +5268,7 @@ const handleToolPanelClick = async (event) => {
     // Save settings changes
     if (target.id === 'settingsSaveBtn') {
       event.preventDefault();
-      settingsSaveInProgress = true;
-      updateSaveButtonState();
-      
-      try {
-        const workspace = selectedWorkspace();
-        if (state.activeSettingsTab === 'general') {
-          if (state.demoMode) {
-            showToast('Demo workspace settings are temporary.');
-          } else {
-            if (workspace?._id) {
-              if (!settingsWorkspaceName) {
-                showToast('Workspace name is required', true);
-                settingsSaveInProgress = false;
-                updateSaveButtonState();
-                return;
-              }
-              await request(`/api/workspaces/${workspace._id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ name: settingsWorkspaceName })
-              });
-              if (settingsWorkspaceDescription) {
-                localStorage.setItem(`nexusWorkspaceDescription_${workspace._id}`, settingsWorkspaceDescription);
-              }
-              await loadWorkspaces();
-            }
-          }
-          showToast('Workspace profile saved');
-        } else if (state.activeSettingsTab === 'appearance') {
-          state.preferences.theme = settingsTheme;
-          state.preferences.density = settingsDensity;
-          state.preferences.reduceMotion = settingsReduceMotion;
-          localStorage.setItem('theme', settingsTheme);
-          persistPreferences();
-          applyPreferences();
-          showToast('Appearance preferences saved');
-        } else if (state.activeSettingsTab === 'notifications') {
-          state.preferences.emailNotifications = settingsEmailNotifications;
-          state.preferences.taskNotifications = settingsTaskNotifications;
-          state.preferences.discussionNotifications = settingsDiscussionNotifications;
-          state.preferences.mentionNotifications = settingsMentionNotifications;
-          state.preferences.inviteNotifications = settingsInviteNotifications;
-          persistPreferences();
-          showToast('Notification preferences saved');
-        }
-      } catch (err) {
-        showToast(err.message, true);
-      } finally {
-        settingsSaveInProgress = false;
-        syncSettingsFormState(selectedWorkspace());
-        renderSettingsPage();
-      }
+      await saveSettings();
       return;
     }
 
