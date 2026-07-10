@@ -1099,7 +1099,7 @@ const {
   getEditorHtml: (...args) => getEditorHtml(...args),
   selectedDocument,
   setAutosaveStatus,
-  setCollabStatus,
+  setCollabStatus: (...args) => setCollabStatus(...args),
   renderAiEmptyState: (...args) => renderAiEmptyState(...args),
   renderPresence: (...args) => renderPresence(...args),
   render: (...args) => render(...args),
