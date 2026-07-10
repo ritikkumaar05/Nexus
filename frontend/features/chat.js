@@ -1075,8 +1075,12 @@ export const toggleReaction = async (messageId, emoji) => {
     }
   };
 
-  toggleLocal(state.messages.find(m => String(m._id) === String(messageId)));
-  toggleLocal(state.chatMessages.find(m => String(m._id) === String(messageId)));
+  const message = state.messages.find(m => String(m._id) === String(messageId));
+  const chatMessage = state.chatMessages.find(m => String(m._id) === String(messageId));
+  toggleLocal(message);
+  if (chatMessage && chatMessage !== message) {
+    toggleLocal(chatMessage);
+  }
   
   if (currentRoute() === 'chat') {
     renderChatPage({ skipEnsure: true });
