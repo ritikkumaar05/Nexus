@@ -1608,7 +1608,7 @@ const {
   commitRichEditorChange,
   escapeHtml,
   updateEditorStudyStats,
-  scheduleAutosave,
+  scheduleAutosave: (...args) => scheduleAutosave(...args),
   updateAiSelectionHint,
   activateContextTab,
   renderMessageFormContext: (...args) => renderMessageFormContext(...args),
