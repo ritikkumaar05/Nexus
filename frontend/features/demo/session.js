@@ -155,7 +155,7 @@ export const createDemoSession = ({
     state.saveStatus = 'saved';
     setAutosaveStatus(silent ? 'Demo autosaved locally' : 'Demo saved locally');
     if (!silent) addActivity({ action: 'studied', target: doc.title || 'Untitled lecture', documentId: doc._id });
-    if (doc.plainTextContent.trim().length >= 40) {
+    if (doc.plainTextContent.trim().length >= 200) {
       markLectureMilestone(doc._id, 'notesAdded', {
         message: 'Notes added',
         show: !silent

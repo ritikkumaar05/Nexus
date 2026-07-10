@@ -4930,7 +4930,7 @@ const saveCurrentDocument = async ({ silent = false } = {}) => {
     state.lastSavedHtml = contentHtml;
     state.saveStatus = 'saved';
     upsertDocument(doc, { prepend: true });
-    if (plainTextContent.trim().length >= 40) {
+    if (plainTextContent.trim().length >= 200) {
       markLectureMilestone(doc._id, 'notesAdded', {
         message: 'Notes added',
         show: !silent
