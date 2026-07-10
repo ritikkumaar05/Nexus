@@ -71,6 +71,7 @@ import {
 } from './features/editor/selection.js';
 import { createEditorCommands } from './features/editor/commands.js';
 import { createAiStudyOutput } from './features/ai/studyOutput.js';
+import { configureChatFeatureRuntime } from './features/chat/featureRuntime.js';
 import { createChatRuntime, searchState } from './features/chat/runtime.js';
 import { createChatSession } from './features/chat/session.js';
 import { createAccountSecurity } from './features/settings/accountSecurity.js';
@@ -2321,6 +2322,7 @@ const {
   collaborationPeople: (...args) => collaborationPeople(...args),
   selectedWorkspace,
   showToast,
+  showEmojiPicker: (...args) => showEmojiPicker(...args),
   highlightSearchInDom: (...args) => highlightSearchInDom(...args)
 });
 
@@ -6743,7 +6745,7 @@ els.routePage.addEventListener('click', async (event) => {
     const msgArticle = reactionChip.closest('.workspace-chat-message');
     const msgId = msgArticle?.dataset.messageId;
     if (msgId && emoji) {
-      globalThis.toggleReaction(msgId, emoji);
+      toggleReaction(msgId, emoji);
     }
     return;
   }
@@ -7838,6 +7840,35 @@ configureRouterRuntime({
   },
   demo: {
     exitDemoMode
+  }
+});
+
+configureChatFeatureRuntime({
+  shell: {
+    setMainMode,
+    setRouteChrome,
+    els,
+    loadingRows,
+    emptyState,
+    showToast
+  },
+  session: {
+    ensureChatReady
+  },
+  chat: {
+    activeChatChannel,
+    chatOnlineCount,
+    clearChatUnread,
+    isMine,
+    chatSenderName,
+    updateSearchMatchesCounter,
+    highlightActiveMatch
+  },
+  data: {
+    request
+  },
+  markdown: {
+    parseMarkdownToHtml
   }
 });
 

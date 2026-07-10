@@ -1,8 +1,16 @@
-// Lazily loaded route module. Shared shell bindings are exposed by app.js.
+import { collab, selectedWorkspace, state } from '../state/store.js';
+import { currentRoute, navigate } from '../services/router.js';
+import { escapeHtml, formatChatTime, getInitials } from '../utils/text.js';
+import { chatFeatureRuntime } from './chat/featureRuntime.js';
 import { membersRuntime } from './members/runtime.js';
 import { searchState } from './chat/runtime.js';
 
 export const renderChatPage = async ({ skipEnsure = false } = {}) => {
+  const { shell, session, chat } = chatFeatureRuntime();
+  const { setMainMode, setRouteChrome, els, loadingRows, emptyState, showToast } = shell;
+  const { ensureChatReady } = session;
+  const { activeChatChannel, chatOnlineCount, clearChatUnread } = chat;
+
   setMainMode('feature');
   setRouteChrome('chat');
   clearChatUnread();
@@ -387,6 +395,10 @@ export const renderReactions = (reactions) => {
 
 
 export const renderChatMessages = () => {
+  const { chat, markdown } = chatFeatureRuntime();
+  const { activeChatChannel, chatSenderName, isMine } = chat;
+  const { parseMarkdownToHtml } = markdown;
+
   const messages = state.chatMessages.filter((message) => message.channelId === activeChatChannel().slug);
   if (!messages.length) {
     return `
@@ -607,6 +619,10 @@ export const showChatModal = (title, contentHtml) => {
 
 
 export const highlightSearchInDom = (query = '') => {
+  const { chat, markdown } = chatFeatureRuntime();
+  const { activeChatChannel, highlightActiveMatch, updateSearchMatchesCounter } = chat;
+  const { parseMarkdownToHtml } = markdown;
+
   const messages = state.chatMessages.filter((message) => message.channelId === activeChatChannel().slug && !message.isSystem);
   const messageElements = document.querySelectorAll('.workspace-chat-message:not(.chat-system-message)');
   
@@ -695,6 +711,10 @@ export const highlightSearchInDom = (query = '') => {
 
 
 export const handleChatDropdownAction = (action) => {
+  const { shell, chat } = chatFeatureRuntime();
+  const { showToast } = shell;
+  const { activeChatChannel, chatOnlineCount, clearChatUnread, chatSenderName, isMine } = chat;
+
   const channel = activeChatChannel();
   const workspace = selectedWorkspace();
 
@@ -798,6 +818,12 @@ export const handleChatDropdownAction = (action) => {
 
 
 export const handleChatAction = async (action) => {
+  const { shell, chat, data, markdown } = chatFeatureRuntime();
+  const { showToast } = shell;
+  const { activeChatChannel, chatSenderName, isMine } = chat;
+  const { request } = data;
+  const { parseMarkdownToHtml } = markdown;
+
   if (action === 'search') {
     const container = document.getElementById('chatHeaderSearchContainer');
     if (container) {
@@ -945,6 +971,9 @@ export const handleChatAction = async (action) => {
 
 
 export const handleChatEmptyAction = (action) => {
+  const { shell } = chatFeatureRuntime();
+  const { showToast } = shell;
+
   if (action === 'ai-summarize') {
     handleChatAction('ai-summarize');
   } else if (action === 'share-note') {
@@ -1023,6 +1052,9 @@ export const showEmojiPicker = (buttonEl, messageId) => {
 };
 
 export const toggleReaction = async (messageId, emoji) => {
+  const { chat } = chatFeatureRuntime();
+  const { activeChatChannel } = chat;
+
   const currentUserId = String(state.user?.id || state.user?._id || 'me');
   
   const toggleLocal = (msg) => {

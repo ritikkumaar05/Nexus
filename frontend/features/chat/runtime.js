@@ -12,6 +12,7 @@ export const createChatRuntime = ({
   collaborationPeople,
   selectedWorkspace,
   showToast,
+  showEmojiPicker,
   highlightSearchInDom
 }) => {
   const activeChatChannel = () => state.channels.find((channel) => channel.slug === state.selectedChannelId)
@@ -117,7 +118,7 @@ export const createChatRuntime = ({
     } else if (action === 'react') {
       const btn = targetEl?.closest('[data-msg-action="react"]');
       if (btn && msgId) {
-        globalThis.showEmojiPicker(btn, msgId);
+        showEmojiPicker(btn, msgId);
       }
     }
   };
