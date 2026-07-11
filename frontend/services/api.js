@@ -35,7 +35,7 @@ export const createApiClient = ({
       return text || 'That already exists. Try a different name or email.';
     }
     if (status === 429 || lower.includes('too many')) {
-      return 'Too many attempts. Please wait a moment and try again.';
+      return 'That refreshed too often. Wait a moment and try again.';
     }
     if (status === 503 || lower.includes('not configured') || lower.includes('temporarily unavailable')) {
       return 'This feature is temporarily unavailable. Please try again later.';
@@ -108,7 +108,10 @@ export const createApiClient = ({
       const detailMessage = Array.isArray(data?.details) && data.details[0]?.message
         ? data.details[0].message
         : '';
-      throw new Error(friendlyError(detailMessage || data?.error || `Request failed with ${response.status}`, response.status));
+      const error = new Error(friendlyError(detailMessage || data?.error || `Request failed with ${response.status}`, response.status));
+      error.status = response.status;
+      error.code = data?.code || '';
+      throw error;
     }
 
     return data;

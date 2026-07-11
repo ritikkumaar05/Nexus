@@ -168,7 +168,9 @@ export const renderHomePage = () => {
       if (currentRoute() === 'home') {
         renderHomePage();
       }
-    }).catch((err) => console.warn('Failed to load chat preview:', err));
+    }).catch((err) => {
+      if (err?.status !== 429) console.warn('Failed to load chat preview:', err);
+    });
   }
 
   const userName = state.demoMode ? 'Alex' : (state.user?.username || state.user?.email?.split('@')[0] || '');
@@ -231,7 +233,7 @@ export const renderHomePage = () => {
           <article class="card-v3 learning-coach-card">
             <div class="learning-coach-main">
               <span class="doc-badge">Overall Workspace Progress</span>
-              <h3>${coach.progress}% revision coverage</h3>
+              <h3>${coach.progress}% study progress</h3>
               <p>${primaryDoc ? `Next lecture to move forward: ${escapeHtml(primaryDoc.title || 'Untitled lecture')} · ${Number(primaryDoc.progress || 0)}% complete` : 'Add one lecture and Nexus will organize notes, doubts, tasks, quizzes, and revision around it.'}</p>
               ${renderProgressBar(coach.progress)}
               <div class="course-progress-list">
@@ -257,7 +259,7 @@ export const renderHomePage = () => {
                   <span class="doc-icon-large">▣</span>
                   <div>
                     <h3>${escapeHtml(primaryDoc.title || 'Untitled Document')}</h3>
-                    <p>${escapeHtml(primaryDoc.category || 'Course')} · ${Number(primaryDoc.progress || 0)}% learning progress</p>
+                    <p>${escapeHtml(primaryDoc.category || 'Course')} · ${Number(primaryDoc.progress || 0)}% study progress</p>
                   </div>
                 </div>
               </div>

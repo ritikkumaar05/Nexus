@@ -52,6 +52,10 @@ export const createChatSession = ({
       state.chatMessages = await request(`/api/messages/${state.selectedWorkspaceId}/${channel.slug}`);
       setError('chat');
     } catch (err) {
+      if (err?.status === 429) {
+        setError('chat');
+        return;
+      }
       setError('chat', err.message);
       throw err;
     } finally {

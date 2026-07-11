@@ -7,6 +7,9 @@ export const createAiStudyOutput = ({
   aiActionLabel,
   selectedAiSource,
   updateLibrarySaveButton,
+  markLectureMilestone,
+  addActivity,
+  selectedDocumentTitle,
   updateStudyMaterialProgress,
   getQuizProgressFromSession,
   scheduleFlashcardProgressSave,
@@ -130,6 +133,56 @@ export const createAiStudyOutput = ({
     }).filter(Boolean);
   };
 
+  const extractJsonPayload = (output = '') => {
+    const text = String(output || '').trim();
+    if (!text) return null;
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const start = Math.min(
+      ...['{', '['].map((char) => {
+        const index = text.indexOf(char);
+        return index < 0 ? Number.POSITIVE_INFINITY : index;
+      })
+    );
+    const end = Math.max(text.lastIndexOf('}'), text.lastIndexOf(']'));
+    const candidate = fenced?.[1] || (Number.isFinite(start) && end >= start ? text.slice(start, end + 1) : '');
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      return null;
+    }
+  };
+
+  const normalizeQuizQuestions = (questions = []) => questions.slice(0, 20).map((question, index) => {
+    const options = Array.isArray(question.options)
+      ? question.options.map((option, optionIndex) => {
+        if (typeof option === 'string') {
+          return { key: String.fromCharCode(65 + optionIndex), text: option.trim() };
+        }
+        return {
+          key: String(option.key || String.fromCharCode(65 + optionIndex)).trim().toUpperCase().slice(0, 1),
+          text: String(option.text || option.label || option.value || '').trim()
+        };
+      }).filter((option) => option.key && option.text).slice(0, 6)
+      : [];
+    return {
+      id: question.id || `q-${index}`,
+      question: String(question.question || question.prompt || '').trim(),
+      options,
+      answer: String(question.answer || question.correctAnswer || '').trim().toUpperCase().slice(0, 1),
+      answerText: String(question.answerText || '').trim(),
+      explanation: String(question.explanation || question.reason || '').trim(),
+      topic: String(question.topic || 'Study notes').trim()
+    };
+  }).filter((question) => question.question);
+
+  const parseStructuredQuizOutput = (output = '') => {
+    const parsed = extractJsonPayload(output);
+    if (!parsed || typeof parsed !== 'object') return [];
+    if (Array.isArray(parsed.questions)) return normalizeQuizQuestions(parsed.questions);
+    if (Array.isArray(parsed)) return normalizeQuizQuestions(parsed);
+    return [];
+  };
+
   const parseFlashcardsOutput = (output = '') => {
     const lines = output.replace(/\r/g, '').split('\n').map((line) => line.trim()).filter(Boolean);
     const cards = [];
@@ -180,6 +233,17 @@ export const createAiStudyOutput = ({
     .replace(/(?:\s*[-*_=]{2,}\s*)+$/g, '')
     .trim();
 
+  const parseStructuredFlashcardsOutput = (output = '') => {
+    const parsed = extractJsonPayload(output);
+    const cards = Array.isArray(parsed?.cards) ? parsed.cards : Array.isArray(parsed) ? parsed : [];
+    return cards.slice(0, 40).map((card, index) => ({
+      id: card.id || `card-${index}`,
+      front: sanitizeFlashcardText(card.front || card.question || ''),
+      back: sanitizeFlashcardText(card.back || card.answer || ''),
+      tag: sanitizeFlashcardText(card.tag || card.topic || 'Study notes') || 'Study notes'
+    })).filter((card) => card.front && card.back);
+  };
+
   const buildAiStudySession = (action = '', output = '', structured = null) => {
     if (structured?.type === 'quiz' && Array.isArray(structured.questions) && structured.questions.length) {
       return {
@@ -211,7 +275,8 @@ export const createAiStudyOutput = ({
     }
 
     if (action === 'quiz') {
-      const questions = parseQuizOutput(output);
+      const structuredQuestions = parseStructuredQuizOutput(output);
+      const questions = structuredQuestions.length ? structuredQuestions : parseQuizOutput(output);
       if (questions.length) {
         return {
           type: 'quiz',
@@ -224,7 +289,8 @@ export const createAiStudyOutput = ({
     }
 
     if (action === 'flashcards') {
-      const cards = parseFlashcardsOutput(output);
+      const structuredCards = parseStructuredFlashcardsOutput(output);
+      const cards = structuredCards.length ? structuredCards : parseFlashcardsOutput(output);
       if (cards.length) {
         return {
           type: 'flashcards',
@@ -457,6 +523,10 @@ export const createAiStudyOutput = ({
       if (action === 'next') session.currentIndex = Math.min(session.questions.length - 1, session.currentIndex + 1);
       if (action === 'finish') {
         session.completed = true;
+        markLectureMilestone(state.selectedDocumentId, 'quizAttempted', {
+          message: 'Quiz attempted'
+        });
+        addActivity({ action: 'completed quiz on', target: selectedDocumentTitle() });
         if (state.currentAiResultSavedId) {
           updateStudyMaterialProgress(state.currentAiResultSavedId, {
             quizProgress: getQuizProgressFromSession(session)
@@ -486,6 +556,11 @@ export const createAiStudyOutput = ({
       }
       if (action === 'known' || action === 'hard') {
         session.progress[session.currentIndex] = action;
+        markLectureMilestone(state.selectedDocumentId, 'flashcardsReviewed', {
+          message: 'Flashcards reviewed',
+          show: false
+        });
+        addActivity({ action: action === 'known' ? 'reviewed flashcard from' : 'marked hard flashcard from', target: selectedDocumentTitle() });
         session.currentIndex = Math.min(session.cards.length - 1, session.currentIndex + 1);
         session.flipped = false;
         scheduleFlashcardProgressSave();
