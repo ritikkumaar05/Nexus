@@ -1,6 +1,15 @@
 // import './styles/workspace.css';
 import './styles/shared-shell.css';
 import { createApiClient } from './services/api.js';
+import {
+  configureAuthSessionRuntime,
+  saveSession,
+  clearSession,
+  completeAuthenticatedSession,
+  restoreSessionFromRefresh,
+  completeOAuthCallback,
+  handleLogout
+} from './services/authSession.js';
 import { configureRouterRuntime, currentRoute, routeQuery, navigate, renderRoute } from './services/router.js';
 import {
   collab,
@@ -569,59 +578,12 @@ const toggleTheme = () => {
   showToast(`Theme changed to ${newTheme}`);
 };
 
-const saveSession = ({ token, user, csrfToken }) => {
-  state.token = token;
-  state.user = user;
-  state.csrfToken = csrfToken || state.csrfToken || '';
-  localStorage.setItem('user', JSON.stringify(user));
-  if (state.csrfToken) localStorage.setItem('csrfToken', state.csrfToken);
-  localStorage.removeItem('token');
-  localStorage.removeItem('refreshToken');
-};
-
 ({ request } = createApiClient({
   apiBase: API_BASE,
   getToken: () => state.token,
   getCsrfToken: () => state.csrfToken,
   onRefresh: saveSession
 }));
-
-const clearSession = () => {
-  disconnectSocket();
-  teardownYDoc();
-  sessionStorage.removeItem('demoMode');
-  state.demoMode = false;
-  state.token = '';
-  state.csrfToken = '';
-  state.user = null;
-  state.workspaces = [];
-  state.channels = [];
-  setDocuments([]);
-  state.messages = [];
-  state.documentMessages = [];
-  state.workspaceThreads = [];
-  resetTaskStore();
-  state.studyMaterials = [];
-  state.demoStudyMaterials = [];
-  state.activityItems = [];
-  state.typingUsers = [];
-  state.lastAiAction = '';
-  state.lastAiOutput = '';
-  state.aiStructuredOutput = null;
-  state.aiStudySession = null;
-  state.pendingDoubtLinkedText = '';
-  state.presence = [];
-  state.selectedWorkspaceId = '';
-  state.selectedChannelId = '';
-  state.selectedDocumentId = '';
-  localStorage.removeItem('token');
-  localStorage.removeItem('csrfToken');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('user');
-  localStorage.removeItem('workspaceId');
-  localStorage.removeItem('channelId');
-  localStorage.removeItem('documentId');
-};
 
 const selectedDocumentTitle = () => selectedDocument()?.title || els.documentTitleInput?.value || 'Untitled lecture';
 
@@ -5884,79 +5846,6 @@ els.routePage.addEventListener('keydown', async (event) => {
   }
 });
 
-const bootstrapAuthenticatedSession = async () => {
-  try {
-    await connectSocket();
-  } catch (err) {
-    console.warn('Realtime connection failed after sign in:', err.message);
-  }
-
-  try {
-    await loadWorkspaces();
-    if (state.token && !state.demoMode) await renderRoute();
-  } catch (err) {
-    render();
-    showToast(`Signed in, but workspace loading failed: ${err.message}`, true);
-  }
-};
-
-const completeAuthenticatedSession = (result) => {
-  saveSession(result);
-  showToast('Signed in');
-  navigate(pendingInviteRoute() || 'home');
-  void bootstrapAuthenticatedSession();
-};
-
-const restoreSessionFromRefresh = async () => {
-  if (state.token || !state.csrfToken) return false;
-
-  try {
-    const result = await request('/api/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({})
-    }, false);
-    saveSession(result);
-    return true;
-  } catch (err) {
-    state.csrfToken = '';
-    localStorage.removeItem('csrfToken');
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    return false;
-  }
-};
-
-const completeOAuthCallback = async () => {
-  const handoffToken = routeQuery().get('token') || '';
-  const error = routeQuery().get('error') || '';
-
-  if (error) {
-    showToast(error, true);
-    navigate('login');
-    return false;
-  }
-
-  if (!handoffToken) {
-    showToast('Google sign-in could not be completed.', true);
-    navigate('login');
-    return false;
-  }
-
-  try {
-    const result = await request('/api/auth/google/complete', {
-      method: 'POST',
-      body: JSON.stringify({ token: handoffToken })
-    }, false);
-    completeAuthenticatedSession(result);
-    return true;
-  } catch (err) {
-    showToast(friendlyUiMessage(err.message, { isError: true }), true);
-    navigate('login');
-    return false;
-  }
-};
-
 const setPendingVerificationEmail = (email = '') => {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   if (normalizedEmail) sessionStorage.setItem('nexusPendingVerificationEmail', normalizedEmail);
@@ -6841,25 +6730,7 @@ els.authForm.addEventListener('submit', async (event) => {
   }
 });
 
-els.logoutBtn.addEventListener('click', async () => {
-  if (state.demoMode) {
-    clearSession();
-    navigate('login');
-    await renderRoute();
-    showToast('Exited demo workspace');
-    return;
-  }
-
-  const logoutRequest = state.token
-    ? request('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) })
-    : Promise.resolve();
-
-  clearSession();
-  navigate('login');
-  await renderRoute();
-  showToast('Logged out');
-  logoutRequest.catch((err) => console.warn('Logout request failed:', err.message));
-});
+els.logoutBtn.addEventListener('click', handleLogout);
 
 bindEditorCommandHandlers();
 
@@ -7806,6 +7677,28 @@ els.routePage.addEventListener('submit', async (event) => {
     } finally {
       if (submitButton) submitButton.disabled = false;
     }
+  }
+});
+
+configureAuthSessionRuntime({
+  data: {
+    request
+  },
+  routes: {
+    navigate,
+    routeQuery,
+    renderRoute
+  },
+  shell: {
+    render,
+    showToast,
+    friendlyUiMessage
+  },
+  workspace: {
+    loadWorkspaces
+  },
+  tasks: {
+    resetTaskStore
   }
 });
 
