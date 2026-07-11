@@ -4,24 +4,88 @@
    1. Settings Page Shell
    ========================================================= */
 
-.settings-page {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 56px);
-  margin: -42px -40px;
-  background: var(--bg);
-  overflow: hidden;
-  box-sizing: border-box;
-  padding: 32px 40px 0;
-  min-height: 0;
+/* Viewport constraint for Settings Page on Desktop */
+@media (min-width: 769px) {
+  body.feature-screen:has(.settings-page) {
+    overflow: hidden !important;
+  }
+  body.feature-screen:has(.settings-page) .app-main {
+    overflow: hidden !important;
+    height: 100vh;
+  }
+  body.feature-screen:has(.settings-page) .route-page {
+    overflow: hidden !important;
+    height: 100vh;
+    box-sizing: border-box;
+  }
+  
+  .settings-page {
+    display: flex;
+    flex-direction: column;
+    height: calc(100% + 84px);
+    width: calc(100% + 80px);
+    margin: -42px -40px;
+    background: var(--bg);
+    box-sizing: border-box;
+    overflow: hidden;
+    padding: 42px 40px;
+  }
+
+  @media (max-width: 1100px) {
+    .settings-page {
+      height: calc(100% + 52px);
+      width: calc(100% + 40px);
+      margin: -26px -20px;
+      padding: 26px 20px;
+    }
+  }
+  
+  .settings-layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 28px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  
+  .settings-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-right: 1px solid var(--line);
+    padding-right: 20px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
 }
 
+/* Fallback / Mobile Layout rules */
 @media (max-width: 768px) {
   .settings-page {
-    height: auto;
-    margin: 0;
-    padding: 20px 16px 0;
-    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 56px - 84px);
+    background: var(--bg);
+    box-sizing: border-box;
+    padding-bottom: 24px;
+  }
+  
+  .settings-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
+  .settings-sidebar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    padding-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 16px;
+    gap: 6px;
   }
 }
 
@@ -55,49 +119,11 @@
   color: var(--muted);
 }
 
-/* =========================================================
-   2. Settings Layout (sidebar + content)
-   ========================================================= */
-
-.settings-layout {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 28px;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-@media (max-width: 1100px) {
+/* Base definitions for responsiveness above mobile but below large screens */
+@media (min-width: 769px) and (max-width: 1100px) {
   .settings-layout {
-    grid-template-columns: 1fr;
-    overflow: visible;
-    flex: none;
-  }
-}
-
-/* =========================================================
-   3. Settings Sidebar Nav
-   ========================================================= */
-
-.settings-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border-right: 1px solid var(--line);
-  padding-right: 20px;
-  overflow-y: auto;
-}
-
-@media (max-width: 1100px) {
-  .settings-sidebar {
-    border-right: none;
-    padding-right: 0;
-    flex-direction: row;
-    flex-wrap: wrap;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 16px;
-    gap: 6px;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 20px;
   }
 }
 
@@ -238,7 +264,7 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-width: 740px;
+  max-width: 100%;
 }
 
 .settings-panel-header {
@@ -1073,7 +1099,21 @@ input:checked + .toggle-switch-slider::before {
    ========================================================= */
 
 .workspace-settings-page {
-  max-width: 1120px;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: -42px -40px;
+  padding: 42px 40px;
+  width: calc(100% + 80px);
+  background: var(--bg);
+  min-height: calc(100vh - 56px - 84px);
+}
+
+@media (max-width: 1100px) {
+  .workspace-settings-page {
+    width: calc(100% + 40px);
+    margin: -26px -20px;
+    padding: 26px 20px;
+  }
 }
 
 .workspace-settings-heading {

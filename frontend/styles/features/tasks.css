@@ -30,22 +30,15 @@
 .tasks-page-v2 {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 56px);
-  margin: -42px -40px;
+  min-height: calc(100vh - 56px - 84px); /* 56px topbar, 84px = route-page padding top+bottom */
   background: var(--bg);
-  overflow: hidden;
   box-sizing: border-box;
-  padding: 32px 40px 0;
-  min-height: 0;
+  padding-bottom: 40px;
 }
 
 @media (max-width: 768px) {
   .tasks-page-v2 {
-    height: auto;
-    min-height: 100%;
-    margin: 0;
-    padding: 20px 16px 0;
-    overflow: auto;
+    padding-bottom: 24px;
   }
 }
 
@@ -381,16 +374,6 @@
    6. Content Area (Board / List container)
    ========================================================= */
 
-.tasks-page-v2 > .tasks-board,
-.tasks-page-v2 > .tasks-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
-  padding-bottom: 32px;
-  scrollbar-gutter: stable;
-}
-
 /* Board grid layout */
 
 .tasks-page-v2 > .tasks-board {
@@ -399,17 +382,12 @@
   gap: 24px;
   align-content: start;
   align-items: start;
+  padding-bottom: 8px;
 }
 
 @media (max-width: 768px) {
   .tasks-page-v2 > .tasks-board {
     grid-template-columns: 1fr;
-    overflow: visible;
-    padding-right: 0;
-  }
-  .tasks-page-v2 > .tasks-list {
-    overflow: visible;
-    padding-right: 0;
   }
 }
 
@@ -419,6 +397,7 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+  padding-bottom: 8px;
 }
 
 /* Shared column styles */

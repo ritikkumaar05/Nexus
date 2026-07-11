@@ -111,6 +111,7 @@ export const renderRoute = async () => {
     }
 
     if (route === 'settings') {
+      state.activeSettingsTab = 'general';
       settingsRuntime().syncSettingsFormState(selectedWorkspace());
       return runtime.routes.renderSettingsPage();
     }
