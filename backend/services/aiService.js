@@ -8,6 +8,7 @@
 
 const MODEL_NAME = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 30000);
+const GEMINI_MAX_OUTPUT_TOKENS = Number(process.env.GEMINI_MAX_OUTPUT_TOKENS || 4096);
 
 /**
  * Helper to pause execution (used for exponential backoff)
@@ -51,7 +52,7 @@ const generateText = async (prompt, systemInstruction = "You are a helpful colla
     },
     generationConfig: {
       temperature: 0.4,
-      maxOutputTokens: 2048
+      maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS
     }
   };
 

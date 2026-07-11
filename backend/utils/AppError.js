@@ -157,6 +157,21 @@ class RateLimitError extends AppError {
 }
 
 /**
+ * Service Unavailable Error (503)
+ * Thrown when an external service or required integration is temporarily unavailable
+ */
+class ServiceUnavailableError extends AppError {
+  constructor(message = 'Service temporarily unavailable', details = null) {
+    super(
+      message,
+      HTTP_STATUS.SERVICE_UNAVAILABLE,
+      'SERVICE_UNAVAILABLE',
+      details
+    );
+  }
+}
+
+/**
  * Internal Server Error (500)
  * Generic server error (default for unexpected errors)
  */
@@ -199,7 +214,11 @@ const globalErrorHandler = (err, req, res, next) => {
   // Default to internal error
   let appError = normalizedErr instanceof AppError
     ? normalizedErr
-    : new InternalError(normalizedErr.message || 'An unexpected error occurred');
+    : new InternalError(
+      process.env.NODE_ENV === 'production'
+        ? 'Something went wrong. Please try again.'
+        : normalizedErr.message || 'An unexpected error occurred'
+    );
 
   // Log error (structured logging in production)
   const logData = {
@@ -292,6 +311,7 @@ module.exports = {
   ConflictError,
   UnprocessableEntityError,
   RateLimitError,
+  ServiceUnavailableError,
   InternalError,
 
   // Utilities

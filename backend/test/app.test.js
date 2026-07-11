@@ -60,9 +60,17 @@ test('createCorsOptions allows only configured origins in production', async () 
   });
 
   assert.equal(allowed, true);
-  assert.rejects(
+  const noOriginAllowed = await new Promise((resolve, reject) => {
+    corsOptions.origin(undefined, (err, result) => {
+      if (err) return reject(err);
+      return resolve(result);
+    });
+  });
+  assert.equal(noOriginAllowed, true);
+
+  await assert.rejects(
     () => new Promise((resolve, reject) => {
-      corsOptions.origin(undefined, (err, result) => {
+      corsOptions.origin('https://evil.example', (err, result) => {
         if (err) return reject(err);
         return resolve(result);
       });

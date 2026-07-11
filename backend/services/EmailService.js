@@ -1,4 +1,8 @@
 const { URL } = require('url');
+const { ServiceUnavailableError } = require('../utils/AppError');
+const fetchWithTimeout = require('../utils/fetchWithTimeout');
+
+const emailTimeoutMs = () => Number(process.env.EMAIL_PROVIDER_TIMEOUT_MS || 10000);
 
 const appBaseUrl = () => (
   process.env.FRONTEND_ORIGIN
@@ -15,32 +19,54 @@ const buildHashUrl = (route, params = {}) => {
 
 const sendViaHttpProvider = async ({ to, subject, text, html }) => {
   if (!process.env.EMAIL_PROVIDER_URL) return false;
+  if (!process.env.EMAIL_FROM || !process.env.EMAIL_PROVIDER_API_KEY) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ServiceUnavailableError('Email delivery is not configured.');
+    }
+  }
 
-  const response = await fetch(process.env.EMAIL_PROVIDER_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(process.env.EMAIL_PROVIDER_API_KEY
-        ? { Authorization: `Bearer ${process.env.EMAIL_PROVIDER_API_KEY}` }
-        : {})
-    },
-    body: JSON.stringify({
-  from: process.env.EMAIL_FROM,
-  to: [to],
-  subject,
-  html,
-  text
-})
-
-
-  });
+  let response;
+  try {
+    response = await fetchWithTimeout(process.env.EMAIL_PROVIDER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.EMAIL_PROVIDER_API_KEY
+          ? { Authorization: `Bearer ${process.env.EMAIL_PROVIDER_API_KEY}` }
+          : {})
+      },
+      body: JSON.stringify({
+        from: process.env.EMAIL_FROM,
+        to: [to],
+        subject,
+        html,
+        text
+      })
+    }, emailTimeoutMs());
+  } catch (err) {
+    const timedOut = err?.name === 'AbortError';
+    console.error(JSON.stringify({
+      level: 'error',
+      message: timedOut ? 'Email provider request timed out' : 'Email provider request failed',
+      providerUrl: process.env.EMAIL_PROVIDER_URL,
+      timeoutMs: emailTimeoutMs()
+    }));
+    throw new ServiceUnavailableError(timedOut
+      ? 'Email delivery timed out. Please try again in a moment.'
+      : 'Email delivery failed. Please try again in a moment.');
+  }
 
   if (!response.ok) {
-  const error = await response.text();
-  throw new Error(
-    `Resend error ${response.status}: ${error}`
-  );
-}
+    const body = await response.text().catch(() => '');
+    console.error(JSON.stringify({
+      level: 'error',
+      message: 'Email provider rejected request',
+      status: response.status,
+      providerUrl: process.env.EMAIL_PROVIDER_URL,
+      bodyPreview: body.slice(0, 500)
+    }));
+    throw new ServiceUnavailableError('Email delivery failed. Please try again in a moment.');
+  }
 
   return true;
 };

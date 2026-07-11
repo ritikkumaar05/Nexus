@@ -23,6 +23,17 @@ const {
 } = require('./middleware/security');
 const { globalErrorHandler } = require('./utils/AppError');
 
+const parseTrustProxy = () => {
+  const configured = process.env.TRUST_PROXY
+    || (process.env.NODE_ENV === 'production' ? '1' : '');
+  const normalized = String(configured).trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  if (/^\d+$/.test(normalized)) return Number(normalized);
+  return configured;
+};
+
 const createCorsOptions = () => {
   const allowedOrigins = (process.env.CORS_ORIGIN || '')
     .split(',')
@@ -37,9 +48,6 @@ const createCorsOptions = () => {
   return {
     origin: (origin, callback) => {
       if (!origin) {
-        if (isProduction) {
-          return callback(new Error('Origin not allowed by CORS'));
-        }
         return callback(null, true);
       }
       if (!isProduction && allowedOrigins.length === 0) {
@@ -50,32 +58,36 @@ const createCorsOptions = () => {
       }
       return callback(new Error('Origin not allowed by CORS'));
     },
-    credentials: true
+    credentials: true,
+    optionsSuccessStatus: 204
   };
 };
 
 const createApp = () => {
   const app = express();
   const corsOptions = createCorsOptions();
+  const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '6mb';
 
   app.disable('x-powered-by');
+  app.set('trust proxy', parseTrustProxy());
+
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok' });
+  });
+
   app.use(helmet());
   app.use(cors(corsOptions));
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+  app.use(express.json({ limit: requestBodyLimit }));
+  app.use(express.urlencoded({ extended: true, limit: requestBodyLimit }));
   app.use((err, _req, res, next) => {
     if (err?.type === 'entity.too.large') {
       return res.status(413).json({
-        error: 'Request payload too large. Please reduce document size or generated content.'
+        error: 'This request is too large for Nexus to process. Please reduce the content and try again.'
       });
     }
     return next(err);
   });
   app.use(globalLimiter);
-
-  app.get('/health', (_req, res) => {
-    res.json({ status: 'ok' });
-  });
 
   app.use('/api/auth', authLimiter, authRoutes);
   app.use('/api/account', authLimiter, accountRoutes);

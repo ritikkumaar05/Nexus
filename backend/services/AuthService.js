@@ -14,6 +14,7 @@ const jwt = require('jsonwebtoken');
 const { AccountToken, EmailOtp, Session, User } = require('../models');
 const { getJwtSecret } = require('../config/env');
 const EmailService = require('./EmailService');
+const fetchWithTimeout = require('../utils/fetchWithTimeout');
 const {
   NotFoundError,
   AuthenticationError,
@@ -21,6 +22,8 @@ const {
   ConflictError
 } = require('../utils/AppError');
 const { AUTH, VALIDATION } = require('../config/constants');
+
+const googleOauthTimeoutMs = () => Number(process.env.GOOGLE_OAUTH_TIMEOUT_MS || 10000);
 
 class AuthService {
   /**
@@ -182,7 +185,7 @@ class AuthService {
       throw new ValidationError('Google authorization code is required');
     }
 
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+    const tokenResponse = await fetchWithTimeout('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -192,6 +195,11 @@ class AuthService {
         redirect_uri: redirectUri,
         grant_type: 'authorization_code'
       })
+    }, googleOauthTimeoutMs()).catch((err) => {
+      if (err?.name === 'AbortError') {
+        throw new AuthenticationError('Google sign-in timed out. Please try again.');
+      }
+      throw new AuthenticationError('Google authentication failed');
     });
 
     const tokenData = await tokenResponse.json().catch(() => ({}));
@@ -809,7 +817,16 @@ class AuthService {
   }
 
   async _verifyGoogleIdToken(idToken) {
-    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+    const response = await fetchWithTimeout(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+      {},
+      googleOauthTimeoutMs()
+    ).catch((err) => {
+      if (err?.name === 'AbortError') {
+        throw new AuthenticationError('Google sign-in timed out. Please try again.');
+      }
+      throw new AuthenticationError('Google authentication failed');
+    });
     const profile = await response.json().catch(() => ({}));
 
     if (!response.ok) {

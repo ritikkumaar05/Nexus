@@ -62,6 +62,11 @@ class AiGenerationCacheService {
       { upsert: true, returnDocument: 'after' }
     );
   }
+
+  async delete(cacheKey) {
+    if (!cacheKey) return null;
+    return AiGenerationCache.deleteOne({ cacheKey });
+  }
 }
 
 module.exports = new AiGenerationCacheService();

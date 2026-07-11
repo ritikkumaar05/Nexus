@@ -30,10 +30,16 @@ const parseCookies = (cookieHeader = '') => cookieHeader
     return cookies;
   }, {});
 
+const authCookieSameSite = () => {
+  const configured = (process.env.REFRESH_COOKIE_SAMESITE || '').toLowerCase();
+  if (configured === 'none' || configured === 'lax') return configured;
+  return process.env.NODE_ENV === 'production' ? 'none' : 'lax';
+};
+
 const refreshCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.REFRESH_COOKIE_SAMESITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax'),
+  sameSite: authCookieSameSite(),
   path: '/api/auth',
   maxAge: AUTH.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000
 });
@@ -131,7 +137,7 @@ router.get('/google/start', asyncHandler(async (req, res) => {
   res.cookie(OAUTH_STATE_COOKIE_NAME, state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.REFRESH_COOKIE_SAMESITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax'),
+    sameSite: authCookieSameSite(),
     path: '/api/auth/google',
     maxAge: 10 * 60 * 1000
   });
@@ -157,7 +163,7 @@ router.get('/google/callback', asyncHandler(async (req, res) => {
   res.clearCookie(OAUTH_STATE_COOKIE_NAME, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.REFRESH_COOKIE_SAMESITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax'),
+    sameSite: authCookieSameSite(),
     path: '/api/auth/google'
   });
 
@@ -176,7 +182,11 @@ router.get('/google/callback', asyncHandler(async (req, res) => {
     });
     return redirectToFrontend(res, 'oauth-callback', { token: result.handoffToken });
   } catch (err) {
-    return redirectToFrontend(res, 'login', { error: err.message || 'Google sign-in failed' });
+    console.error('Google OAuth callback failed:', JSON.stringify({
+      message: err.message,
+      code: err.code || err.name || 'OAuthError'
+    }));
+    return redirectToFrontend(res, 'login', { error: 'Google sign-in failed. Please try again.' });
   }
 }));
 
