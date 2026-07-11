@@ -8,7 +8,10 @@ import {
   completeAuthenticatedSession,
   restoreSessionFromRefresh,
   completeOAuthCallback,
-  handleLogout
+  handleLogout,
+  requestVerificationOtp,
+  handleAuthRouteSubmit,
+  handleLegacyAuthFormSubmit
 } from './services/authSession.js';
 import { configureRouterRuntime, currentRoute, routeQuery, navigate, renderRoute } from './services/router.js';
 import {
@@ -110,7 +113,30 @@ import {
   markdownFileName
 } from './utils/text.js';
 
-const API_BASE = localStorage.getItem('apiBase') || import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+const resolveApiBase = () => {
+  const configuredApiBase = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+  if (import.meta.env.PROD) {
+    if (!configuredApiBase) {
+      throw new Error('VITE_API_BASE must be set for production builds.');
+    }
+    const parsed = new URL(configuredApiBase);
+    const hostname = parsed.hostname || '';
+    const isIpAddress = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':');
+    const isSingleLabelHost = !hostname.includes('.');
+    if (parsed.protocol !== 'https:' || isIpAddress || isSingleLabelHost) {
+      throw new Error('VITE_API_BASE must be the production HTTPS backend URL.');
+    }
+    return configuredApiBase;
+  }
+
+  if (import.meta.env.DEV) {
+    return (localStorage.getItem('apiBase') || configuredApiBase || 'http://localhost:5000').replace(/\/$/, '');
+  }
+
+  return configuredApiBase;
+};
+
+const API_BASE = resolveApiBase();
 const Y_TEXT_KEY = 'content';
 let request;
 
@@ -118,7 +144,6 @@ let autosaveTimer = null;
 let dashboardHydrationTimer = null;
 let aiSelectionHintTimer = null;
 let titleUiTimer = null;
-let emailVerificationResendTimer = null;
 let aiGenerationInFlight = false;
 let flashcardProgressSaveTimer = null;
 let documentCreateInFlight = false;
@@ -622,14 +647,14 @@ const loadMilestonesForDoc = (docId) => {
 
 const LECTURE_PROGRESS_MILESTONES = [
   { key: 'created',           label: 'Lecture created',               weight: 5  },
-  { key: 'notesAdded',        label: 'Notes/content added',           weight: 15 },
-  { key: 'aiExplanation',     label: 'AI explanation used',           weight: 10 },
-  { key: 'summaryGenerated',  label: 'Lecture summary generated',     weight: 10 },
-  { key: 'flashcardsGenerated', label: 'Flashcards generated',        weight: 15 },
-  { key: 'quizGenerated',     label: 'Quiz generated',                weight: 15 },
-  { key: 'revisionGenerated', label: 'Revision questions generated',  weight: 10 },
+  { key: 'notesAdded',        label: 'Notes/content added',           weight: 20 },
+  { key: 'aiExplanation',     label: 'Mentor explanation used',       weight: 5  },
+  { key: 'summarySaved',      label: 'Summary saved for revision',    weight: 5  },
+  { key: 'quizAttempted',     label: 'Quiz attempted',                weight: 20 },
+  { key: 'flashcardsReviewed', label: 'Flashcards reviewed',          weight: 20 },
+  { key: 'revisionGenerated', label: 'Revision questions prepared',   weight: 5  },
   { key: 'doubtResolved',     label: 'Doubt created and resolved',    weight: 10 },
-  { key: 'taskCreated',       label: 'Study task created',            weight: 10 },
+  { key: 'taskCreated',       label: 'Study task created',            weight: 5  },
   { key: 'allTasksCompleted', label: 'All linked tasks completed',    weight: 10 }
 ];
 
@@ -786,6 +811,8 @@ const lectureMilestoneFlags = (doc = selectedDocument()) => {
   const tasks = allKnownTasks().filter((task) => taskDocumentId(task) === docId);
   const threads = allKnownThreads().filter((thread) => threadDocumentId(thread) === docId);
   const materials = allKnownStudyMaterials().filter((material) => materialDocumentId(material) === docId);
+  const quizMaterials = materials.filter((m) => studyMaterialMatchesAction(m, ['quiz']));
+  const flashcardMaterials = materials.filter((m) => studyMaterialMatchesAction(m, ['flashcards']));
 
   // FIX: raised notesAdded threshold from 40 to 200 characters.
   // 40 chars is a single sentence; 200 chars represents a real paragraph of notes.
@@ -795,9 +822,9 @@ const lectureMilestoneFlags = (doc = selectedDocument()) => {
     created:            Boolean(docId),
     notesAdded:         Boolean(stored.notesAdded)        || text.length >= NOTES_THRESHOLD,
     aiExplanation:      Boolean(stored.aiExplanation)     || materials.some((m) => studyMaterialMatchesAction(m, ['explanation', 'simple-explanation'])),
-    summaryGenerated:   Boolean(stored.summaryGenerated)  || materials.some((m) => studyMaterialMatchesAction(m, ['summary', 'summarize'])),
-    flashcardsGenerated:Boolean(stored.flashcardsGenerated)||materials.some((m) => studyMaterialMatchesAction(m, ['flashcards'])),
-    quizGenerated:      Boolean(stored.quizGenerated)     || materials.some((m) => studyMaterialMatchesAction(m, ['quiz'])),
+    summarySaved:       Boolean(stored.summarySaved)      || materials.some((m) => studyMaterialMatchesAction(m, ['summary', 'summarize'])),
+    quizAttempted:      Boolean(stored.quizAttempted)     || quizMaterials.some((m) => Number(m.quizProgress?.attempts || 0) > 0),
+    flashcardsReviewed: Boolean(stored.flashcardsReviewed)|| flashcardMaterials.some((m) => Number(m.flashcardProgress?.knownCount || 0) + Number(m.flashcardProgress?.hardCount || 0) > 0),
     revisionGenerated:  Boolean(stored.revisionGenerated) || materials.some((m) => studyMaterialMatchesAction(m, ['important_questions', 'important-questions'])),
     doubtResolved:      Boolean(stored.doubtResolved)     || threads.some((thread) => thread.status === 'resolved'),
     taskCreated:        Boolean(stored.taskCreated)       || tasks.length > 0,
@@ -1660,6 +1687,9 @@ const {
   aiActionLabel,
   selectedAiSource,
   updateLibrarySaveButton: (...args) => updateLibrarySaveButton(...args),
+  markLectureMilestone,
+  addActivity: (...args) => addActivity(...args),
+  selectedDocumentTitle,
   updateStudyMaterialProgress: (...args) => updateStudyMaterialProgress(...args),
   getQuizProgressFromSession: (...args) => getQuizProgressFromSession(...args),
   scheduleFlashcardProgressSave: (...args) => scheduleFlashcardProgressSave(...args),
@@ -1673,11 +1703,8 @@ const setAiOutput = (action, output, structured = null) => {
   state.aiStudySession = buildAiStudySession(action, output, structured);
   state.currentAiResultSavedId = '';
   const milestoneKey = {
-    summarize: 'summaryGenerated',
     'simple-explanation': 'aiExplanation',
     explain: 'aiExplanation',
-    flashcards: 'flashcardsGenerated',
-    quiz: 'quizGenerated',
     'important-questions': 'revisionGenerated'
   }[action];
   if (milestoneKey && state.selectedDocumentId) {
@@ -2144,9 +2171,18 @@ const renderEditor = () => {
   }
 
   const contextTitle = doc ? `"${doc.title || 'Untitled lecture'}"` : 'the current lecture';
-  els.aiContextLabel.textContent = doc
-    ? `The tutor already knows ${contextTitle}, selected text, saved study material, open doubts, and tasks.`
-    : 'Select a lecture to use the tutor with learning context.';
+  if (doc) {
+    const contextItems = [contextTitle];
+    if (getSelectedEditorText()) contextItems.push('selected text');
+    if (state.studyMaterials?.length) contextItems.push('saved study material');
+    if (selectedDocumentTasks().length) contextItems.push('linked tasks');
+    if (allKnownThreads().some((thread) => threadDocumentId(thread) === String(doc._id) && thread.status !== 'resolved')) {
+      contextItems.push('open doubts');
+    }
+    els.aiContextLabel.textContent = `Nexus Mentor will use ${contextItems.join(', ')}.`;
+  } else {
+    els.aiContextLabel.textContent = 'Select a lecture to use Nexus Mentor with learning context.';
+  }
   els.tasksContextLabel.textContent = doc
     ? `Tasks are scoped to ${contextTitle} so revision work stays attached.`
     : 'Select a lecture to see lecture tasks.';
@@ -2359,6 +2395,31 @@ const {
   showToast
 }));
 
+const activityStorageKey = (workspaceId = state.selectedWorkspaceId) => {
+  const userKey = state.user?.uid || state.user?.id || state.user?.email || 'anonymous';
+  return `nexus_activity_${userKey}_${workspaceId || 'none'}`;
+};
+
+const persistActivityItems = () => {
+  if (!state.selectedWorkspaceId) return;
+  try {
+    localStorage.setItem(activityStorageKey(), JSON.stringify(state.activityItems.slice(0, 12)));
+  } catch {}
+};
+
+const hydrateActivityItems = () => {
+  if (!state.selectedWorkspaceId) {
+    state.activityItems = [];
+    return;
+  }
+  try {
+    const parsed = JSON.parse(localStorage.getItem(activityStorageKey()) || '[]');
+    state.activityItems = Array.isArray(parsed) ? parsed.slice(0, 12) : [];
+  } catch {
+    state.activityItems = [];
+  }
+};
+
 const addActivity = ({ actor = state.user?.username || state.user?.email || 'You', action, target, documentId = state.selectedDocumentId }) => {
   if (!action || !target) return;
   // Advance the study streak whenever a real learning action happens
@@ -2372,6 +2433,7 @@ const addActivity = ({ actor = state.user?.username || state.user?.email || 'You
     documentId
   });
   state.activityItems = state.activityItems.slice(0, 12);
+  persistActivityItems();
   if (normalizeContextTab(state.activeContextTab) === 'activity') renderActivityList();
 };
 
@@ -2866,12 +2928,14 @@ const loadWorkspaces = async () => {
 
   if (state.selectedWorkspaceId) {
     localStorage.setItem('workspaceId', state.selectedWorkspaceId);
+    hydrateActivityItems();
     await Promise.all([loadChannels(), loadDocuments()]);
   } else {
     localStorage.removeItem('workspaceId');
     state.channels = [];
     state.documents = [];
     state.chatMessages = [];
+    state.activityItems = [];
     resetTaskStore();
   }
 
@@ -2944,6 +3008,10 @@ const loadMessages = async () => {
     state.messages = await request(`/api/messages/${state.selectedWorkspaceId}/${state.selectedChannelId}`);
     setError('messages');
   } catch (err) {
+    if (err?.status === 429) {
+      setError('messages');
+      return;
+    }
     setError('messages', err.message);
     throw err;
   } finally {
@@ -3142,6 +3210,13 @@ const saveCurrentAiResultToLibrary = async () => {
     if (material?._id) {
       state.currentAiResultSavedId = material._id;
       state.selectedStudyMaterialId = material._id;
+      if (payload.type === 'summary') {
+        markLectureMilestone(payload.documentId, 'summarySaved', {
+          message: 'Summary saved for revision',
+          show: false
+        });
+      }
+      addActivity({ action: 'saved study material from', target: selectedDocumentTitle(), documentId: payload.documentId });
       renderStudyLibrary();
       updateLibrarySaveButton();
       activateContextTab('library');
@@ -3191,6 +3266,13 @@ const updateStudyMaterialProgress = async (materialId, body) => {
     body: JSON.stringify(body)
   });
   upsertStudyMaterial(material);
+  if (body.quizProgress) {
+    markLectureMilestone(material.documentId, 'quizAttempted', { show: false });
+  }
+  if (body.flashcardProgress) {
+    const reviewed = (body.flashcardProgress.knownCardIds || []).length + (body.flashcardProgress.hardCardIds || []).length;
+    if (reviewed) markLectureMilestone(material.documentId, 'flashcardsReviewed', { show: false });
+  }
   renderStudyLibrary();
   return material;
 };
@@ -3201,7 +3283,7 @@ const scheduleFlashcardProgressSave = () => {
   flashcardProgressSaveTimer = window.setTimeout(() => {
     updateStudyMaterialProgress(state.currentAiResultSavedId, {
       flashcardProgress: getFlashcardProgressFromSession()
-    }).catch((err) => showToast(err.message, true));
+    }).catch((err) => console.warn('Background flashcard progress save failed:', err.message));
   }, 1800);
 };
 
@@ -3770,7 +3852,7 @@ const runStudyAiAction = async (action, mentorPrompt = '') => {
   if (state.demoMode) {
     window.setTimeout(() => {
       setAiOutput(action, demoAiResponse(action));
-      addActivity({ action: `generated ${aiActionLabel(action).toLowerCase()} from`, target: selectedDocumentTitle() });
+      addActivity({ action: mentorPrompt ? 'asked Mentor about' : `generated ${aiActionLabel(action).toLowerCase()} from`, target: selectedDocumentTitle() });
       setAiGenerating(false);
     }, 350);
     return null;
@@ -3792,7 +3874,7 @@ const runStudyAiAction = async (action, mentorPrompt = '') => {
       })
     });
     setAiOutput(action, result.response, result.structured || null);
-    addActivity({ action: `generated ${aiActionLabel(action).toLowerCase()} from`, target: selectedDocumentTitle() });
+    addActivity({ action: mentorPrompt ? 'asked Mentor about' : `generated ${aiActionLabel(action).toLowerCase()} from`, target: selectedDocumentTitle() });
     return result.response;
   } catch (err) {
     const message = friendlyUiMessage(err.message, { isError: true });
@@ -3927,10 +4009,15 @@ const createWorkspaceAndOpen = async (name, { closePanel = false, route = 'home'
       body: JSON.stringify({ name: workspaceName })
     });
 
+    state.workspaces = [
+      workspace,
+      ...state.workspaces.filter((item) => String(item._id) !== String(workspace._id))
+    ];
     state.selectedWorkspaceId = workspace._id;
     state.selectedDocumentId = '';
     state.selectedChannelId = '';
     state.chatMessages = [];
+    state.activityItems = [];
     resetTaskStore();
     state.documentMessages = [];
     state.workspaceThreads = [];
@@ -3938,6 +4025,7 @@ const createWorkspaceAndOpen = async (name, { closePanel = false, route = 'home'
     localStorage.removeItem('documentId');
     localStorage.removeItem('channelId');
     teardownYDoc();
+    render();
 
     if (closePanel) closeToolPanel();
     await loadWorkspaces();
@@ -5846,356 +5934,6 @@ els.routePage.addEventListener('keydown', async (event) => {
   }
 });
 
-const setPendingVerificationEmail = (email = '') => {
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-  if (normalizedEmail) sessionStorage.setItem('nexusPendingVerificationEmail', normalizedEmail);
-  else sessionStorage.removeItem('nexusPendingVerificationEmail');
-};
-
-const startVerificationResendCountdown = (seconds = 60) => {
-  window.clearInterval(emailVerificationResendTimer);
-  const resendButtons = [
-    document.getElementById('pageResendOtpInlineBtn'),
-    document.getElementById('pageResendVerificationSubmit')
-  ].filter(Boolean);
-  const countdown = document.getElementById('verificationResendCountdown');
-  let remaining = seconds;
-
-  const renderCountdown = () => {
-    resendButtons.forEach((button) => {
-      button.disabled = remaining > 0;
-      button.setAttribute('aria-disabled', remaining > 0 ? 'true' : 'false');
-    });
-    if (countdown) {
-      countdown.classList.toggle('hidden', remaining <= 0);
-      countdown.textContent = remaining > 0
-        ? `You can resend OTP in ${remaining}s.`
-        : 'You can resend OTP now.';
-    }
-  };
-
-  renderCountdown();
-  emailVerificationResendTimer = window.setInterval(() => {
-    remaining -= 1;
-    renderCountdown();
-    if (remaining <= 0) {
-      window.clearInterval(emailVerificationResendTimer);
-      emailVerificationResendTimer = null;
-    }
-  }, 1000);
-};
-
-const requestVerificationOtp = async (email, { startCountdown = true } = {}) => {
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-  if (!normalizedEmail) {
-    showToast('Enter the email address for your Nexus account.', true);
-    return false;
-  }
-  await request('/api/auth/resend-verification', {
-    method: 'POST',
-    body: JSON.stringify({ email: normalizedEmail })
-  }, false);
-  setPendingVerificationEmail(normalizedEmail);
-  if (startCountdown) startVerificationResendCountdown(60);
-  showToast('If the account is unverified, a new OTP has been sent.');
-  return true;
-};
-
-const handleAuthRouteSubmit = async (event) => {
-  if (event.target.id === 'pageForgotPasswordForm') {
-    event.preventDefault();
-    const submitButton = document.getElementById('pageForgotPasswordSubmit');
-    const resultBox = document.getElementById('passwordRecoveryResult');
-
-    try {
-      submitButton.disabled = true;
-      submitButton.setAttribute('aria-busy', 'true');
-      submitButton.querySelector('span').textContent = 'Sending...';
-
-      const result = await request('/api/auth/password/forgot', {
-        method: 'POST',
-        body: JSON.stringify({ email: document.getElementById('pageForgotEmailInput').value.trim() })
-      }, false);
-
-      resultBox.classList.remove('hidden');
-      resultBox.innerHTML = `
-        <strong>${escapeHtml(result.message || 'Password reset requested')}</strong>
-        <p>Check your email for reset instructions.</p>
-      `;
-      showToast('Password reset email sent');
-    } catch (err) {
-      showToast(err.message, true);
-    } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.removeAttribute('aria-busy');
-        submitButton.querySelector('span').textContent = 'Send reset email';
-      }
-    }
-    return true;
-  }
-
-  if (event.target.id === 'pageResetPasswordForm') {
-    event.preventDefault();
-    const submitButton = document.getElementById('pageResetPasswordSubmit');
-    const resultBox = document.getElementById('passwordRecoveryResult');
-
-    try {
-      const resetToken = document.getElementById('pageResetTokenInput').value.trim();
-      const newPassword = document.getElementById('pageNewPasswordInput').value;
-      const confirmPassword = document.getElementById('pageConfirmNewPasswordInput').value;
-      if (!resetToken) {
-        throw new Error('Use the latest password reset link from your email.');
-      }
-      if (newPassword !== confirmPassword) {
-        throw new Error('Passwords do not match.');
-      }
-
-      submitButton.disabled = true;
-      submitButton.setAttribute('aria-busy', 'true');
-      submitButton.querySelector('span').textContent = 'Resetting...';
-
-      await request('/api/auth/password/reset', {
-        method: 'POST',
-        body: JSON.stringify({
-          token: resetToken,
-          password: newPassword
-        })
-      }, false);
-
-      document.getElementById('pageResetTokenInput').value = '';
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/reset-password`);
-      resultBox.classList.remove('hidden');
-      resultBox.innerHTML = `
-        <strong>Password reset successful</strong>
-        <p>You can now sign in with your new password.</p>
-        <a class="primary" href="#/login">Back to login</a>
-      `;
-      showToast('Password reset successful');
-    } catch (err) {
-      showToast(err.message, true);
-    } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.removeAttribute('aria-busy');
-        submitButton.querySelector('span').textContent = 'Reset password';
-      }
-    }
-    return true;
-  }
-
-  if (event.target.id === 'pageVerifyEmailForm') {
-    event.preventDefault();
-    const submitButton = document.getElementById('pageVerifyEmailSubmit');
-    const resultBox = document.getElementById('emailVerificationResult');
-    const emailInput = document.getElementById('pageVerifyEmailInput');
-    const otpInput = document.getElementById('pageVerifyOtpInput');
-    clearInlineErrors(event.target);
-
-    const email = emailInput?.value.trim().toLowerCase() || '';
-    const otp = otpInput?.value.trim() || '';
-    let hasError = false;
-    if (!email) {
-      showInlineError(emailInput, 'Enter the email address you used to create your account.');
-      hasError = true;
-    } else if (!emailInput.validity.valid) {
-      showInlineError(emailInput, 'Enter a valid email address.');
-      hasError = true;
-    }
-    if (!/^\d{6}$/.test(otp)) {
-      showInlineError(otpInput, 'Enter the 6-digit OTP from your email.');
-      hasError = true;
-    }
-    if (hasError) {
-      focusFirstInvalid(event.target);
-      return true;
-    }
-
-    try {
-      submitButton.disabled = true;
-      submitButton.setAttribute('aria-busy', 'true');
-      submitButton.querySelector('span').textContent = 'Verifying...';
-      await request('/api/auth/verify-email', {
-        method: 'POST',
-        body: JSON.stringify({ email, otp })
-      }, false);
-
-      setPendingVerificationEmail('');
-      window.clearInterval(emailVerificationResendTimer);
-      resultBox.classList.remove('hidden');
-      resultBox.innerHTML = `
-        <strong>Email verified successfully</strong>
-        <p>You can now sign in to Nexus.</p>
-        <a class="primary" href="#/login">Back to login</a>
-      `;
-      showToast('Email verified successfully');
-    } catch (err) {
-      showToast(friendlyUiMessage(err.message, { isError: true }), true);
-    } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.removeAttribute('aria-busy');
-        submitButton.querySelector('span').textContent = 'Verify OTP';
-      }
-    }
-    return true;
-  }
-
-  if (event.target.id === 'pageResendVerificationForm') {
-    event.preventDefault();
-    const submitButton = document.getElementById('pageResendVerificationSubmit');
-    const resultBox = document.getElementById('emailVerificationResult');
-    const emailInput = document.getElementById('pageResendEmailInput');
-    clearInlineErrors(event.target);
-
-    const email = emailInput?.value.trim().toLowerCase() || '';
-    if (!email) {
-      showInlineError(emailInput, 'Enter the email address you used to create your account.');
-      focusFirstInvalid(event.target);
-      return true;
-    }
-    if (!emailInput.validity.valid) {
-      showInlineError(emailInput, 'Enter a valid email address.');
-      focusFirstInvalid(event.target);
-      return true;
-    }
-
-    try {
-      submitButton.disabled = true;
-      submitButton.setAttribute('aria-busy', 'true');
-      submitButton.querySelector('span').textContent = 'Sending...';
-      const result = await request('/api/auth/resend-verification', {
-        method: 'POST',
-        body: JSON.stringify({ email })
-      }, false);
-      setPendingVerificationEmail(email);
-      startVerificationResendCountdown(60);
-
-      resultBox.classList.remove('hidden');
-      resultBox.innerHTML = `
-        <strong>${escapeHtml(result.message || 'If the account is unverified, a new OTP has been sent.')}</strong>
-        <p>Check your email for the latest 6-digit OTP.</p>
-        <a class="primary" href="#/verify-email">Enter OTP</a>
-      `;
-      showToast('Verification OTP sent');
-    } catch (err) {
-      showToast(friendlyUiMessage(err.message, { isError: true }), true);
-    } finally {
-      if (submitButton) {
-        if (!emailVerificationResendTimer) submitButton.disabled = false;
-        submitButton.removeAttribute('aria-busy');
-        submitButton.querySelector('span').textContent = 'Resend verification OTP';
-      }
-    }
-    return true;
-  }
-
-  if (event.target.id !== 'pageAuthForm') return false;
-  event.preventDefault();
-  if (state.demoMode) exitDemoMode();
-
-  const submitButton = document.getElementById('pageAuthSubmit');
-  const form = event.target;
-  clearInlineErrors(form);
-
-  try {
-    const mode = currentRoute() === 'signup' ? 'register' : 'login';
-    const emailInput = document.getElementById('pageEmailInput');
-    const passwordInput = document.getElementById('pagePasswordInput');
-    const payload = {
-      email: emailInput.value.trim(),
-      password: passwordInput.value
-    };
-    let hasError = false;
-    if (!payload.email) {
-      showInlineError(emailInput, 'Enter the email address for your Nexus account.');
-      hasError = true;
-    } else if (!emailInput.validity.valid) {
-      showInlineError(emailInput, 'Enter a valid email address.');
-      hasError = true;
-    }
-    if (!payload.password) {
-      showInlineError(passwordInput, 'Enter your password.');
-      hasError = true;
-    } else if (mode === 'register' && payload.password.length < 8) {
-      showInlineError(passwordInput, 'Use at least 8 characters.');
-      hasError = true;
-    }
-    if (mode === 'register') {
-      const usernameInput = document.getElementById('pageUsernameInput');
-      const confirmPasswordInput = document.getElementById('pageConfirmPasswordInput');
-      const confirmPassword = confirmPasswordInput.value;
-	      payload.username = usernameInput.value.trim();
-	      if (!payload.username) {
-	        showInlineError(usernameInput, 'Choose a username for your profile.');
-	        hasError = true;
-	      } else if (!isValidSignupUsername(payload.username)) {
-	        showInlineError(usernameInput, 'Use 3-50 letters, numbers, underscores, or hyphens.');
-	        hasError = true;
-	      }
-	      if (payload.password !== confirmPassword) {
-	        showInlineError(confirmPasswordInput, 'Passwords do not match.');
-	        hasError = true;
-      }
-    }
-    if (hasError) {
-      focusFirstInvalid(form);
-      showToast('Please fix the highlighted fields.', true);
-      return true;
-    }
-
-    submitButton.disabled = true;
-    submitButton.setAttribute('aria-busy', 'true');
-    submitButton.querySelector('span').textContent = mode === 'register' ? 'Creating account...' : 'Signing in...';
-
-    const result = await request(`/api/auth/${mode}`, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    if (mode === 'register') {
-      setPendingVerificationEmail(payload.email);
-      showToast('Account created. Enter the OTP sent to your email.');
-      navigate('verify-email');
-      window.setTimeout(() => startVerificationResendCountdown(60), 0);
-      return true;
-    }
-    completeAuthenticatedSession(result);
-  } catch (err) {
-    const message = friendlyUiMessage(err.message, { isError: true });
-    showToast(message, true);
-    const emailInput = document.getElementById('pageEmailInput');
-    const passwordInput = document.getElementById('pagePasswordInput');
-	    const usernameInput = document.getElementById('pageUsernameInput');
-	    if (/username/i.test(message) && usernameInput) {
-	      showInlineError(usernameInput, message);
-	    } else if (/email|registered|credentials|password|sign in/i.test(message)) {
-	      showInlineError(/password/i.test(message) ? passwordInput : emailInput, message);
-	    }
-    if (/verify your email/i.test(message) && emailInput?.value) {
-      setPendingVerificationEmail(emailInput.value);
-      let verifyAction = document.getElementById('authVerifyEmailAction');
-      if (!verifyAction) {
-        verifyAction = document.createElement('div');
-        verifyAction.id = 'authVerifyEmailAction';
-        verifyAction.className = 'password-recovery-result';
-        submitButton?.insertAdjacentElement('afterend', verifyAction);
-      }
-      verifyAction.innerHTML = `
-        <strong>Email verification required</strong>
-        <p>Enter the OTP sent to ${escapeHtml(emailInput.value.trim())} to finish setup.</p>
-        <a class="primary" href="#/verify-email">Verify Email</a>
-      `;
-    }
-  } finally {
-    if (submitButton) {
-      submitButton.disabled = false;
-      submitButton.removeAttribute('aria-busy');
-      submitButton.querySelector('span').textContent = currentRoute() === 'signup' ? 'Create account' : 'Continue';
-    }
-  }
-  return true;
-};
-
 els.routePage.addEventListener('submit', async (event) => {
   if (await handleAuthRouteSubmit(event)) return;
 
@@ -6653,82 +6391,7 @@ els.registerTab.addEventListener('click', () => {
   render();
 });
 
-els.authForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  if (state.demoMode) exitDemoMode();
-  clearInlineErrors(event.target);
-  try {
-    const payload = {
-      email: els.emailInput.value.trim(),
-      password: els.passwordInput.value
-    };
-    let hasError = false;
-    if (!payload.email) {
-      showInlineError(els.emailInput, 'Enter your email address.');
-      hasError = true;
-    } else if (!els.emailInput.validity.valid) {
-      showInlineError(els.emailInput, 'Enter a valid email address.');
-      hasError = true;
-    }
-	    if (!payload.password) {
-	      showInlineError(els.passwordInput, 'Enter your password.');
-	      hasError = true;
-	    } else if (state.authMode === 'register' && payload.password.length < 8) {
-	      showInlineError(els.passwordInput, 'Use at least 8 characters.');
-	      hasError = true;
-	    }
-	    if (state.authMode === 'register') {
-	      payload.username = els.usernameInput.value.trim();
-	      if (!payload.username) {
-	        showInlineError(els.usernameInput, 'Choose a username.');
-	        hasError = true;
-	      } else if (!isValidSignupUsername(payload.username)) {
-	        showInlineError(els.usernameInput, 'Use 3-50 letters, numbers, underscores, or hyphens.');
-	        hasError = true;
-	      }
-	    }
-    if (hasError) {
-      focusFirstInvalid(event.target);
-      return showToast('Please fix the highlighted fields.', true);
-    }
-
-    const authButton = event.target.querySelector('button[type="submit"]');
-    authButton.disabled = true;
-    authButton.setAttribute('aria-busy', 'true');
-
-    const mode = state.authMode === 'register' ? 'register' : 'login';
-    const result = await request(`/api/auth/${mode}`, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    if (mode === 'register') {
-      setPendingVerificationEmail(payload.email);
-      showToast('Account created. Enter the OTP sent to your email.');
-      navigate('verify-email');
-      window.setTimeout(() => startVerificationResendCountdown(60), 0);
-      return;
-    }
-    completeAuthenticatedSession(result);
-	  } catch (err) {
-	    const message = friendlyUiMessage(err.message, { isError: true });
-	    showToast(message, true);
-	    if (/username/i.test(message) && els.usernameInput) {
-	      showInlineError(els.usernameInput, message);
-	    } else if (/email|registered|credentials|password|sign in/i.test(message)) {
-	      showInlineError(/password/i.test(message) ? els.passwordInput : els.emailInput, message);
-	    }
-	    if (/verify your email/i.test(message) && els.emailInput?.value) {
-	      setPendingVerificationEmail(els.emailInput.value);
-	      navigate('verify-email');
-    }
-  } finally {
-    const authButton = event.target.querySelector('button[type="submit"]');
-    if (authButton) {
-      authButton.disabled = false;
-      authButton.removeAttribute('aria-busy');
-    }
-  }
-});
+els.authForm.addEventListener('submit', handleLegacyAuthFormSubmit);
 
 els.logoutBtn.addEventListener('click', handleLogout);
 
@@ -6777,6 +6440,7 @@ els.workspaceList.addEventListener('click', async (event) => {
   }
   state.selectedWorkspaceId = button.dataset.workspaceId;
   localStorage.setItem('workspaceId', state.selectedWorkspaceId);
+  hydrateActivityItems();
   teardownYDoc();
   await Promise.all([loadChannels(), loadDocuments()]);
   render();
@@ -7686,19 +7350,26 @@ configureAuthSessionRuntime({
   },
   routes: {
     navigate,
+    currentRoute,
     routeQuery,
     renderRoute
   },
   shell: {
+    els,
     render,
     showToast,
-    friendlyUiMessage
+    clearInlineErrors,
+    focusFirstInvalid,
+    showInlineError
   },
   workspace: {
     loadWorkspaces
   },
   tasks: {
     resetTaskStore
+  },
+  demo: {
+    exitDemoMode
   }
 });
 
