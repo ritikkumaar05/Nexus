@@ -40,6 +40,7 @@ import {
   showAskDoubtModal
 } from './services/modals.js';
 import {
+  configureInviteRuntime,
   inviteState,
   formatInviteRole,
   formatInviteExpiry,
@@ -2652,12 +2653,12 @@ const renderInvitePage = async () => {
   const code = routeQuery().get('code') || '';
   const credential = token ? { token } : code ? { code } : {};
   let inviteMarkup = '<p>Paste an invite link or code below to preview and accept it.</p>';
-  activeJoinInvite = null;
+  inviteState.activeJoinInvite = null;
 
   if (credential.token || credential.code) {
     try {
       const invite = await previewInviteCredential(credential);
-      activeJoinInvite = { preview: invite, credential };
+      inviteState.activeJoinInvite = { preview: invite, credential };
       if (!state.token) {
         storePendingInviteCredential(credential);
         showToast('Log in or create an account to join this workspace.');
@@ -2690,8 +2691,8 @@ const renderInvitePage = async () => {
       </header>
       <section class="page-card">
         ${inviteMarkup}
-        ${activeJoinInvite ? '' : `<input id="inviteTokenInput" value="${escapeHtml(token || code)}" placeholder="Invite link, token, or STUDY code" />`}
-        <button id="${activeJoinInvite ? 'confirmJoinWorkspaceBtn' : 'previewInviteBtn'}" class="primary" type="button">${activeJoinInvite ? 'Join Workspace' : 'Preview invite'}</button>
+        ${inviteState.activeJoinInvite ? '' : `<input id="inviteTokenInput" value="${escapeHtml(token || code)}" placeholder="Invite link, token, or STUDY code" />`}
+        <button id="${inviteState.activeJoinInvite ? 'confirmJoinWorkspaceBtn' : 'previewInviteBtn'}" class="primary" type="button">${inviteState.activeJoinInvite ? 'Join Workspace' : 'Preview invite'}</button>
       </section>
     </div>
   `;
@@ -5452,7 +5453,7 @@ const handleToolPanelClick = async (event) => {
 
     if (target.id === 'acceptInviteBtn') {
       const credential = parseInviteInput(document.getElementById('inviteTokenInput')?.value.trim() || '');
-      activeJoinInvite = { credential };
+      inviteState.activeJoinInvite = { credential };
       return acceptActiveInvite();
     }
 
@@ -7869,6 +7870,19 @@ configureChatFeatureRuntime({
   },
   markdown: {
     parseMarkdownToHtml
+  }
+});
+
+configureInviteRuntime({
+  shell: {
+    renderToolPanel,
+    closeToolPanel,
+    showToast
+  },
+  data: {
+    request,
+    loadWorkspaces,
+    bootstrapWorkspace
   }
 });
 

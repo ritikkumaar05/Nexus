@@ -1,4 +1,20 @@
-import { state } from '../state/store.js';
+import { selectedWorkspace, state } from '../state/store.js';
+import { navigate } from './router.js';
+import { escapeHtml } from '../utils/text.js';
+
+let inviteRuntime = null;
+
+export const configureInviteRuntime = (runtime) => {
+  inviteRuntime = runtime;
+};
+
+const appRuntime = () => {
+  if (!inviteRuntime) {
+    throw new Error('Invite runtime has not been configured.');
+  }
+
+  return inviteRuntime;
+};
 
 export const inviteState = {
   latestCreatedInvite: null,
@@ -102,7 +118,7 @@ export const renderInviteResultTool = (result = inviteState.latestCreatedInvite)
   const formattedRole = formatInviteRole(invite.role);
   const formattedExpiry = formatInviteExpiry(invite.expiresAt);
 
-  globalThis.renderToolPanel(`
+  appRuntime().shell.renderToolPanel(`
     <div class="tool-card invite-result-card">
       <div class="invite-success-box">
         <strong>Teammate invite ready!</strong>
@@ -111,18 +127,18 @@ export const renderInviteResultTool = (result = inviteState.latestCreatedInvite)
 
       <div class="form-field-v2 invite-form-field">
         <label>Role</label>
-        <div class="invite-meta-badge">${globalThis.escapeHtml(formattedRole)}</div>
+        <div class="invite-meta-badge">${escapeHtml(formattedRole)}</div>
       </div>
 
       <div class="form-field-v2 invite-form-field">
         <label>Expires</label>
-        <div class="invite-meta-badge secondary">${globalThis.escapeHtml(formattedExpiry)}</div>
+        <div class="invite-meta-badge secondary">${escapeHtml(formattedExpiry)}</div>
       </div>
 
       <div class="form-field-v2 invite-form-field">
         <label>Invite Link</label>
         <div class="invite-copy-row">
-          <input readonly value="${globalThis.escapeHtml(inviteLink)}" id="inviteResultLinkInput" />
+          <input readonly value="${escapeHtml(inviteLink)}" id="inviteResultLinkInput" />
           <button class="primary invite-copy-btn" data-copy-invite-link type="button">Copy Link</button>
         </div>
       </div>
@@ -130,7 +146,7 @@ export const renderInviteResultTool = (result = inviteState.latestCreatedInvite)
       <div class="form-field-v2 invite-form-field">
         <label>Invite Code</label>
         <div class="invite-copy-row">
-          <input class="invite-code-input" readonly value="${globalThis.escapeHtml(code)}" id="inviteResultCodeInput" />
+          <input class="invite-code-input" readonly value="${escapeHtml(code)}" id="inviteResultCodeInput" />
           <button class="ghost invite-copy-btn" data-copy-invite-code type="button">Copy Code</button>
         </div>
       </div>
@@ -148,23 +164,23 @@ export const renderJoinWorkspaceTool = ({ inputValue = '', preview = null, crede
   const token = credential?.token || '';
   const code = credential?.code || '';
 
-  globalThis.renderToolPanel(`
+  appRuntime().shell.renderToolPanel(`
     <div class="tool-card join-workspace-card">
       ${error ? `
         <div class="invite-error-box">
           <strong>Could not load invite</strong>
-          <p>${globalThis.escapeHtml(error)}</p>
+          <p>${escapeHtml(error)}</p>
         </div>
       ` : ''}
 
       ${preview ? `
         <div class="invite-preview-box">
           <p class="invite-kicker">You've been invited to join</p>
-          <h3>${globalThis.escapeHtml(workspace?.name || 'Workspace')}</h3>
-          ${workspace?.description ? `<p class="invite-desc">${globalThis.escapeHtml(workspace.description)}</p>` : ''}
+          <h3>${escapeHtml(workspace?.name || 'Workspace')}</h3>
+          ${workspace?.description ? `<p class="invite-desc">${escapeHtml(workspace.description)}</p>` : ''}
           <div class="invite-preview-meta">
-            <div><dt>Role</dt><dd>${globalThis.escapeHtml(formatInviteRole(preview.role))}</dd></div>
-            <div><dt>Expires</dt><dd>${globalThis.escapeHtml(formatInviteExpiry(preview.expiresAt))}</dd></div>
+            <div><dt>Role</dt><dd>${escapeHtml(formatInviteRole(preview.role))}</dd></div>
+            <div><dt>Expires</dt><dd>${escapeHtml(formatInviteExpiry(preview.expiresAt))}</dd></div>
           </div>
         </div>
       ` : `
@@ -173,7 +189,7 @@ export const renderJoinWorkspaceTool = ({ inputValue = '', preview = null, crede
       `}
 
       <section class="join-workspace-form">
-        ${inviteState.activeJoinInvite ? '' : `<input id="inviteTokenInput" value="${globalThis.escapeHtml(token || code || inputValue)}" placeholder="Invite link, token, or STUDY code" />`}
+        ${inviteState.activeJoinInvite ? '' : `<input id="inviteTokenInput" value="${escapeHtml(token || code || inputValue)}" placeholder="Invite link, token, or STUDY code" />`}
         <button id="${inviteState.activeJoinInvite ? 'confirmJoinWorkspaceBtn' : 'previewInviteBtn'}" class="primary" type="button">${inviteState.activeJoinInvite ? 'Join Workspace' : 'Preview invite'}</button>
       </section>
     </div>
@@ -182,7 +198,7 @@ export const renderJoinWorkspaceTool = ({ inputValue = '', preview = null, crede
 };
 
 export const showInviteMemberModal = () => {
-  const workspace = globalThis.selectedWorkspace();
+  const workspace = selectedWorkspace();
   if (!workspace) return;
   
   const result = inviteState.latestCreatedInvite;
@@ -197,21 +213,21 @@ export const showInviteMemberModal = () => {
       <div class="form-field-v2 invite-form-field">
         <label>Invite Link</label>
         <div class="invite-copy-row">
-          <input readonly value="${globalThis.escapeHtml(result.inviteLink)}" id="generatedInviteLinkInput" />
+          <input readonly value="${escapeHtml(result.inviteLink)}" id="generatedInviteLinkInput" />
           <button class="primary invite-copy-btn" id="copyGeneratedInviteLinkBtn" type="button">Copy Link</button>
         </div>
       </div>
       <div class="form-field-v2 invite-form-field">
         <label>Invite Code</label>
         <div class="invite-copy-row">
-          <input class="invite-code-input" readonly value="${globalThis.escapeHtml(result.code)}" id="generatedInviteCodeInput" />
+          <input class="invite-code-input" readonly value="${escapeHtml(result.code)}" id="generatedInviteCodeInput" />
           <button class="ghost invite-copy-btn" id="copyGeneratedInviteCodeBtn" type="button">Copy Code</button>
         </div>
       </div>
     `;
   }
   
-  globalThis.renderToolPanel(`
+  appRuntime().shell.renderToolPanel(`
     <div class="tool-card invite-member-card">
       ${successHtml}
       
@@ -246,7 +262,7 @@ export const showInviteMemberModal = () => {
 export const previewInviteCredential = async (credential) => {
   const query = inviteCredentialQuery(credential);
   if (!query) throw new Error('Paste an invite link or code first.');
-  return globalThis.request(`/api/invites/preview?${query}`, {}, false);
+  return appRuntime().data.request(`/api/invites/preview?${query}`, {}, false);
 };
 
 export const openJoinWorkspaceFlow = async (inputValue = '') => {
@@ -259,9 +275,10 @@ export const openJoinWorkspaceFlow = async (inputValue = '') => {
     const preview = await previewInviteCredential(credential);
     if (!state.token) {
       storePendingInviteCredential(credential);
-      globalThis.closeToolPanel();
-      globalThis.showToast('Log in or create an account to join this workspace.');
-      globalThis.navigate('login');
+      const { closeToolPanel, showToast } = appRuntime().shell;
+      closeToolPanel();
+      showToast('Log in or create an account to join this workspace.');
+      navigate('login');
       return;
     }
     renderJoinWorkspaceTool({ inputValue, preview, credential });
@@ -272,16 +289,17 @@ export const openJoinWorkspaceFlow = async (inputValue = '') => {
 
 export const acceptActiveInvite = async () => {
   const credential = inviteState.activeJoinInvite?.credential || readPendingInviteCredential();
-  if (!credential.token && !credential.code) return globalThis.showToast('Paste an invite link or code first.', true);
+  const { shell, data } = appRuntime();
+  if (!credential.token && !credential.code) return shell.showToast('Paste an invite link or code first.', true);
   if (!state.token) {
     storePendingInviteCredential(credential);
-    globalThis.navigate('login');
-    return globalThis.showToast('Log in or create an account to join this workspace.');
+    navigate('login');
+    return shell.showToast('Log in or create an account to join this workspace.');
   }
   if (inviteState.inviteRequestInFlight) return;
   inviteState.inviteRequestInFlight = true;
   try {
-    const result = await globalThis.request('/api/invites/accept', {
+    const result = await data.request('/api/invites/accept', {
       method: 'POST',
       body: JSON.stringify(credential)
     });
@@ -294,13 +312,13 @@ export const acceptActiveInvite = async () => {
       state.selectedWorkspaceId = workspace._id;
       localStorage.setItem('workspaceId', workspace._id);
     }
-    globalThis.closeToolPanel();
-    await globalThis.loadWorkspaces();
-    await globalThis.bootstrapWorkspace();
-    globalThis.navigate('home');
-    globalThis.showToast(`Joined ${workspace?.name || 'workspace'}`);
+    shell.closeToolPanel();
+    await data.loadWorkspaces();
+    await data.bootstrapWorkspace();
+    navigate('home');
+    shell.showToast(`Joined ${workspace?.name || 'workspace'}`);
   } catch (err) {
-    globalThis.showToast(err.message || 'Could not join workspace. Try again.', true);
+    shell.showToast(err.message || 'Could not join workspace. Try again.', true);
   } finally {
     inviteState.inviteRequestInFlight = false;
   }
