@@ -15,6 +15,7 @@ import {
 } from './state/store.js';
 import { uiState } from './state/uiState.js';
 import {
+  configureSocketRuntime,
   socketState,
   loadYjs,
   loadSocketClient,
@@ -7883,6 +7884,45 @@ configureInviteRuntime({
     request,
     loadWorkspaces,
     bootstrapWorkspace
+  }
+});
+
+configureSocketRuntime({
+  config: {
+    API_BASE,
+    Y_TEXT_KEY,
+    CHAT_TYPING_PUBLISH_INTERVAL_MS,
+    CURSOR_PUBLISH_INTERVAL_MS,
+    TYPING_PUBLISH_INTERVAL_MS
+  },
+  shell: {
+    showToast,
+    setCollabStatus,
+    renderWorkspace,
+    renderHomePage,
+    recordDocumentOpenMeasure
+  },
+  editor: {
+    getEditorText,
+    setEditorText,
+    getEditorSelection
+  },
+  presence: {
+    renderPresence,
+    updateTypingStatus
+  },
+  chat: {
+    activeChatChannel,
+    renderChatTypingIndicator,
+    renderChatPage,
+    syncUnreadBadge
+  },
+  activity: {
+    addActivity
+  },
+  encoding: {
+    base64ToUint8,
+    uint8ToBase64
   }
 });
 

@@ -1,4 +1,19 @@
-import { state, collab, selectedDocument } from '../state/store.js';
+import { state, collab, selectedDocument, selectedWorkspace } from '../state/store.js';
+import { currentRoute } from './router.js';
+
+let socketRuntime = null;
+
+export const configureSocketRuntime = (runtime) => {
+  socketRuntime = runtime;
+};
+
+const appRuntime = () => {
+  if (!socketRuntime) {
+    throw new Error('Socket runtime has not been configured.');
+  }
+
+  return socketRuntime;
+};
 
 export const socketState = {
   yjsModulePromise: null,
@@ -16,9 +31,7 @@ export const socketState = {
 };
 
 const setCollabStatus = (message) => {
-  if (globalThis.els?.collabStatus) {
-    globalThis.els.collabStatus.textContent = message;
-  }
+  appRuntime().shell.setCollabStatus(message);
 };
 
 export const loadYjs = async () => {
@@ -38,18 +51,18 @@ export const loadSocketClient = async () => {
 };
 
 const base64ToUint8 = (value) => {
-  return globalThis.base64ToUint8(value);
+  return appRuntime().encoding.base64ToUint8(value);
 };
 
 const uint8ToBase64 = (uint8Array) => {
-  return globalThis.uint8ToBase64(uint8Array);
+  return appRuntime().encoding.uint8ToBase64(uint8Array);
 };
 
 export const connectSocket = async () => {
   if (!state.token || collab.socket) return;
   const io = await loadSocketClient();
 
-  collab.socket = io(globalThis.API_BASE, {
+  collab.socket = io(appRuntime().config.API_BASE, {
     auth: { token: state.token },
     reconnection: true,
     reconnectionAttempts: Infinity,
@@ -76,7 +89,7 @@ export const connectSocket = async () => {
   });
 
   collab.socket.on('operation-error', ({ message }) => {
-    globalThis.showToast(message || 'Realtime operation failed', true);
+    appRuntime().shell.showToast(message || 'Realtime operation failed', true);
   });
 
   collab.socket.on('document-synced', ({ documentId, updateBase64, text, users }) => {
@@ -94,11 +107,11 @@ export const connectSocket = async () => {
 
       const syncedText = collab.ytext.toString();
       const doc = selectedDocument();
-      if (!doc?.contentHtml) globalThis.setEditorText(syncedText);
+      if (!doc?.contentHtml) appRuntime().editor.setEditorText(syncedText);
       state.lastSavedText = syncedText;
       if (doc) doc.plainTextContent = syncedText;
       state.presence = users || [];
-      globalThis.renderPresence();
+      appRuntime().presence.renderPresence();
       setCollabStatus(`Live with ${state.presence.length} collaborator(s)`);
     } finally {
       collab.applyingRemote = false;
@@ -119,7 +132,7 @@ export const connectSocket = async () => {
   collab.socket.on('presence-update', ({ documentId, users }) => {
     if (documentId !== state.selectedDocumentId) return;
     state.presence = users || [];
-    globalThis.renderPresence();
+    appRuntime().presence.renderPresence();
     setCollabStatus(`Live with ${state.presence.length} collaborator(s)`);
   });
 
@@ -128,32 +141,32 @@ export const connectSocket = async () => {
     state.typingUsers = typing
       ? [...state.typingUsers.filter((item) => item.userId !== user.userId), user]
       : state.typingUsers.filter((item) => item.userId !== user.userId);
-    globalThis.updateTypingStatus();
+    appRuntime().presence.updateTypingStatus();
   });
 
   collab.socket.on('workspace-presence-update', ({ workspaceId, users }) => {
     if (workspaceId !== state.selectedWorkspaceId) return;
     state.chatOnlineUsers = users || [];
-    globalThis.renderWorkspace();
+    appRuntime().shell.renderWorkspace();
   });
 
   collab.socket.on('chat-typing', ({ workspaceId, channelId, user, typing }) => {
-    if (workspaceId !== state.selectedWorkspaceId || channelId !== globalThis.activeChatChannel().slug || !user) return;
+    if (workspaceId !== state.selectedWorkspaceId || channelId !== appRuntime().chat.activeChatChannel().slug || !user) return;
     state.chatTypingUsers = typing
       ? [...state.chatTypingUsers.filter((item) => item.userId !== user.userId), user]
       : state.chatTypingUsers.filter((item) => item.userId !== user.userId);
-    if (globalThis.currentRoute() === 'chat') globalThis.renderChatTypingIndicator();
+    if (currentRoute() === 'chat') appRuntime().chat.renderChatTypingIndicator();
   });
 
   collab.socket.on('user-joined', ({ userId, username, email }) => {
     const displayName = username || (email ? email.split('@')[0] : null) || userId || 'Someone';
-    globalThis.addActivity({ actor: displayName, action: 'joined', target: globalThis.selectedWorkspace()?.name || 'the workspace' });
-    globalThis.showToast(`${displayName} joined the workspace`);
+    appRuntime().activity.addActivity({ actor: displayName, action: 'joined', target: selectedWorkspace()?.name || 'the workspace' });
+    appRuntime().shell.showToast(`${displayName} joined the workspace`);
 
     const systemMsg = {
       _id: `system-join-${Date.now()}-${Math.random()}`,
       workspace: state.selectedWorkspaceId,
-      channelId: globalThis.activeChatChannel().slug,
+      channelId: appRuntime().chat.activeChatChannel().slug,
       isSystem: true,
       content: `${displayName} joined the workspace`,
       createdAt: new Date().toISOString()
@@ -165,24 +178,24 @@ export const connectSocket = async () => {
 
     if (!duplicate) {
       state.chatMessages.push(systemMsg);
-      if (globalThis.currentRoute() === 'chat') {
-        globalThis.renderChatPage();
+      if (currentRoute() === 'chat') {
+        appRuntime().chat.renderChatPage();
       }
     }
   });
 
   collab.socket.on('receive-chat-message', (message) => {
     if (String(message.workspace || message.workspaceId) !== String(state.selectedWorkspaceId)) return;
-    if (message.channelId !== globalThis.activeChatChannel().slug) return;
+    if (message.channelId !== appRuntime().chat.activeChatChannel().slug) return;
     state.messages.push(message);
     state.chatMessages.push(message);
     state.chatTypingUsers = state.chatTypingUsers.filter((item) => String(item.userId) !== String(message.sender?._id || message.sender));
-    if (globalThis.currentRoute() === 'chat') {
-      globalThis.renderChatPage();
+    if (currentRoute() === 'chat') {
+      appRuntime().chat.renderChatPage();
     } else {
       state.unreadChatCount = Number(state.unreadChatCount || 0) + 1;
-      globalThis.syncUnreadBadge();
-      if (globalThis.currentRoute() === 'home') globalThis.renderHomePage();
+      appRuntime().chat.syncUnreadBadge();
+      if (currentRoute() === 'home') appRuntime().shell.renderHomePage();
     }
   });
 
@@ -195,8 +208,8 @@ export const connectSocket = async () => {
     };
     updateInArr(state.messages);
     updateInArr(state.chatMessages);
-    if (globalThis.currentRoute() === 'chat') {
-      globalThis.renderChatPage();
+    if (currentRoute() === 'chat') {
+      appRuntime().chat.renderChatPage();
     }
   });
 };
@@ -219,7 +232,7 @@ export const teardownYDoc = () => {
   collab.activeDocumentId = '';
   state.presence = [];
   state.typingUsers = [];
-  globalThis.renderPresence();
+  appRuntime().presence.renderPresence();
 };
 
 export const setupYDoc = async (documentId) => {
@@ -232,17 +245,17 @@ export const setupYDoc = async (documentId) => {
   teardownYDoc();
 
   collab.ydoc = new socketState.Y.Doc();
-  collab.ytext = collab.ydoc.getText(globalThis.Y_TEXT_KEY);
+  collab.ytext = collab.ydoc.getText(appRuntime().config.Y_TEXT_KEY);
   collab.activeDocumentId = documentId;
 
   collab.ytext.observe(() => {
     if (collab.localInput) return;
     const nextValue = collab.ytext.toString();
-    if (globalThis.getEditorText() === nextValue) return;
+    if (appRuntime().editor.getEditorText() === nextValue) return;
     if (selectedDocument()?.contentHtml) return;
     collab.applyingRemote = true;
     try {
-      globalThis.setEditorText(nextValue);
+      appRuntime().editor.setEditorText(nextValue);
     } finally {
       collab.applyingRemote = false;
     }
@@ -256,7 +269,7 @@ export const setupYDoc = async (documentId) => {
     });
   });
 
-  globalThis.recordDocumentOpenMeasure('setupYDoc', setupStartedAt);
+  appRuntime().shell.recordDocumentOpenMeasure('setupYDoc', setupStartedAt);
 };
 
 export const joinDocumentRoom = (documentId) => {
@@ -288,10 +301,10 @@ export const joinWorkspaceChat = () => {
 };
 
 export const publishChatTyping = (typing = true) => {
-  const channel = globalThis.activeChatChannel();
+  const channel = appRuntime().chat.activeChatChannel();
   if (!collab.socket?.connected || !state.selectedWorkspaceId || !channel.slug) return;
   const now = Date.now();
-  if (typing && now - socketState.lastChatTypingPublishAt < globalThis.CHAT_TYPING_PUBLISH_INTERVAL_MS) return;
+  if (typing && now - socketState.lastChatTypingPublishAt < appRuntime().config.CHAT_TYPING_PUBLISH_INTERVAL_MS) return;
   socketState.lastChatTypingPublishAt = now;
   collab.socket.emit('chat-typing', {
     workspaceId: state.selectedWorkspaceId,
@@ -308,13 +321,13 @@ export const scheduleChatTypingStop = () => {
 export const publishCursor = () => {
   if (!collab.socket?.connected || !state.selectedDocumentId) return;
   const now = Date.now();
-  if (now - socketState.lastCursorPublishAt < globalThis.CURSOR_PUBLISH_INTERVAL_MS) return;
+  if (now - socketState.lastCursorPublishAt < appRuntime().config.CURSOR_PUBLISH_INTERVAL_MS) return;
   socketState.lastCursorPublishAt = now;
 
   collab.socket.emit('cursor-update', {
     documentId: state.selectedDocumentId,
     cursor: {
-      ...globalThis.getEditorSelection()
+      ...appRuntime().editor.getEditorSelection()
     }
   });
 };
@@ -322,7 +335,7 @@ export const publishCursor = () => {
 export const publishTyping = () => {
   if (!collab.socket?.connected || !state.selectedDocumentId) return;
   const now = Date.now();
-  if (now - socketState.lastTypingPublishAt >= globalThis.TYPING_PUBLISH_INTERVAL_MS) {
+  if (now - socketState.lastTypingPublishAt >= appRuntime().config.TYPING_PUBLISH_INTERVAL_MS) {
     socketState.lastTypingPublishAt = now;
     collab.socket.emit('typing-update', {
       documentId: state.selectedDocumentId,
@@ -343,7 +356,7 @@ export const applyEditorInputToYDoc = () => {
   if (!collab.ydoc || !collab.ytext || !state.selectedDocumentId) return;
 
   const currentValue = collab.ytext.toString();
-  const nextValue = globalThis.getEditorText();
+  const nextValue = appRuntime().editor.getEditorText();
   if (currentValue === nextValue) return;
 
   let start = 0;
