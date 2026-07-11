@@ -7904,6 +7904,7 @@ configureSocketRuntime({
   },
   editor: {
     getEditorText,
+    getEditorHtml,
     setEditorText,
     getEditorSelection
   },

@@ -58,6 +58,38 @@ const uint8ToBase64 = (uint8Array) => {
   return appRuntime().encoding.uint8ToBase64(uint8Array);
 };
 
+const applyRemoteYTextToEditor = (nextValue, { preserveMatchingRichContent = false } = {}) => {
+  const doc = selectedDocument();
+  const currentEditorText = appRuntime().editor.getEditorText();
+  const savedPlainText = String(doc?.plainTextContent || '');
+
+  if (
+    preserveMatchingRichContent
+    && doc?.contentHtml
+    && savedPlainText === nextValue
+    && currentEditorText === nextValue
+  ) {
+    return;
+  }
+
+  if (currentEditorText === nextValue) return;
+
+  collab.applyingRemote = true;
+  try {
+    appRuntime().editor.setEditorText(nextValue);
+  } finally {
+    collab.applyingRemote = false;
+  }
+
+  const nextHtml = appRuntime().editor.getEditorHtml();
+  state.lastSavedText = nextValue;
+  state.lastSavedHtml = nextHtml;
+  if (doc) {
+    doc.plainTextContent = nextValue;
+    doc.contentHtml = nextHtml;
+  }
+};
+
 export const connectSocket = async () => {
   if (!state.token || collab.socket) return;
   const io = await loadSocketClient();
@@ -107,7 +139,7 @@ export const connectSocket = async () => {
 
       const syncedText = collab.ytext.toString();
       const doc = selectedDocument();
-      if (!doc?.contentHtml) appRuntime().editor.setEditorText(syncedText);
+      applyRemoteYTextToEditor(syncedText, { preserveMatchingRichContent: true });
       state.lastSavedText = syncedText;
       if (doc) doc.plainTextContent = syncedText;
       state.presence = users || [];
@@ -251,14 +283,7 @@ export const setupYDoc = async (documentId) => {
   collab.ytext.observe(() => {
     if (collab.localInput) return;
     const nextValue = collab.ytext.toString();
-    if (appRuntime().editor.getEditorText() === nextValue) return;
-    if (selectedDocument()?.contentHtml) return;
-    collab.applyingRemote = true;
-    try {
-      appRuntime().editor.setEditorText(nextValue);
-    } finally {
-      collab.applyingRemote = false;
-    }
+    applyRemoteYTextToEditor(nextValue);
   });
 
   collab.ydoc.on('update', (update, origin) => {
