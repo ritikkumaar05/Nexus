@@ -83,6 +83,13 @@ const assertProductionEnv = () => {
     throw new Error('JWT_SECRET must be at least 32 characters in production');
   }
 
+  const lowercaseSecret = process.env.JWT_SECRET.toLowerCase();
+  const forbiddenPatterns = ['change', 'secret_for_dev', 'example', 'placeholder', 'your_', 'replace'];
+  const matchedPattern = forbiddenPatterns.find(pattern => lowercaseSecret.includes(pattern));
+  if (matchedPattern) {
+    throw new Error(`JWT_SECRET must not contain common placeholder patterns (matched: "${matchedPattern}")`);
+  }
+
   assertUrl('CORS_ORIGIN', { requireHttps: true, allowCommaList: true, disallowLocalhost: true });
   assertUrl('FRONTEND_ORIGIN', { requireHttps: true, disallowLocalhost: true });
   assertUrl('API_BASE_URL', { requireHttps: true, disallowLocalhost: true });
