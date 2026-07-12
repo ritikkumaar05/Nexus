@@ -21,6 +21,8 @@ const Y_TEXT_KEY = 'content';
 const documentPresence = new Map();
 const workspacePresence = new Map();
 const documentCache = new Map();
+const documentLoadPromises = new Map();
+const documentOperationQueues = new Map();
 
 // Active users tracking map: roomName -> Map(userId -> Set(socketId))
 const activeRoomUsers = new Map();
@@ -128,32 +130,63 @@ const getEditableDocumentWorkspace = async (documentId, userId) => {
 };
 
 const loadYDocument = async (documentId) => {
-  if (documentCache.has(documentId)) {
-    return documentCache.get(documentId);
+  const cacheKey = String(documentId);
+  if (documentCache.has(cacheKey)) {
+    return documentCache.get(cacheKey);
+  }
+  if (documentLoadPromises.has(cacheKey)) {
+    return documentLoadPromises.get(cacheKey);
   }
 
-  // SECURITY FIX 2:
-  // Do not load deleted documents into the Yjs cache.
-  const docRecord = await Document.findOne({
-    _id: documentId,
-    deletedAt: null
-  }).select('binaryUpdate plainTextContent');
+  const loadPromise = (async () => {
+    // SECURITY FIX 2:
+    // Do not load deleted documents into the Yjs cache.
+    const docRecord = await Document.findOne({
+      _id: documentId,
+      deletedAt: null
+    }).select('binaryUpdate plainTextContent');
 
-  if (!docRecord) return null;
+    if (!docRecord) return null;
 
-  const ydoc = new Y.Doc();
-  const ytext = ydoc.getText(Y_TEXT_KEY);
+    const ydoc = new Y.Doc();
+    const ytext = ydoc.getText(Y_TEXT_KEY);
 
-  if (docRecord.binaryUpdate?.length) {
-    Y.applyUpdate(ydoc, new Uint8Array(docRecord.binaryUpdate));
-  } else if (docRecord.plainTextContent) {
-    ytext.insert(0, docRecord.plainTextContent);
-    docRecord.binaryUpdate = Buffer.from(Y.encodeStateAsUpdate(ydoc));
-    await docRecord.save();
+    if (docRecord.binaryUpdate?.length) {
+      Y.applyUpdate(ydoc, new Uint8Array(docRecord.binaryUpdate));
+    } else if (docRecord.plainTextContent) {
+      ytext.insert(0, docRecord.plainTextContent);
+      docRecord.binaryUpdate = Buffer.from(Y.encodeStateAsUpdate(ydoc));
+      await docRecord.save();
+    }
+
+    documentCache.set(cacheKey, ydoc);
+    return ydoc;
+  })();
+
+  documentLoadPromises.set(cacheKey, loadPromise);
+  try {
+    return await loadPromise;
+  } finally {
+    if (documentLoadPromises.get(cacheKey) === loadPromise) {
+      documentLoadPromises.delete(cacheKey);
+    }
   }
+};
 
-  documentCache.set(documentId, ydoc);
-  return ydoc;
+const enqueueDocumentOperation = (documentId, operation) => {
+  const cacheKey = String(documentId);
+  const previousTail = documentOperationQueues.get(cacheKey) || Promise.resolve();
+  const operationPromise = previousTail.then(operation);
+  const queueTail = operationPromise.catch(() => {});
+
+  documentOperationQueues.set(cacheKey, queueTail);
+  queueTail.then(() => {
+    if (documentOperationQueues.get(cacheKey) === queueTail) {
+      documentOperationQueues.delete(cacheKey);
+    }
+  });
+
+  return operationPromise;
 };
 const persistYDocument = async (documentId, ydoc, userId) => {
   const ytext = ydoc.getText(Y_TEXT_KEY);
@@ -464,34 +497,36 @@ const setupEditorSockets = (io) => {
           return socket.emit('operation-error', { message: 'Valid document ID is required' });
         }
 
-        const workspace = await getEditableDocumentWorkspace(documentId, socket.data.user.id);
-        if (!workspace) {
-          return socket.emit('operation-error', { message: 'Access denied for document' });
-        }
+        await enqueueDocumentOperation(documentId, async () => {
+          const workspace = await getEditableDocumentWorkspace(documentId, socket.data.user.id);
+          if (!workspace) {
+            return socket.emit('operation-error', { message: 'Access denied for document' });
+          }
 
-        socket.join(documentId);
-        const ydoc = await loadYDocument(documentId);
-        if (!ydoc) {
-          return socket.emit('operation-error', { message: 'Document not found' });
-        }
+          socket.join(documentId);
+          const ydoc = await loadYDocument(documentId);
+          if (!ydoc) {
+            return socket.emit('operation-error', { message: 'Document not found' });
+          }
 
-        if (!documentPresence.has(documentId)) {
-          documentPresence.set(documentId, new Map());
-        }
-        documentPresence.get(documentId).set(socket.id, {
-          socketId: socket.id,
-          userId: socket.data.user.id,
-          email: socket.data.user.email,
-          cursor: null
+          if (!documentPresence.has(documentId)) {
+            documentPresence.set(documentId, new Map());
+          }
+          documentPresence.get(documentId).set(socket.id, {
+            socketId: socket.id,
+            userId: socket.data.user.id,
+            email: socket.data.user.email,
+            cursor: null
+          });
+
+          socket.emit('document-synced', {
+            documentId,
+            updateBase64: toBase64(Y.encodeStateAsUpdate(ydoc)),
+            text: ydoc.getText(Y_TEXT_KEY).toString(),
+            users: getPresenceList(documentId)
+          });
+          broadcastPresence(io, documentId);
         });
-
-        socket.emit('document-synced', {
-          documentId,
-          updateBase64: toBase64(Y.encodeStateAsUpdate(ydoc)),
-          text: ydoc.getText(Y_TEXT_KEY).toString(),
-          users: getPresenceList(documentId)
-        });
-        broadcastPresence(io, documentId);
       } catch (err) {
         console.error('Socket document join error:', err);
         socket.emit('operation-error', { message: 'Document sync failed' });
@@ -509,23 +544,25 @@ const setupEditorSockets = (io) => {
           return socket.emit('operation-error', { message: 'Valid Yjs update is required' });
         }
 
-        const workspace = await getEditableDocumentWorkspace(documentId, socket.data.user.id);
-        if (!workspace) {
-          return socket.emit('operation-error', { message: 'Access denied for document' });
-        }
+        await enqueueDocumentOperation(documentId, async () => {
+          const workspace = await getEditableDocumentWorkspace(documentId, socket.data.user.id);
+          if (!workspace) {
+            return socket.emit('operation-error', { message: 'Access denied for document' });
+          }
 
-        const ydoc = await loadYDocument(documentId);
-        if (!ydoc) {
-          return socket.emit('operation-error', { message: 'Document not found' });
-        }
+          const ydoc = await loadYDocument(documentId);
+          if (!ydoc) {
+            return socket.emit('operation-error', { message: 'Document not found' });
+          }
 
-        const update = fromBase64(updateBase64);
-        Y.applyUpdate(ydoc, update);
-        await persistYDocument(documentId, ydoc, socket.data.user.id);
+          const update = fromBase64(updateBase64);
+          Y.applyUpdate(ydoc, update);
+          await persistYDocument(documentId, ydoc, socket.data.user.id);
 
-        socket.to(documentId).emit('yjs-update', {
-          documentId,
-          updateBase64
+          socket.to(documentId).emit('yjs-update', {
+            documentId,
+            updateBase64
+          });
         });
       } catch (err) {
         console.error('Socket document update error:', err);
