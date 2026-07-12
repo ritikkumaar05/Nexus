@@ -16,7 +16,6 @@ export const createChatSession = ({
   const ensureChatReady = async () => {
     if (state.demoMode) {
       if (!state.selectedChannelId) state.selectedChannelId = GENERAL_CHAT_CHANNEL;
-      state.chatMessages = state.messages.slice();
       state.chatOnlineUsers = collaborationPeople().map((person) => ({
         userId: person.id,
         username: person.name,
@@ -37,14 +36,12 @@ export const createChatSession = ({
 
   const loadChatMessages = async () => {
     if (state.demoMode) {
-      state.chatMessages = state.messages.slice();
       return;
     }
     const channel = activeChatChannel();
     if (!state.selectedWorkspaceId || !channel.slug) return;
 
     if (state.messages.length && state.selectedChannelId === channel.slug) {
-      state.chatMessages = [...state.messages];
       return;
     }
 
@@ -150,7 +147,6 @@ export const createChatSession = ({
           createdAt: new Date().toISOString()
         };
         state.messages.push(message);
-        state.chatMessages.push(message);
         if (input) input.value = '';
         renderChatPage();
         return;
@@ -171,7 +167,6 @@ export const createChatSession = ({
         body: JSON.stringify({ content: messageContent })
       });
       state.messages.push(message);
-      state.chatMessages.push(message);
       if (input) input.value = '';
       renderChatPage();
     } catch (err) {

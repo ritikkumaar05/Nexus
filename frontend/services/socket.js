@@ -220,7 +220,6 @@ export const connectSocket = async () => {
     if (String(message.workspace || message.workspaceId) !== String(state.selectedWorkspaceId)) return;
     if (message.channelId !== appRuntime().chat.activeChatChannel().slug) return;
     state.messages.push(message);
-    state.chatMessages.push(message);
     state.chatTypingUsers = state.chatTypingUsers.filter((item) => String(item.userId) !== String(message.sender?._id || message.sender));
     if (currentRoute() === 'chat') {
       appRuntime().chat.renderChatPage();
@@ -239,7 +238,6 @@ export const connectSocket = async () => {
       }
     };
     updateInArr(state.messages);
-    updateInArr(state.chatMessages);
     if (currentRoute() === 'chat') {
       appRuntime().chat.renderChatPage();
     }

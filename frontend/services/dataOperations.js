@@ -126,7 +126,7 @@ export const loadWorkspaces = async () => {
     localStorage.removeItem('workspaceId');
     state.channels = [];
     state.documents = [];
-    state.chatMessages = [];
+    state.messages = [];
     state.activityItems = [];
     appRuntime().resetTaskStore();
   }
@@ -141,7 +141,6 @@ export const loadChannels = async () => {
         ? GENERAL_CHAT_CHANNEL
         : state.channels[0]?.slug || '';
     }
-    state.chatMessages = state.messages.slice();
     state.chatOnlineUsers = appRuntime().collaborationPeople().map((person) => ({
       userId: person.id,
       username: person.name,
@@ -152,7 +151,6 @@ export const loadChannels = async () => {
   }
   state.channels = [];
   state.messages = [];
-  state.chatMessages = [];
   state.chatLoadedKey = '';
   state.selectedChannelId = '';
   if (!state.selectedWorkspaceId) return;
@@ -190,8 +188,7 @@ export const loadMessages = async () => {
   state.messages = [];
   if (!state.selectedWorkspaceId || !state.selectedChannelId) return;
 
-  if (state.chatMessages.length && appRuntime().activeChatChannel().slug === state.selectedChannelId) {
-    state.messages = [...state.chatMessages];
+  if (state.messages.length && appRuntime().activeChatChannel().slug === state.selectedChannelId) {
     appRuntime().render();
     return;
   }
@@ -199,7 +196,6 @@ export const loadMessages = async () => {
   appRuntime().setLoading('messages', true);
   try {
     state.messages = await appRuntime().request(`/api/messages/${state.selectedWorkspaceId}/${state.selectedChannelId}`);
-    state.chatMessages = [...state.messages];
     state.chatLoadedKey = `${state.selectedWorkspaceId}:${state.selectedChannelId}`;
     appRuntime().setError('messages');
   } catch (err) {
@@ -483,7 +479,7 @@ export const createWorkspaceAndOpen = async (name, { closePanel = false, route =
     state.selectedWorkspaceId = workspace._id;
     state.selectedDocumentId = '';
     state.selectedChannelId = '';
-    state.chatMessages = [];
+    state.messages = [];
     state.activityItems = [];
     appRuntime().resetTaskStore();
     state.documentMessages = [];

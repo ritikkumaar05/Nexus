@@ -8,7 +8,12 @@ export const state = {
   channels: [],
   documents: [],
   messages: [],
-  chatMessages: [],
+  get chatMessages() {
+    return this.messages;
+  },
+  set chatMessages(val) {
+    this.messages = val;
+  },
   chatLoadedKey: '',
   chatTypingUsers: [],
   chatOnlineUsers: [],

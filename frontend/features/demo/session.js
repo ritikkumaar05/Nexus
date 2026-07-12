@@ -41,7 +41,6 @@ export const createDemoSession = ({
     state.channels = demo.channels.slice(0, 5);
     setDocuments(demo.documents.slice(0, 8));
     state.messages = demo.messages.slice();
-    state.chatMessages = demo.messages.slice();
     state.documentMessages = demo.documentMessages.slice(0, 5);
     state.workspaceThreads = state.documentMessages
       .slice(0, 5)
