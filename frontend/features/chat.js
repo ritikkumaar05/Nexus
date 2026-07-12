@@ -16,7 +16,8 @@ export const renderChatPage = async ({ skipEnsure = false } = {}) => {
   clearChatUnread();
 
   if (!skipEnsure) {
-    if (!state.demoMode && !state.chatMessages.length) {
+    const channelKey = `${state.selectedWorkspaceId}:${activeChatChannel().slug || ''}`;
+    if (!state.demoMode && state.chatLoadedKey !== channelKey) {
       state.loading.chat = true;
     }
     ensureChatReady()

@@ -40,6 +40,8 @@ export const clearSession = () => {
   state.channels = [];
   setDocuments([]);
   state.messages = [];
+  state.chatMessages = [];
+  state.chatLoadedKey = '';
   state.documentMessages = [];
   state.workspaceThreads = [];
   appRuntime().tasks.resetTaskStore();

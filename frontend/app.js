@@ -6897,6 +6897,7 @@ const exposeLazyRouteShellBindings = () => {
 
 configureDataRuntime({
   request: (...args) => request(...args),
+  currentRoute: (...args) => currentRoute(...args),
   setLoading: (...args) => setLoading(...args),
   setError: (...args) => setError(...args),
   showToast: (...args) => showToast(...args),
@@ -6943,12 +6944,15 @@ configureDataRuntime({
   getAiSourceText: (...args) => getAiSourceText(...args),
   selectedAiSource: (...args) => selectedAiSource(...args),
   startDocumentOpenProfile: (...args) => startDocumentOpenProfile(...args),
+  getActiveDocumentOpenProfile: () => activeDocumentOpenProfile,
   recordDocumentOpenMeasure: (...args) => recordDocumentOpenMeasure(...args),
   finishDocumentOpenProfile: (...args) => finishDocumentOpenProfile(...args),
   resetTaskStore: (...args) => resetTaskStore(...args),
   setWorkspaceTasks: (...args) => setWorkspaceTasks(...args),
   upsertTaskInStore: (...args) => upsertTaskInStore(...args),
   selectedDocumentTasks: (...args) => selectedDocumentTasks(...args),
+  selectedDocumentTitle: (...args) => selectedDocumentTitle(...args),
+  materialTypeToAiAction: (...args) => materialTypeToAiAction(...args),
   collaborationPeople: (...args) => collaborationPeople(...args),
   activeChatChannel: (...args) => activeChatChannel(...args),
   loadMessages: (...args) => loadMessages(...args),

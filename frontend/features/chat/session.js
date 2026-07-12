@@ -31,7 +31,8 @@ export const createChatSession = ({
     localStorage.setItem('channelId', state.selectedChannelId);
     joinChannelRoom();
     joinWorkspaceChat();
-    if (!state.chatMessages.length) await loadChatMessages();
+    const chatKey = `${state.selectedWorkspaceId}:${state.selectedChannelId}`;
+    if (state.chatLoadedKey !== chatKey) await loadChatMessages();
   };
 
   const loadChatMessages = async () => {
@@ -50,6 +51,7 @@ export const createChatSession = ({
     state.loading.chat = true;
     try {
       state.chatMessages = await request(`/api/messages/${state.selectedWorkspaceId}/${channel.slug}`);
+      state.chatLoadedKey = `${state.selectedWorkspaceId}:${channel.slug}`;
       setError('chat');
     } catch (err) {
       if (err?.status === 429) {

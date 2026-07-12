@@ -163,7 +163,8 @@ export const renderHomePage = () => {
   }
 
   // Load chat messages asynchronously if they are not loaded
-  if (!state.demoMode && state.selectedWorkspaceId && !state.chatMessages.length && !state.loading.chat) {
+  const activeChatKey = `${state.selectedWorkspaceId}:${activeChatChannel().slug || ''}`;
+  if (!state.demoMode && state.selectedWorkspaceId && state.chatLoadedKey !== activeChatKey && !state.loading.chat) {
     ensureChatReady().then(() => {
       if (currentRoute() === 'home') {
         renderHomePage();

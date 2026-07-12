@@ -153,6 +153,7 @@ export const loadChannels = async () => {
   state.channels = [];
   state.messages = [];
   state.chatMessages = [];
+  state.chatLoadedKey = '';
   state.selectedChannelId = '';
   if (!state.selectedWorkspaceId) return;
 
@@ -198,6 +199,8 @@ export const loadMessages = async () => {
   appRuntime().setLoading('messages', true);
   try {
     state.messages = await appRuntime().request(`/api/messages/${state.selectedWorkspaceId}/${state.selectedChannelId}`);
+    state.chatMessages = [...state.messages];
+    state.chatLoadedKey = `${state.selectedWorkspaceId}:${state.selectedChannelId}`;
     appRuntime().setError('messages');
   } catch (err) {
     if (err?.status === 429) {
@@ -243,7 +246,6 @@ export const loadDocuments = async () => {
     state.workspaceThreads = [];
     workspaceThreadsLoadedKey = '';
     workspaceThreadsLoadSeq += 1;
-    appRuntime().scheduleDashboardDataLoad();
     await loadDocument(state.selectedDocumentId);
   } else {
     localStorage.removeItem('documentId');
@@ -446,7 +448,7 @@ export const bootstrapWorkspace = async () => {
   if (!state.selectedWorkspaceId) return;
   if (state.channels.length === 0) await createDefaultChannel();
   if (state.documents.length === 0) await createDefaultDocument();
-  await Promise.all([loadMessages(), loadDocuments()]);
+  await loadMessages();
 };
 
 export const createWorkspaceAndOpen = async (name, { closePanel = false, route = 'home' } = {}) => {

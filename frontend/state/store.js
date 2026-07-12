@@ -9,6 +9,7 @@ export const state = {
   documents: [],
   messages: [],
   chatMessages: [],
+  chatLoadedKey: '',
   chatTypingUsers: [],
   chatOnlineUsers: [],
   unreadChatCount: Number(localStorage.getItem('chatUnreadCount') || 0),
