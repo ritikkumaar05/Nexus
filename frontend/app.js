@@ -136,50 +136,83 @@ const resolveApiBase = () => {
   return configuredApiBase;
 };
 
+import {
+  configureDataRuntime,
+  GENERAL_CHAT_CHANNEL,
+  loadWorkspaces,
+  loadChannels,
+  loadMessages,
+  loadDocuments,
+  loadDocument,
+  backgroundDocumentBatch,
+  createDocumentAndOpen,
+  deleteDocumentById,
+  clearActiveDocumentAfterDelete,
+  createDefaultChannel,
+  createDefaultDocument,
+  bootstrapWorkspace,
+  createWorkspaceAndOpen,
+  getActiveDocumentLoadToken,
+  setActiveDocumentLoadToken,
+  getDeletingDocumentIds,
+  getDocumentCreateInFlight,
+  setDocumentCreateInFlight,
+  getWorkspaceCreateInFlight,
+  setWorkspaceCreateInFlight,
+  getWorkspaceThreadsLoadSeq,
+  setWorkspaceThreadsLoadSeq,
+  getWorkspaceThreadsLoadedKey,
+  setWorkspaceThreadsLoadedKey,
+  saveCurrentDocument,
+  saveCurrentDocumentIfDirty,
+  scheduleAutosave,
+  getAutosaveTimer,
+  setAutosaveTimer,
+  clearAutosaveTimer,
+  AUTOSAVE_DELAY_MS,
+  MAX_DOCUMENT_TEXT_CHARS,
+  MAX_DOCUMENT_TEXT_BYTES,
+  loadDashboardTasks,
+  loadDocumentTasks,
+  fetchWorkspaceThreadsForDocuments,
+  loadWorkspaceThreads,
+  loadDocumentMessages,
+  scheduleDashboardDataLoad,
+  loadStudyMaterialsForDocument,
+  upsertStudyMaterial,
+  saveCurrentAiResultToLibrary,
+  updateStudyMaterialProgress,
+  scheduleFlashcardProgressSave,
+  openStudyMaterial,
+  deleteStudyMaterial,
+  getDashboardHydrationTimer,
+  setDashboardHydrationTimer,
+  getFlashcardProgressSaveTimer,
+  setFlashcardProgressSaveTimer,
+  TASK_CACHE_TTL_MS
+} from './services/dataOperations.js';
+
 const API_BASE = resolveApiBase();
 const Y_TEXT_KEY = 'content';
 let request;
 
-let autosaveTimer = null;
-let dashboardHydrationTimer = null;
 let aiSelectionHintTimer = null;
 let titleUiTimer = null;
 let aiGenerationInFlight = false;
-let flashcardProgressSaveTimer = null;
-let documentCreateInFlight = false;
-let workspaceCreateInFlight = false;
 let activeDocumentOpenProfile = null;
 let savedEditorRange = null;
-let workspaceThreadsLoadSeq = 0;
-let workspaceThreadsRequestKey = '';
-let workspaceThreadsRequestPromise = null;
-let workspaceThreadsLoadedKey = '';
 
 let activeWorkspaceMenuId = '';
 let activeWorkspaceRenameId = '';
 let generatedInviteResult = null;
-let activeDocumentLoadToken = 0;
-const deletingDocumentIds = new Set();
+const deletingDocumentIds = getDeletingDocumentIds();
 
-const AUTOSAVE_DELAY_MS = 2800;
 const CURSOR_PUBLISH_INTERVAL_MS = 300;
 const TYPING_PUBLISH_INTERVAL_MS = 1000;
 const CHAT_TYPING_PUBLISH_INTERVAL_MS = 1200;
-const GENERAL_CHAT_CHANNEL = 'general';
-const MAX_DOCUMENT_TEXT_CHARS = 200_000;
-const MAX_DOCUMENT_TEXT_BYTES = 850_000;
-const TASK_CACHE_TTL_MS = 45_000;
 
-const uniqueDocuments = (documents = []) => {
-  const seen = new Set();
-  return documents.filter((document) => {
-    const key = documentKey(document);
-    if (!key) return true;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
+
+
 
 const clearInlineErrors = (form) => {
   form?.querySelectorAll('.field-error-text').forEach((node) => node.remove());
@@ -2903,122 +2936,7 @@ const renderPresence = () => {
   recordDocumentOpenMeasure('renderPresence', presenceStartedAt);
 };
 
-const loadWorkspaces = async () => {
-  if (state.demoMode) {
-    await loadDemoWorkspaceModule();
-    hydrateDemoWorkspace();
-    loadDemoDocument(state.selectedDocumentId);
-    return;
-  }
-  if (!state.token) return;
-  setLoading('workspaces', true);
-  try {
-    state.workspaces = await request('/api/workspaces');
-    setError('workspaces');
-  } catch (err) {
-    setError('workspaces', err.message);
-    throw err;
-  } finally {
-    state.loading.workspaces = false;
-  }
 
-  if (!state.workspaces.some((workspace) => workspace._id === state.selectedWorkspaceId)) {
-    state.selectedWorkspaceId = state.workspaces[0]?._id || '';
-  }
-
-  if (state.selectedWorkspaceId) {
-    localStorage.setItem('workspaceId', state.selectedWorkspaceId);
-    hydrateActivityItems();
-    await Promise.all([loadChannels(), loadDocuments()]);
-  } else {
-    localStorage.removeItem('workspaceId');
-    state.channels = [];
-    state.documents = [];
-    state.chatMessages = [];
-    state.activityItems = [];
-    resetTaskStore();
-  }
-
-  render();
-};
-
-const loadChannels = async () => {
-  if (state.demoMode) {
-    if (!state.channels.some((channel) => channel.slug === state.selectedChannelId)) {
-      state.selectedChannelId = state.channels.some((channel) => channel.slug === GENERAL_CHAT_CHANNEL)
-        ? GENERAL_CHAT_CHANNEL
-        : state.channels[0]?.slug || '';
-    }
-    state.chatMessages = state.messages.slice();
-    state.chatOnlineUsers = collaborationPeople().map((person) => ({
-      userId: person.id,
-      username: person.name,
-      email: person.email
-    }));
-    render();
-    return;
-  }
-  state.channels = [];
-  state.messages = [];
-  state.chatMessages = [];
-  state.selectedChannelId = '';
-  if (!state.selectedWorkspaceId) return;
-
-  setLoading('channels', true);
-  try {
-    state.channels = await request(`/api/channels/${state.selectedWorkspaceId}`);
-    setError('channels');
-  } catch (err) {
-    setError('channels', err.message);
-    throw err;
-  } finally {
-    state.loading.channels = false;
-  }
-  const savedChannelId = localStorage.getItem('channelId') || '';
-  state.selectedChannelId = state.channels.some((channel) => channel.slug === GENERAL_CHAT_CHANNEL)
-    ? GENERAL_CHAT_CHANNEL
-    : state.channels.some((channel) => channel.slug === savedChannelId)
-      ? savedChannelId
-      : state.channels[0]?.slug || '';
-
-  if (state.selectedChannelId) {
-    localStorage.setItem('channelId', state.selectedChannelId);
-    joinChannelRoom();
-    joinWorkspaceChat();
-    await loadMessages();
-  }
-};
-
-const loadMessages = async () => {
-  if (state.demoMode) {
-    render();
-    return;
-  }
-  state.messages = [];
-  if (!state.selectedWorkspaceId || !state.selectedChannelId) return;
-
-  if (state.chatMessages.length && activeChatChannel().slug === state.selectedChannelId) {
-    state.messages = [...state.chatMessages];
-    render();
-    return;
-  }
-
-  setLoading('messages', true);
-  try {
-    state.messages = await request(`/api/messages/${state.selectedWorkspaceId}/${state.selectedChannelId}`);
-    setError('messages');
-  } catch (err) {
-    if (err?.status === 429) {
-      setError('messages');
-      return;
-    }
-    setError('messages', err.message);
-    throw err;
-  } finally {
-    state.loading.messages = false;
-  }
-  render();
-};
 
 const {
   ensureChatReady,
@@ -3045,778 +2963,13 @@ const getDocumentContextPath = () => {
   return `/api/workspaces/${state.selectedWorkspaceId}/documents/${state.selectedDocumentId}`;
 };
 
-const loadDocumentTasks = async () => {
-  if (state.demoMode) {
-    state.documentTasks = selectedDocumentTasks();
-    renderTaskList();
-    return;
-  }
-  state.documentTasks = selectedDocumentTasks();
-  if (!state.selectedWorkspaceId || !state.selectedDocumentId) return;
-  const workspaceId = state.selectedWorkspaceId;
-  const documentId = state.selectedDocumentId;
-  setLoading('tasks', true, { scoped: true });
-  try {
-    const tasks = await request(`/api/workspaces/${workspaceId}/documents/${documentId}/tasks`);
-    if (workspaceId !== state.selectedWorkspaceId || documentId !== state.selectedDocumentId) return;
-    tasks.forEach((task) => upsertTaskInStore(task));
-    state.documentTasks = selectedDocumentTasks();
-    setError('tasks');
-  } catch (err) {
-    if (workspaceId !== state.selectedWorkspaceId || documentId !== state.selectedDocumentId) return;
-    setError('tasks', err.message);
-    throw err;
-  } finally {
-    if (workspaceId === state.selectedWorkspaceId && documentId === state.selectedDocumentId) {
-      state.loading.tasks = false;
-    }
-  }
-  renderTaskList();
-};
 
-const loadDocumentMessages = async () => {
-  if (state.demoMode) {
-    renderThreadList();
-    return;
-  }
-  state.documentMessages = [];
-  if (!state.selectedWorkspaceId || !state.selectedDocumentId) return;
-  const workspaceId = state.selectedWorkspaceId;
-  const documentId = state.selectedDocumentId;
-  setLoading('messages', true, { scoped: true });
-  try {
-    const messages = await request(`/api/workspaces/${workspaceId}/documents/${documentId}/messages`);
-    if (workspaceId !== state.selectedWorkspaceId || documentId !== state.selectedDocumentId) return;
-    state.documentMessages = messages;
-    state.workspaceThreads = [
-      ...state.workspaceThreads.filter((thread) => String(thread.documentId) !== String(documentId)),
-      ...state.documentMessages.map((thread) => ({
-        ...thread,
-        documentId,
-        documentTitle: selectedDocumentTitle()
-      }))
-    ];
-    setError('messages');
-  } catch (err) {
-    if (workspaceId !== state.selectedWorkspaceId || documentId !== state.selectedDocumentId) return;
-    setError('messages', err.message);
-    throw err;
-  } finally {
-    if (workspaceId === state.selectedWorkspaceId && documentId === state.selectedDocumentId) {
-      state.loading.messages = false;
-    }
-  }
-  renderThreadList();
-};
 
-const loadStudyMaterialsForDocument = async (documentId = state.selectedDocumentId) => {
-  state.studyMaterials = [];
-  state.selectedStudyMaterialId = '';
-  state.currentAiResultSavedId = '';
-  if (!documentId) {
-    renderStudyLibrary();
-    return;
-  }
-  if (state.demoMode) {
-    state.studyMaterials = state.demoStudyMaterials
-      .filter((material) => String(material.documentId) === String(documentId))
-      .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-    renderStudyLibrary();
-    return;
-  }
 
-  const activeDocumentId = documentId;
-  setLoading('studyMaterials', true, { scoped: true });
-  try {
-    const materials = await request(`/api/study-material/document/${activeDocumentId}`);
-    if (String(activeDocumentId) !== String(state.selectedDocumentId)) return;
-    state.studyMaterials = materials;
-    setError('studyMaterials');
-  } catch (err) {
-    if (String(activeDocumentId) !== String(state.selectedDocumentId)) return;
-    setError('studyMaterials', err.message);
-  } finally {
-    if (String(activeDocumentId) === String(state.selectedDocumentId)) {
-      state.loading.studyMaterials = false;
-      renderStudyLibrary();
-    }
-  }
-};
 
-const upsertStudyMaterial = (material) => {
-  if (!material?._id) return;
-  state.studyMaterials = [
-    material,
-    ...state.studyMaterials.filter((item) => String(item._id) !== String(material._id))
-  ].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
-};
 
-const saveCurrentAiResultToLibrary = async () => {
-  if (!state.selectedDocumentId) return showToast('Open a document before saving study material', true);
-  const payload = buildStudyMaterialPayload();
-  if (!payload) return showToast('Generate mentor output first', true);
-  if (state.studyMaterialSaving) return null;
 
-  state.studyMaterialSaving = true;
-  updateLibrarySaveButton();
-  try {
-    let material;
-    const existingId = state.currentAiResultSavedId;
-    if (existingId && state.aiStudySession?.type === 'quiz') {
-      material = await updateStudyMaterialProgress(existingId, { quizProgress: getQuizProgressFromSession() });
-    } else if (existingId && state.aiStudySession?.type === 'flashcards') {
-      material = await updateStudyMaterialProgress(existingId, { flashcardProgress: getFlashcardProgressFromSession() });
-    } else if (existingId) {
-      showToast('Already saved to Study Library');
-      return state.studyMaterials.find((item) => String(item._id) === String(existingId)) || null;
-    } else if (state.demoMode) {
-      material = {
-        _id: `demo-material-${Date.now()}`,
-        workspaceId: state.selectedWorkspaceId,
-        documentId: state.selectedDocumentId,
-        ...payload,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        quizProgress: state.aiStudySession?.type === 'quiz' ? getQuizProgressFromSession() || {} : {},
-        flashcardProgress: state.aiStudySession?.type === 'flashcards' ? {
-          ...(getFlashcardProgressFromSession() || {}),
-          knownCount: getFlashcardProgressFromSession()?.knownCardIds?.length || 0,
-          hardCount: getFlashcardProgressFromSession()?.hardCardIds?.length || 0
-        } : {}
-      };
-      state.demoStudyMaterials = [
-        material,
-        ...state.demoStudyMaterials.filter((item) => String(item._id) !== String(material._id))
-      ];
-      upsertStudyMaterial(material);
-      showToast('Saved in demo library. Create an account to keep it.');
-    } else {
-      material = await request('/api/study-material', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-      if (state.aiStudySession?.type === 'quiz' && state.aiStudySession.completed) {
-        material = await updateStudyMaterialProgress(material._id, { quizProgress: getQuizProgressFromSession() });
-      } else if (state.aiStudySession?.type === 'flashcards') {
-        const progress = getFlashcardProgressFromSession();
-        if (progress?.knownCardIds?.length || progress?.hardCardIds?.length) {
-          material = await updateStudyMaterialProgress(material._id, { flashcardProgress: progress });
-        }
-      }
-      upsertStudyMaterial(material);
-      showToast('Saved to Study Library');
-    }
 
-    if (material?._id) {
-      state.currentAiResultSavedId = material._id;
-      state.selectedStudyMaterialId = material._id;
-      if (payload.type === 'summary') {
-        markLectureMilestone(payload.documentId, 'summarySaved', {
-          message: 'Summary saved for revision',
-          show: false
-        });
-      }
-      addActivity({ action: 'saved study material from', target: selectedDocumentTitle(), documentId: payload.documentId });
-      renderStudyLibrary();
-      updateLibrarySaveButton();
-      activateContextTab('library');
-    }
-    return material;
-  } catch (err) {
-    showToast(err.message, true);
-    return null;
-  } finally {
-    state.studyMaterialSaving = false;
-    updateLibrarySaveButton();
-  }
-};
-
-const updateStudyMaterialProgress = async (materialId, body) => {
-  if (!materialId || !body) return null;
-  if (state.demoMode) {
-    const material = state.demoStudyMaterials.find((item) => String(item._id) === String(materialId));
-    if (!material) return null;
-    if (body.quizProgress) {
-      material.quizProgress = {
-        ...(material.quizProgress || {}),
-        ...body.quizProgress,
-        attempts: (material.quizProgress?.attempts || 0) + 1,
-        lastAttemptAt: new Date().toISOString()
-      };
-    }
-    if (body.flashcardProgress) {
-      const knownCardIds = body.flashcardProgress.knownCardIds || [];
-      const hardCardIds = body.flashcardProgress.hardCardIds || [];
-      material.flashcardProgress = {
-        knownCardIds,
-        hardCardIds,
-        knownCount: knownCardIds.length,
-        hardCount: hardCardIds.length,
-        lastStudiedAt: new Date().toISOString()
-      };
-    }
-    material.updatedAt = new Date().toISOString();
-    upsertStudyMaterial(material);
-    renderStudyLibrary();
-    return material;
-  }
-
-  const material = await request(`/api/study-material/${materialId}/progress`, {
-    method: 'PATCH',
-    body: JSON.stringify(body)
-  });
-  upsertStudyMaterial(material);
-  if (body.quizProgress) {
-    markLectureMilestone(material.documentId, 'quizAttempted', { show: false });
-  }
-  if (body.flashcardProgress) {
-    const reviewed = (body.flashcardProgress.knownCardIds || []).length + (body.flashcardProgress.hardCardIds || []).length;
-    if (reviewed) markLectureMilestone(material.documentId, 'flashcardsReviewed', { show: false });
-  }
-  renderStudyLibrary();
-  return material;
-};
-
-const scheduleFlashcardProgressSave = () => {
-  if (!state.currentAiResultSavedId || state.aiStudySession?.type !== 'flashcards') return;
-  window.clearTimeout(flashcardProgressSaveTimer);
-  flashcardProgressSaveTimer = window.setTimeout(() => {
-    updateStudyMaterialProgress(state.currentAiResultSavedId, {
-      flashcardProgress: getFlashcardProgressFromSession()
-    }).catch((err) => console.warn('Background flashcard progress save failed:', err.message));
-  }, 1800);
-};
-
-const openStudyMaterial = (materialId) => {
-  const material = state.studyMaterials.find((item) => String(item._id) === String(materialId));
-  if (!material) return;
-  const action = material.content?.action || materialTypeToAiAction(material.type);
-  state.selectedStudyMaterialId = material._id;
-  state.currentAiResultSavedId = material._id;
-  state.lastAiAction = action;
-  state.lastAiOutput = material.content?.output || material.title || '';
-  state.aiStructuredOutput = material.content?.structured || null;
-  state.aiStudySession = material.content?.session || buildAiStudySession(action, state.lastAiOutput, state.aiStructuredOutput);
-  if (state.aiStudySession?.type === 'quiz') {
-    state.aiStudySession.currentIndex = 0;
-    state.aiStudySession.answers = {};
-    state.aiStudySession.completed = false;
-  }
-  if (state.aiStudySession?.type === 'flashcards') {
-    state.aiStudySession.currentIndex = 0;
-    state.aiStudySession.flipped = false;
-    state.aiStudySession.progress = {};
-    (material.flashcardProgress?.knownCardIds || []).forEach((cardId) => {
-      const index = state.aiStudySession.cards?.findIndex((card) => card.id === cardId);
-      if (index >= 0) state.aiStudySession.progress[index] = 'known';
-    });
-    (material.flashcardProgress?.hardCardIds || []).forEach((cardId) => {
-      const index = state.aiStudySession.cards?.findIndex((card) => card.id === cardId);
-      if (index >= 0) state.aiStudySession.progress[index] = 'hard';
-    });
-  }
-  activateContextTab('ai');
-  renderAiStudyOutput();
-};
-
-const deleteStudyMaterial = async (materialId) => {
-  if (!materialId) return;
-  try {
-    if (state.demoMode) {
-      state.demoStudyMaterials = state.demoStudyMaterials.filter((item) => String(item._id) !== String(materialId));
-      state.studyMaterials = state.studyMaterials.filter((item) => String(item._id) !== String(materialId));
-    } else {
-      await request(`/api/study-material/${materialId}`, { method: 'DELETE' });
-      state.studyMaterials = state.studyMaterials.filter((item) => String(item._id) !== String(materialId));
-    }
-    if (String(state.currentAiResultSavedId) === String(materialId)) state.currentAiResultSavedId = '';
-    renderStudyLibrary();
-    updateLibrarySaveButton();
-    showToast('Study material deleted');
-  } catch (err) {
-    inviteState.inviteRequestInFlight = false;
-    if (['workspaceInviteCreateBtn', 'inviteMemberBtn'].includes(target.id)) {
-      target.disabled = false;
-    }
-    showToast(err.message, true);
-  }
-};
-
-const backgroundDocumentBatch = (limit = 8) => {
-  const selected = selectedDocument();
-  return uniqueDocuments([
-    selected,
-    ...state.documents
-  ].filter(Boolean)).slice(0, limit);
-};
-
-const loadDashboardTasks = async ({ limit = 8, clear = false } = {}) => {
-  if (clear) {
-    resetTaskStore();
-    if (currentRoute() === 'tasks') renderTasksBoard();
-  }
-  if (state.demoMode) {
-    syncLegacyTaskViews();
-    return;
-  }
-  if (!state.selectedWorkspaceId || state.documents.length === 0) return;
-
-  const workspaceId = state.selectedWorkspaceId;
-  const cacheIsWarm = state.taskStore.loadedWorkspaceId === workspaceId
-    && state.taskStore.loadedAt
-    && (Date.now() - state.taskStore.loadedAt < TASK_CACHE_TTL_MS);
-  if (!clear && cacheIsWarm) {
-    syncLegacyTaskViews();
-    return;
-  }
-
-  state.taskStore.loading = true;
-  state.taskStore.error = '';
-  try {
-    const tasks = await request(`/api/workspaces/${workspaceId}/tasks`);
-    if (workspaceId !== state.selectedWorkspaceId) return;
-    setWorkspaceTasks(tasks, { workspaceId });
-  } catch (err) {
-    const docs = backgroundDocumentBatch(limit);
-    const taskResults = await Promise.allSettled(docs.map((doc) => (
-      request(`/api/workspaces/${workspaceId}/documents/${doc._id}/tasks`)
-    )));
-    if (workspaceId !== state.selectedWorkspaceId) return;
-    const tasks = taskResults
-      .filter((result) => result.status === 'fulfilled')
-      .flatMap((result) => result.value || []);
-    setWorkspaceTasks(tasks, { workspaceId });
-    state.taskStore.error = err.message;
-  } finally {
-    if (workspaceId === state.selectedWorkspaceId) {
-      state.taskStore.loading = false;
-    }
-  }
-};
-
-const fetchWorkspaceThreadsForDocuments = async (docs = [], { limitPerDocument = 80 } = {}) => {
-  const documentIds = docs.map((doc) => documentKey(doc)).filter(Boolean);
-  if (!documentIds.length) return [];
-
-  const query = new URLSearchParams({
-    documentIds: documentIds.join(','),
-    limit: String(limitPerDocument)
-  });
-
-  try {
-    return await request(`/api/workspaces/${state.selectedWorkspaceId}/thread-summaries?${query.toString()}`);
-  } catch (err) {
-    const threadResults = await Promise.allSettled(docs.map(async (doc) => {
-      const threads = await request(`/api/workspaces/${state.selectedWorkspaceId}/documents/${doc._id}/messages`);
-      return threads.map((thread) => ({
-        ...thread,
-        documentId: doc._id,
-        documentTitle: doc.title || 'Untitled Lecture'
-      }));
-    }));
-    if (!threadResults.some((result) => result.status === 'fulfilled')) {
-      throw threadResults.find((result) => result.status === 'rejected')?.reason || err;
-    }
-    return threadResults
-      .filter((result) => result.status === 'fulfilled')
-      .flatMap((result) => result.value || []);
-  }
-};
-
-const loadWorkspaceThreads = async ({ limit = 8, clear = false, force = false } = {}) => {
-  if (clear) {
-    state.workspaceThreads = [];
-    workspaceThreadsLoadedKey = '';
-  }
-  if (state.demoMode) {
-    state.workspaceThreads = state.documentMessages.map((thread) => ({
-      ...thread,
-      documentId: state.selectedDocumentId,
-      documentTitle: selectedDocumentTitle()
-    }));
-    state.loading.threads = false;
-    setError('threads');
-    return;
-  }
-  if (!state.selectedWorkspaceId || state.documents.length === 0) return;
-
-  const docs = backgroundDocumentBatch(limit);
-  const docIds = docs.map((doc) => documentKey(doc)).filter(Boolean);
-  const requestKey = `${state.selectedWorkspaceId}:${docIds.join(',')}:${limit}`;
-  if (!force && state.workspaceThreads.length && workspaceThreadsLoadedKey === requestKey) {
-    return state.workspaceThreads;
-  }
-  if (workspaceThreadsRequestPromise && workspaceThreadsRequestKey === requestKey) {
-    return workspaceThreadsRequestPromise;
-  }
-
-  const loadSeq = ++workspaceThreadsLoadSeq;
-  const workspaceId = state.selectedWorkspaceId;
-  workspaceThreadsRequestKey = requestKey;
-  setError('threads');
-  setLoading('threads', true);
-
-  workspaceThreadsRequestPromise = fetchWorkspaceThreadsForDocuments(docs)
-    .then((threads) => {
-      if (loadSeq !== workspaceThreadsLoadSeq || workspaceId !== state.selectedWorkspaceId) {
-        return state.workspaceThreads;
-      }
-      state.workspaceThreads = threads
-        .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
-      workspaceThreadsLoadedKey = requestKey;
-      return state.workspaceThreads;
-    })
-    .catch((err) => {
-      if (loadSeq === workspaceThreadsLoadSeq) setError('threads', err.message);
-      throw err;
-    })
-    .finally(() => {
-      if (workspaceThreadsRequestKey === requestKey) {
-        workspaceThreadsRequestKey = '';
-        workspaceThreadsRequestPromise = null;
-      }
-      if (loadSeq === workspaceThreadsLoadSeq) {
-        setLoading('threads', false);
-      }
-    });
-
-  return workspaceThreadsRequestPromise;
-};
-
-const scheduleDashboardDataLoad = () => {
-  window.clearTimeout(dashboardHydrationTimer);
-  if (!state.selectedWorkspaceId || state.documents.length === 0) return;
-  if (state.demoMode) {
-    loadDashboardTasks();
-    loadWorkspaceThreads();
-    return;
-  }
-
-  const workspaceId = state.selectedWorkspaceId;
-  dashboardHydrationTimer = window.setTimeout(async () => {
-    if (workspaceId !== state.selectedWorkspaceId) return;
-    try {
-      const route = currentRoute();
-      await Promise.allSettled([
-        loadDashboardTasks({ limit: route === 'tasks' ? state.documents.length : 8 }),
-        loadWorkspaceThreads({ limit: route === 'threads' ? state.documents.length : 8 })
-      ]);
-      if (workspaceId !== state.selectedWorkspaceId) return;
-      const currentRouteNow = currentRoute();
-      if (currentRouteNow === 'home') renderHomePage();
-      if (currentRouteNow === 'threads') renderThreadsPage();
-      if (currentRouteNow === 'tasks') renderTasksBoard();
-    } catch (err) {
-      console.warn('Background dashboard refresh failed:', err);
-    }
-  }, 160);
-};
-
-const loadDocuments = async () => {
-  if (state.demoMode) {
-    loadDemoDocument(state.selectedDocumentId);
-    return;
-  }
-  setDocuments([]);
-  if (!state.selectedWorkspaceId) return;
-
-  setLoading('documents', true);
-  try {
-    setDocuments(await request(`/api/documents/workspace/${state.selectedWorkspaceId}`));
-    renderDocuments();
-    setError('documents');
-  } catch (err) {
-    setError('documents', err.message);
-    throw err;
-  } finally {
-    state.loading.documents = false;
-    renderDocuments();
-  }
-  const savedDocumentId = localStorage.getItem('documentId') || '';
-  state.selectedDocumentId = state.documents.some((document) => String(document._id) === String(savedDocumentId))
-    ? savedDocumentId
-    : state.documents[0]?._id || '';
-
-  if (state.selectedDocumentId) {
-    localStorage.setItem('documentId', state.selectedDocumentId);
-    resetTaskStore();
-    state.workspaceThreads = [];
-    workspaceThreadsLoadedKey = '';
-    workspaceThreadsLoadSeq += 1;
-    scheduleDashboardDataLoad();
-    await loadDocument(state.selectedDocumentId);
-  } else {
-    localStorage.removeItem('documentId');
-    teardownYDoc();
-    resetTaskStore();
-    state.documentMessages = [];
-    state.studyMaterials = [];
-    els.documentTitleInput.value = '';
-    setEditorText('');
-    setCollabStatus('No document selected');
-    setAutosaveStatus('No document');
-    render();
-  }
-};
-
-const loadDocument = async (documentId) => {
-  if (state.demoMode) {
-    loadDemoDocument(documentId);
-    return;
-  }
-  const loadToken = ++activeDocumentLoadToken;
-  if (!activeDocumentOpenProfile) startDocumentOpenProfile(documentId);
-  const loadStartedAt = performance.now();
-  setLoading('document', true);
-  let doc;
-  try {
-    doc = await request(`/api/documents/${documentId}`);
-    if (loadToken !== activeDocumentLoadToken) return null;
-    setError('document');
-  } catch (err) {
-    if (loadToken === activeDocumentLoadToken) {
-      setError('document', err.message);
-      recordDocumentOpenMeasure('loadDocument', loadStartedAt);
-      finishDocumentOpenProfile();
-      throw err;
-    }
-    return null;
-  } finally {
-    if (loadToken === activeDocumentLoadToken) {
-      state.loading.document = false;
-      if (!doc) renderEditor();
-    }
-  }
-  if (loadToken !== activeDocumentLoadToken) return null;
-  state.selectedDocumentId = doc._id;
-  state.typingUsers = [];
-  state.selectedThreadId = '';
-  state.contextLoadedFor = { tasks: '', threads: '', library: '' };
-  state.documentTasks = selectedDocumentTasks();
-  state.documentMessages = [];
-  state.studyMaterials = [];
-  localStorage.setItem('documentId', doc._id);
-  upsertDocument(doc, { prepend: true });
-  renderDocuments();
-  els.documentTitleInput.value = doc.title || 'Untitled Lecture';
-  setEditorHtml(doc.contentHtml || '', doc.plainTextContent || '');
-  state.lastSavedTitle = els.documentTitleInput.value;
-  state.lastSavedText = doc.plainTextContent || '';
-  state.lastSavedHtml = doc.contentHtml || '';
-  state.saveStatus = 'saved';
-  state.pendingSavePromise = null;
-  state.saveQueued = false;
-  await setupYDoc(doc._id);
-  joinDocumentRoom(doc._id);
-  setAutosaveStatus('Saved');
-  state.lastAiAction = '';
-  state.lastAiOutput = '';
-  state.aiStudySession = null;
-  renderAiEmptyState(doc);
-  updateActiveDocumentSelection();
-  renderEditor();
-  ensureActiveContextData();
-  scheduleDashboardDataLoad();
-  recordDocumentOpenMeasure('loadDocument', loadStartedAt);
-  finishDocumentOpenProfile();
-};
-
-const saveCurrentDocument = async ({ silent = false } = {}) => {
-  if (!state.selectedDocumentId) return null;
-  if (state.demoMode) return saveDemoDocument({ silent });
-
-  const title = els.documentTitleInput.value || 'Untitled lecture';
-  const plainTextContent = getEditorText();
-  const contentHtml = getEditorHtml();
-  const plainTextBytes = new TextEncoder().encode(plainTextContent).byteLength;
-  if (plainTextContent.length > MAX_DOCUMENT_TEXT_CHARS || plainTextBytes > MAX_DOCUMENT_TEXT_BYTES) {
-    const err = new Error('This document is too large to save. Shorten it before switching documents or leaving the page.');
-    err.code = 'DOCUMENT_TOO_LARGE';
-    state.saveStatus = 'error';
-    setAutosaveStatus('Document too large to save');
-    if (!silent) showToast(err.message, true);
-    throw err;
-  }
-  if (title === state.lastSavedTitle && plainTextContent === state.lastSavedText && contentHtml === (state.lastSavedHtml || '')) {
-    state.saveStatus = 'saved';
-    setAutosaveStatus('Saved');
-    return selectedDocument();
-  }
-
-  if (state.pendingSavePromise) {
-    state.saveQueued = true;
-    return state.pendingSavePromise;
-  }
-
-  state.saveStatus = 'saving';
-  setAutosaveStatus(silent ? 'Autosaving...' : 'Saving...');
-  state.pendingSavePromise = request(`/api/documents/${state.selectedDocumentId}`, {
-    method: 'PUT',
-    body: JSON.stringify({ title, plainTextContent, contentHtml })
-  });
-
-  try {
-    const doc = await state.pendingSavePromise;
-    state.lastSavedTitle = title;
-    state.lastSavedText = plainTextContent;
-    state.lastSavedHtml = contentHtml;
-    state.saveStatus = 'saved';
-    upsertDocument(doc, { prepend: true });
-    if (plainTextContent.trim().length >= 200) {
-      markLectureMilestone(doc._id, 'notesAdded', {
-        message: 'Notes added',
-        show: !silent
-      });
-    } else {
-      refreshLectureProgress(doc._id);
-    }
-    setAutosaveStatus(silent ? 'Saved just now' : 'Saved');
-    if (!silent) addActivity({ action: 'edited', target: doc.title || 'Untitled lecture', documentId: doc._id });
-    if (silent) {
-      refreshDocumentTitleChrome();
-    } else {
-      render();
-    }
-    return doc;
-  } catch (err) {
-    state.saveStatus = 'error';
-    throw err;
-  } finally {
-    state.pendingSavePromise = null;
-    if (state.saveQueued) {
-      state.saveQueued = false;
-      const latestTitle = els.documentTitleInput.value || 'Untitled lecture';
-      const latestText = getEditorText();
-      const latestHtml = getEditorHtml();
-      if (latestTitle !== state.lastSavedTitle || latestText !== state.lastSavedText || latestHtml !== (state.lastSavedHtml || '')) {
-        scheduleAutosave();
-      }
-    }
-  }
-};
-
-const saveCurrentDocumentIfDirty = async () => {
-  const saveStartedAt = performance.now();
-  if (!state.selectedDocumentId) return null;
-  const title = els.documentTitleInput.value || 'Untitled lecture';
-  const plainTextContent = getEditorText();
-  const contentHtml = getEditorHtml();
-  try {
-    const titleChanged = title !== state.lastSavedTitle;
-    const contentChanged = plainTextContent !== state.lastSavedText;
-    const htmlChanged = contentHtml !== (state.lastSavedHtml || '');
-    console.log('[dirty-check]', {
-      documentId: state.selectedDocumentId,
-      titleChanged,
-      contentChanged,
-      editorLength: plainTextContent.length,
-      lastSavedLength: state.lastSavedText.length,
-      action: titleChanged || contentChanged || htmlChanged ? 'save' : 'skip'
-    });
-    if (!titleChanged && !contentChanged && !htmlChanged) return selectedDocument();
-    return await saveCurrentDocument({ silent: true });
-  } finally {
-    recordDocumentOpenMeasure('saveCurrentDocumentIfDirty', saveStartedAt);
-  }
-};
-
-const clearActiveDocumentAfterDelete = () => {
-  activeDocumentLoadToken += 1;
-  window.clearTimeout(autosaveTimer);
-  teardownYDoc();
-  state.selectedDocumentId = '';
-  state.typingUsers = [];
-  state.selectedThreadId = '';
-  state.contextLoadedFor = { tasks: '', threads: '', library: '' };
-  state.documentTasks = [];
-  state.documentMessages = [];
-  state.studyMaterials = [];
-  state.lastSavedTitle = '';
-  state.lastSavedText = '';
-  state.lastSavedHtml = '';
-  state.saveStatus = 'saved';
-  state.pendingSavePromise = null;
-  state.saveQueued = false;
-  localStorage.removeItem('documentId');
-  els.documentTitleInput.value = '';
-  setEditorText('');
-  setCollabStatus('No document selected');
-  setAutosaveStatus('No document');
-  renderAiEmptyState(null);
-  render();
-};
-
-const deleteDocumentById = async (documentId) => {
-  const id = String(documentId || '');
-  if (!id || deletingDocumentIds.has(id)) return;
-  const index = state.documents.findIndex((item) => documentKey(item) === id);
-  const doc = state.documents[index];
-  if (!doc) return;
-
-  const title = doc.title?.trim() || 'Untitled Lecture';
-  const confirmed = window.confirm(`Are you sure you want to delete "${title}" lecture?`);
-  if (!confirmed) return;
-
-  deletingDocumentIds.add(id);
-  renderDocuments();
-  const wasActive = id === String(state.selectedDocumentId);
-
-  try {
-    window.clearTimeout(autosaveTimer);
-    if (state.demoMode) {
-      state.documents = state.documents.filter((item) => documentKey(item) !== id);
-    } else {
-      await request(`/api/documents/${id}`, { method: 'DELETE' });
-      state.documents = state.documents.filter((item) => documentKey(item) !== id);
-    }
-
-    if (wasActive) {
-      const nextDocument = state.documents[index] || state.documents[index - 1] || state.documents[0] || null;
-      if (nextDocument) {
-        if (state.demoMode) {
-          loadDemoDocument(nextDocument._id);
-        } else {
-          await loadDocument(nextDocument._id);
-        }
-      } else {
-        clearActiveDocumentAfterDelete();
-      }
-    } else {
-      renderDocuments();
-    }
-    showToast('Lecture deleted');
-  } catch (err) {
-    showToast(err.message || 'Document delete failed', true);
-  } finally {
-    deletingDocumentIds.delete(id);
-    renderDocuments();
-  }
-};
-
-const createDocumentAndOpen = async (title = 'Untitled Lecture') => {
-  if (!state.selectedWorkspaceId) {
-    showToast('Select a workspace first', true);
-    return null;
-  }
-  if (documentCreateInFlight) {
-    showToast('Document is already being created');
-    return null;
-  }
-
-  documentCreateInFlight = true;
-  try {
-    const doc = await request('/api/documents', {
-      method: 'POST',
-      body: JSON.stringify({ workspaceId: state.selectedWorkspaceId, title })
-    });
-    upsertDocument(doc, { prepend: true });
-    await loadDocument(doc._id);
-    renderDocuments();
-    return doc;
-  } finally {
-    documentCreateInFlight = false;
-  }
-};
 
 const runStudyAiAction = async (action, mentorPrompt = '') => {
   if (aiGenerationInFlight) {
@@ -3942,104 +3095,9 @@ const createAiOutputDocument = async () => {
   showToast('Study material document created');
 };
 
-const scheduleAutosave = () => {
-  if (!state.selectedDocumentId) return;
-  const title = els.documentTitleInput.value || 'Untitled lecture';
-  const plainTextContent = getEditorText();
-  const contentHtml = getEditorHtml();
-  if (title === state.lastSavedTitle && plainTextContent === state.lastSavedText && contentHtml === (state.lastSavedHtml || '')) {
-    state.saveStatus = 'saved';
-    setAutosaveStatus('Saved');
-    return;
-  }
-  state.saveStatus = 'dirty';
-  setAutosaveStatus('Unsaved changes');
-  window.clearTimeout(autosaveTimer);
-  autosaveTimer = window.setTimeout(() => {
-    saveCurrentDocument({ silent: true }).catch((err) => {
-      setAutosaveStatus('Autosave failed');
-      showToast(err.message, true);
-    });
-  }, AUTOSAVE_DELAY_MS);
-};
 
-const createDefaultChannel = async () => {
-  const channel = await request(`/api/channels/${state.selectedWorkspaceId}`, {
-    method: 'POST',
-    body: JSON.stringify({ name: 'General', slug: 'general' })
-  });
-  state.channels.unshift(channel);
-  state.selectedChannelId = channel.slug;
-  localStorage.setItem('channelId', channel.slug);
-};
 
-const createDefaultDocument = async () => {
-  await createDocumentAndOpen('Project Notes');
-};
 
-const bootstrapWorkspace = async () => {
-  if (!state.selectedWorkspaceId) return;
-  if (state.channels.length === 0) await createDefaultChannel();
-  if (state.documents.length === 0) await createDefaultDocument();
-  await Promise.all([loadMessages(), loadDocuments()]);
-};
-
-const createWorkspaceAndOpen = async (name, { closePanel = false, route = 'home' } = {}) => {
-  const workspaceName = String(name || '').trim();
-  if (!workspaceName) {
-    showToast('Workspace name is required', true);
-    return null;
-  }
-  if (state.demoMode) {
-    showToast('Demo mode uses the sample workspace. Sign up to create your own.');
-    return null;
-  }
-  if (workspaceCreateInFlight) {
-    showToast('Workspace is already being created');
-    return null;
-  }
-
-  workspaceCreateInFlight = true;
-  try {
-    window.clearTimeout(autosaveTimer);
-    if (state.selectedDocumentId) await saveCurrentDocumentIfDirty().catch(() => {});
-
-    const workspace = await request('/api/workspaces', {
-      method: 'POST',
-      body: JSON.stringify({ name: workspaceName })
-    });
-
-    state.workspaces = [
-      workspace,
-      ...state.workspaces.filter((item) => String(item._id) !== String(workspace._id))
-    ];
-    state.selectedWorkspaceId = workspace._id;
-    state.selectedDocumentId = '';
-    state.selectedChannelId = '';
-    state.chatMessages = [];
-    state.activityItems = [];
-    resetTaskStore();
-    state.documentMessages = [];
-    state.workspaceThreads = [];
-    localStorage.setItem('workspaceId', workspace._id);
-    localStorage.removeItem('documentId');
-    localStorage.removeItem('channelId');
-    teardownYDoc();
-    render();
-
-    if (closePanel) closeToolPanel();
-    await loadWorkspaces();
-    await bootstrapWorkspace();
-    navigate(route);
-    showToast('Workspace created');
-    return workspace;
-  } catch (err) {
-    showToast(friendlyUiMessage(err.message, { isError: true }), true);
-    return null;
-  } finally {
-    workspaceCreateInFlight = false;
-  }
-};
 
 const renderToolPanel = (html, title = 'Workspace Panel', subtitle = 'Manage focused actions without cluttering the sidebar') => {
   const panelClass = [
@@ -7502,19 +6560,19 @@ const exposeLazyRouteShellBindings = () => {
     demoWorkspacePromise: { configurable: true, get: () => demoRuntime.workspacePromise, set: (value) => { demoRuntime.workspacePromise = value; } },
     Y: { configurable: true, get: () => socketState.Y, set: (value) => { socketState.Y = value; } },
     socketIo: { configurable: true, get: () => socketState.socketIo, set: (value) => { socketState.socketIo = value; } },
-    demoWorkspaceModule: { configurable: true, get: () => demoRuntime.workspaceModule, set: (value) => { demoRuntime.workspaceModule = value; } },
-    autosaveTimer: { configurable: true, get: () => autosaveTimer, set: (value) => { autosaveTimer = value; } },
+        demoWorkspaceModule: { configurable: true, get: () => demoRuntime.workspaceModule, set: (value) => { demoRuntime.workspaceModule = value; } },
+    autosaveTimer: { configurable: true, get: () => getAutosaveTimer(), set: (value) => { setAutosaveTimer(value); } },
     typingTimer: { configurable: true, get: () => socketState.typingTimer, set: (value) => { socketState.typingTimer = value; } },
     chatTypingTimer: { configurable: true, get: () => socketState.chatTypingTimer, set: (value) => { socketState.chatTypingTimer = value; } },
     lastChatTypingPublishAt: { configurable: true, get: () => socketState.lastChatTypingPublishAt, set: (value) => { socketState.lastChatTypingPublishAt = value; } },
-    dashboardHydrationTimer: { configurable: true, get: () => dashboardHydrationTimer, set: (value) => { dashboardHydrationTimer = value; } },
+    dashboardHydrationTimer: { configurable: true, get: () => getDashboardHydrationTimer(), set: (value) => { setDashboardHydrationTimer(value); } },
     aiSelectionHintTimer: { configurable: true, get: () => aiSelectionHintTimer, set: (value) => { aiSelectionHintTimer = value; } },
     titleUiTimer: { configurable: true, get: () => titleUiTimer, set: (value) => { titleUiTimer = value; } },
     lastCursorPublishAt: { configurable: true, get: () => socketState.lastCursorPublishAt, set: (value) => { socketState.lastCursorPublishAt = value; } },
     lastTypingPublishAt: { configurable: true, get: () => socketState.lastTypingPublishAt, set: (value) => { socketState.lastTypingPublishAt = value; } },
     aiGenerationInFlight: { configurable: true, get: () => aiGenerationInFlight, set: (value) => { aiGenerationInFlight = value; } },
-    flashcardProgressSaveTimer: { configurable: true, get: () => flashcardProgressSaveTimer, set: (value) => { flashcardProgressSaveTimer = value; } },
-    documentCreateInFlight: { configurable: true, get: () => documentCreateInFlight, set: (value) => { documentCreateInFlight = value; } },
+    flashcardProgressSaveTimer: { configurable: true, get: () => getFlashcardProgressSaveTimer(), set: (value) => { setFlashcardProgressSaveTimer(value); } },
+    documentCreateInFlight: { configurable: true, get: () => getDocumentCreateInFlight(), set: (value) => { setDocumentCreateInFlight(value); } },
     activeDocumentOpenProfile: { configurable: true, get: () => activeDocumentOpenProfile, set: (value) => { activeDocumentOpenProfile = value; } },
     overlayScrollLocked: { configurable: true, get: () => modalState.overlayScrollLocked, set: (value) => { modalState.overlayScrollLocked = value; } },
     overlayScrollY: { configurable: true, get: () => modalState.overlayScrollY, set: (value) => { modalState.overlayScrollY = value; } },
@@ -7523,8 +6581,8 @@ const exposeLazyRouteShellBindings = () => {
     latestCreatedInvite: { configurable: true, get: () => inviteState.latestCreatedInvite, set: (value) => { inviteState.latestCreatedInvite = value; } },
     activeJoinInvite: { configurable: true, get: () => inviteState.activeJoinInvite, set: (value) => { inviteState.activeJoinInvite = value; } },
     inviteRequestInFlight: { configurable: true, get: () => inviteState.inviteRequestInFlight, set: (value) => { inviteState.inviteRequestInFlight = value; } },
-    activeDocumentLoadToken: { configurable: true, get: () => activeDocumentLoadToken, set: (value) => { activeDocumentLoadToken = value; } },
-    deletingDocumentIds: { configurable: true, get: () => deletingDocumentIds },
+    activeDocumentLoadToken: { configurable: true, get: () => getActiveDocumentLoadToken(), set: (value) => { setActiveDocumentLoadToken(value); } },
+    deletingDocumentIds: { configurable: true, get: () => getDeletingDocumentIds() },
     selectedCommandIndex: { configurable: true, get: () => uiState.selectedCommandIndex, set: (value) => { uiState.selectedCommandIndex = value; } },
     threadFilterTab: { configurable: true, get: () => uiState.threadFilterTab, set: (value) => { uiState.threadFilterTab = value; } },
     threadSearchQuery: { configurable: true, get: () => uiState.threadSearchQuery, set: (value) => { uiState.threadSearchQuery = value; } },
@@ -7836,6 +6894,72 @@ const exposeLazyRouteShellBindings = () => {
     upsertDocument: { configurable: true, get: () => upsertDocument }
   });
 };
+
+configureDataRuntime({
+  request: (...args) => request(...args),
+  setLoading: (...args) => setLoading(...args),
+  setError: (...args) => setError(...args),
+  showToast: (...args) => showToast(...args),
+  render: (...args) => render(...args),
+  renderDocuments: (...args) => renderDocuments(...args),
+  renderEditor: (...args) => renderEditor(...args),
+  renderTaskList: (...args) => renderTaskList(...args),
+  renderThreadList: (...args) => renderThreadList(...args),
+  renderStudyLibrary: (...args) => renderStudyLibrary(...args),
+  renderHomePage: (...args) => renderHomePage(...args),
+  renderThreadsPage: (...args) => renderThreadsPage(...args),
+  renderTasksBoard: (...args) => renderTasksBoard(...args),
+  renderAiEmptyState: (...args) => renderAiEmptyState(...args),
+  renderAiStudyOutput: (...args) => renderAiStudyOutput(...args),
+  updateActiveDocumentSelection: (...args) => updateActiveDocumentSelection(...args),
+  updateLibrarySaveButton: (...args) => updateLibrarySaveButton(...args),
+  refreshDocumentTitleChrome: (...args) => refreshDocumentTitleChrome(...args),
+  hydrateActivityItems: (...args) => hydrateActivityItems(...args),
+  ensureActiveContextData: (...args) => ensureActiveContextData(...args),
+  closeToolPanel: (...args) => closeToolPanel(...args),
+  setAutosaveStatus: (...args) => setAutosaveStatus(...args),
+  setCollabStatus: (...args) => setCollabStatus(...args),
+  setAiGenerating: (...args) => setAiGenerating(...args),
+  setAiOutput: (...args) => setAiOutput(...args),
+  activateContextTab: (...args) => activateContextTab(...args),
+  addActivity: (...args) => addActivity(...args),
+  markLectureMilestone: (...args) => markLectureMilestone(...args),
+  refreshLectureProgress: (...args) => refreshLectureProgress(...args),
+  syncLegacyTaskViews: (...args) => syncLegacyTaskViews(...args),
+  getEditorText: (...args) => getEditorText(...args),
+  getEditorHtml: (...args) => getEditorHtml(...args),
+  setEditorText: (...args) => setEditorText(...args),
+  setEditorHtml: (...args) => setEditorHtml(...args),
+  getQuizProgressFromSession: (...args) => getQuizProgressFromSession(...args),
+  getFlashcardProgressFromSession: (...args) => getFlashcardProgressFromSession(...args),
+  buildStudyMaterialPayload: (...args) => buildStudyMaterialPayload(...args),
+  buildAiStudySession: (...args) => buildAiStudySession(...args),
+  requireDemoWorkspaceModule: (...args) => requireDemoWorkspaceModule(...args),
+  loadDemoWorkspaceModule: (...args) => loadDemoWorkspaceModule(...args),
+  hydrateDemoWorkspace: (...args) => hydrateDemoWorkspace(...args),
+  loadDemoDocument: (...args) => loadDemoDocument(...args),
+  saveDemoDocument: (...args) => saveDemoDocument(...args),
+  demoAiResponse: (...args) => demoAiResponse(...args),
+  getAiSourceText: (...args) => getAiSourceText(...args),
+  selectedAiSource: (...args) => selectedAiSource(...args),
+  startDocumentOpenProfile: (...args) => startDocumentOpenProfile(...args),
+  recordDocumentOpenMeasure: (...args) => recordDocumentOpenMeasure(...args),
+  finishDocumentOpenProfile: (...args) => finishDocumentOpenProfile(...args),
+  resetTaskStore: (...args) => resetTaskStore(...args),
+  setWorkspaceTasks: (...args) => setWorkspaceTasks(...args),
+  upsertTaskInStore: (...args) => upsertTaskInStore(...args),
+  selectedDocumentTasks: (...args) => selectedDocumentTasks(...args),
+  collaborationPeople: (...args) => collaborationPeople(...args),
+  activeChatChannel: (...args) => activeChatChannel(...args),
+  loadMessages: (...args) => loadMessages(...args),
+  loadChannels: (...args) => loadChannels(...args),
+  loadDocuments: (...args) => loadDocuments(...args),
+  loadDocument: (...args) => loadDocument(...args),
+  scheduleDashboardDataLoad: (...args) => scheduleDashboardDataLoad(...args),
+  saveCurrentDocumentIfDirty: (...args) => saveCurrentDocumentIfDirty(...args),
+  saveCurrentDocument: (...args) => saveCurrentDocument(...args),
+  els
+});
 
 exposeLazyRouteShellBindings();
 

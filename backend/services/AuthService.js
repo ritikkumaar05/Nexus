@@ -105,7 +105,7 @@ class AuthService {
       email: normalizedEmail,
       passwordHash,
       authProvider: 'email',
-      emailVerifiedAt: null
+      emailVerifiedAt: new Date()
     });
 
     const savedUser = await newUser.save();
@@ -155,7 +155,17 @@ class AuthService {
     // Find user by email
     const user = await User.findOne({ email: normalizedEmail, deletedAt: null });
 
-    if (!user || !user.passwordHash) {
+    if (!user) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[AUTH DEBUG] User not found for email: "${normalizedEmail}"`);
+      }
+      throw new AuthenticationError('Invalid email or password');
+    }
+
+    if (!user.passwordHash) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[AUTH DEBUG] User has no password hash for email: "${normalizedEmail}"`);
+      }
       throw new AuthenticationError('Invalid email or password');
     }
 
@@ -163,6 +173,9 @@ class AuthService {
     const isPasswordValid = await this.validatePassword(password, user.passwordHash);
 
     if (!isPasswordValid) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[AUTH DEBUG] Password invalid for email: "${normalizedEmail}"`);
+      }
       throw new AuthenticationError('Invalid email or password');
     }
 
