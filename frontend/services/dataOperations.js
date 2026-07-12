@@ -260,12 +260,13 @@ export const loadDocuments = async () => {
 };
 
 export const loadDocument = async (documentId) => {
+  await ensureCurrentDocumentSaved();
   if (state.demoMode) {
     appRuntime().loadDemoDocument(documentId);
     return;
   }
   const loadToken = ++activeDocumentLoadToken;
-  if (!appRuntime().activeDocumentOpenProfile) appRuntime().startDocumentOpenProfile(documentId);
+  if (!appRuntime().getActiveDocumentOpenProfile()) appRuntime().startDocumentOpenProfile(documentId);
   const loadStartedAt = performance.now();
   appRuntime().setLoading('document', true);
   let doc;
@@ -579,25 +580,45 @@ export const saveCurrentDocument = async ({ silent = false } = {}) => {
   }
 };
 
-export const saveCurrentDocumentIfDirty = async () => {
-  const saveStartedAt = performance.now();
-  if (!state.selectedDocumentId) return null;
+export const isDocumentDirty = () => {
+  if (!state.selectedDocumentId) return false;
   const title = appRuntime().els.documentTitleInput.value || 'Untitled lecture';
   const plainTextContent = appRuntime().getEditorText();
   const contentHtml = appRuntime().getEditorHtml();
+  return title !== state.lastSavedTitle ||
+         plainTextContent !== state.lastSavedText ||
+         contentHtml !== (state.lastSavedHtml || '');
+};
+
+export const ensureCurrentDocumentSaved = async () => {
+  if (!state.selectedDocumentId) return;
+
+  // 1. Wait for any current in-flight save to finish
+  while (state.pendingSavePromise) {
+    await state.pendingSavePromise;
+  }
+
+  // 2. If there are still dirty changes, trigger a save and wait for it
+  if (isDocumentDirty()) {
+    appRuntime().setAutosaveStatus('Saving changes before switching...');
+    await saveCurrentDocument({ silent: true });
+    while (state.pendingSavePromise) {
+      await state.pendingSavePromise;
+    }
+  }
+};
+
+export const saveCurrentDocumentIfDirty = async () => {
+  const saveStartedAt = performance.now();
+  if (!state.selectedDocumentId) return null;
   try {
-    const titleChanged = title !== state.lastSavedTitle;
-    const contentChanged = plainTextContent !== state.lastSavedText;
-    const htmlChanged = contentHtml !== (state.lastSavedHtml || '');
+    const dirty = isDocumentDirty();
     console.log('[dirty-check]', {
       documentId: state.selectedDocumentId,
-      titleChanged,
-      contentChanged,
-      editorLength: plainTextContent.length,
-      lastSavedLength: state.lastSavedText.length,
-      action: titleChanged || contentChanged || htmlChanged ? 'save' : 'skip'
+      dirty,
+      action: dirty ? 'save' : 'skip'
     });
-    if (!titleChanged && !contentChanged && !htmlChanged) return selectedDocument();
+    if (!dirty) return selectedDocument();
     return await saveCurrentDocument({ silent: true });
   } finally {
     appRuntime().recordDocumentOpenMeasure('saveCurrentDocumentIfDirty', saveStartedAt);
@@ -606,10 +627,7 @@ export const saveCurrentDocumentIfDirty = async () => {
 
 export const scheduleAutosave = () => {
   if (!state.selectedDocumentId) return;
-  const title = appRuntime().els.documentTitleInput.value || 'Untitled lecture';
-  const plainTextContent = appRuntime().getEditorText();
-  const contentHtml = appRuntime().getEditorHtml();
-  if (title === state.lastSavedTitle && plainTextContent === state.lastSavedText && contentHtml === (state.lastSavedHtml || '')) {
+  if (!isDocumentDirty()) {
     state.saveStatus = 'saved';
     appRuntime().setAutosaveStatus('Saved');
     return;
@@ -1079,5 +1097,3 @@ export const deleteStudyMaterial = async (materialId) => {
     appRuntime().showToast(err.message, true);
   }
 };
-
-
