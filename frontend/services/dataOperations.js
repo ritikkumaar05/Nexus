@@ -216,7 +216,14 @@ export const loadDocuments = async () => {
     appRuntime().loadDemoDocument(state.selectedDocumentId);
     return;
   }
+  // Clear documents, tasks, and threads synchronously before any await so that
+  // no stale data from the previous workspace leaks through the async fetch gap.
+  // This mirrors the pattern already used by setDocuments([]) and loadChannels().
   setDocuments([]);
+  appRuntime().resetTaskStore();
+  state.workspaceThreads = [];
+  workspaceThreadsLoadedKey = '';
+  workspaceThreadsLoadSeq += 1;
   if (!state.selectedWorkspaceId) return;
 
   appRuntime().setLoading('documents', true);
@@ -238,15 +245,10 @@ export const loadDocuments = async () => {
 
   if (state.selectedDocumentId) {
     localStorage.setItem('documentId', state.selectedDocumentId);
-    appRuntime().resetTaskStore();
-    state.workspaceThreads = [];
-    workspaceThreadsLoadedKey = '';
-    workspaceThreadsLoadSeq += 1;
     await loadDocument(state.selectedDocumentId);
   } else {
     localStorage.removeItem('documentId');
     teardownYDoc();
-    appRuntime().resetTaskStore();
     state.documentMessages = [];
     state.studyMaterials = [];
     appRuntime().els.documentTitleInput.value = '';
