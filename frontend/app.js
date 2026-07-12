@@ -3052,8 +3052,12 @@ const saveAiOutputToDocument = async () => {
   const block = `\n\n---\nAI ${aiActionLabel(state.lastAiAction)}\nGenerated on ${stamp}\n\n${state.lastAiOutput.trim()}\n`;
   setEditorText(`${getEditorText()}${block}`);
   applyEditorInputToYDoc();
-  await saveCurrentDocument();
-  showToast('Mentor output saved below your notes');
+  try {
+    await saveCurrentDocument();
+    showToast('Mentor output saved below your notes');
+  } catch (err) {
+    showToast(friendlyUiMessage('Failed to save mentor output: ' + err.message, { isError: true }), true);
+  }
 };
 
 const createAiOutputDocument = async () => {
@@ -3491,10 +3495,14 @@ Summary:
   const doc = await createDocumentAndOpen(templateTitle);
   if (!doc) return;
   setEditorText(templateBody);
-  await saveCurrentDocument({ silent: true });
-  navigate('workspace');
-  addActivity({ action: 'created document from template', target: templateTitle, documentId: doc._id });
-  showToast('Template note created');
+  try {
+    await saveCurrentDocument({ silent: true });
+    navigate('workspace');
+    addActivity({ action: 'created document from template', target: templateTitle, documentId: doc._id });
+    showToast('Template note created');
+  } catch (err) {
+    showToast(friendlyUiMessage('Failed to save template note: ' + err.message, { isError: true }), true);
+  }
 };
 
 const handleEmptyStateAction = async (target) => {
@@ -4205,15 +4213,21 @@ const handleToolPanelClick = async (event) => {
         return;
       }
       window.clearTimeout(autosaveTimer);
-      if (state.selectedDocumentId) await saveCurrentDocument({ silent: true }).catch(() => {});
-      state.selectedWorkspaceId = workspaceId;
-      localStorage.setItem('workspaceId', state.selectedWorkspaceId);
-      state.chatMessages = [];
-      teardownYDoc();
-      closeToolPanel();
-      await Promise.all([loadChannels(), loadDocuments()]);
-      navigate('home');
-      return showToast('Workspace switched');
+      try {
+        if (state.selectedDocumentId) {
+          await saveCurrentDocument({ silent: true });
+        }
+        state.selectedWorkspaceId = workspaceId;
+        localStorage.setItem('workspaceId', state.selectedWorkspaceId);
+        state.chatMessages = [];
+        teardownYDoc();
+        closeToolPanel();
+        await Promise.all([loadChannels(), loadDocuments()]);
+        navigate('home');
+        return showToast('Workspace switched');
+      } catch (err) {
+        showToast(friendlyUiMessage('Failed to switch workspace: ' + err.message, { isError: true }), true);
+      }
     }
 
     if (target.id === 'toolCreateWorkspaceBtn') {
@@ -5493,15 +5507,19 @@ els.workspaceList.addEventListener('click', async (event) => {
   if (state.demoMode) return;
 
   window.clearTimeout(autosaveTimer);
-  if (state.selectedDocumentId) {
-    await saveCurrentDocument({ silent: true }).catch(() => {});
+  try {
+    if (state.selectedDocumentId) {
+      await saveCurrentDocument({ silent: true });
+    }
+    state.selectedWorkspaceId = button.dataset.workspaceId;
+    localStorage.setItem('workspaceId', state.selectedWorkspaceId);
+    hydrateActivityItems();
+    teardownYDoc();
+    await Promise.all([loadChannels(), loadDocuments()]);
+    render();
+  } catch (err) {
+    showToast(friendlyUiMessage('Failed to switch workspace: ' + err.message, { isError: true }), true);
   }
-  state.selectedWorkspaceId = button.dataset.workspaceId;
-  localStorage.setItem('workspaceId', state.selectedWorkspaceId);
-  hydrateActivityItems();
-  teardownYDoc();
-  await Promise.all([loadChannels(), loadDocuments()]);
-  render();
 });
 
 els.refreshWorkspacesBtn.addEventListener('click', () => loadWorkspaces().catch((err) => showToast(err.message, true)));
@@ -6845,6 +6863,7 @@ const exposeLazyRouteShellBindings = () => {
     loadDocument: { configurable: true, get: () => loadDocument },
     saveCurrentDocument: { configurable: true, get: () => saveCurrentDocument },
     saveCurrentDocumentIfDirty: { configurable: true, get: () => saveCurrentDocumentIfDirty },
+    createWorkspaceAndOpen: { configurable: true, get: () => createWorkspaceAndOpen },
     clearActiveDocumentAfterDelete: { configurable: true, get: () => clearActiveDocumentAfterDelete },
     deleteDocumentById: { configurable: true, get: () => deleteDocumentById },
     createDocumentAndOpen: { configurable: true, get: () => createDocumentAndOpen },

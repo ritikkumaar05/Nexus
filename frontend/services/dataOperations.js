@@ -469,7 +469,7 @@ export const createWorkspaceAndOpen = async (name, { closePanel = false, route =
   workspaceCreateInFlight = true;
   try {
     clearGlobalAutosaveTimer();
-    if (state.selectedDocumentId) await appRuntime().saveCurrentDocumentIfDirty().catch(() => {});
+    if (state.selectedDocumentId) await appRuntime().saveCurrentDocumentIfDirty();
 
     const workspace = await appRuntime().request('/api/workspaces', {
       method: 'POST',
@@ -567,6 +567,7 @@ export const saveCurrentDocument = async ({ silent = false } = {}) => {
     return doc;
   } catch (err) {
     state.saveStatus = 'error';
+    appRuntime().setAutosaveStatus('Save failed');
     throw err;
   } finally {
     state.pendingSavePromise = null;
