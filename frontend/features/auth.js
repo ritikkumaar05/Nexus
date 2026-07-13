@@ -278,7 +278,7 @@ export const renderAuthPage = (mode) => {
           <div class="hero-left">
             <div class="hero-badge">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
-              <span>Built for study groups racing toward exams</span>
+              <span>Built to remember your learning journey</span>
             </div>
             <h2 class="hero-headline">Your AI Mentor That Remembers Your Learning Journey</h2>
             <p class="hero-subtext">
@@ -397,12 +397,6 @@ export const renderAuthPage = (mode) => {
                   ${mode === 'signup' ? 'Already have an account?' : 'New to Nexus?'}
                   <a href="#/${mode === 'signup' ? 'login' : 'signup'}">${mode === 'signup' ? 'Sign in' : 'Create account'}</a>
                 </p>
-                ${mode === 'login' ? `
-                  <p class="auth-switch">
-                    Need a new OTP?
-                    <a href="#/resend-verification">Resend verification OTP</a>
-                  </p>
-                ` : ''}
                 <button class="demo-auth-link" data-try-demo type="button">Try Demo Workspace instead</button>
               </form>
             </section>
@@ -558,7 +552,7 @@ export const renderPasswordRecoveryPage = (mode = 'forgot-password') => {
           <div class="hero-left">
             <div class="hero-badge">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
-              <span>Built for study groups racing toward exams</span>
+              <span>Built to remember your learning journey</span>
             </div>
             <h2 class="hero-headline">Your AI Mentor That Remembers Your Learning Journey</h2>
             <p class="hero-subtext">
