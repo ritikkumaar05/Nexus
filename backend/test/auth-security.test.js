@@ -63,6 +63,197 @@ test('login response sets HttpOnly refresh cookie and omits refresh token JSON',
   }
 });
 
+test('registration response creates a session immediately when email verification is disabled', async () => {
+  const originalRegister = AuthService.register;
+  const originalFlag = process.env.REQUIRE_EMAIL_VERIFICATION;
+  process.env.REQUIRE_EMAIL_VERIFICATION = 'false';
+  AuthService.register = async () => ({
+    token: 'registration-access-token',
+    refreshToken: 'registration-refresh-token',
+    csrfToken: 'registration-csrf-token',
+    verificationRequired: false,
+    verificationSent: false,
+    user: { id: 'user-1', email: 'user@example.com', emailVerified: true }
+  });
+
+  const { app } = createApp();
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const { port } = server.address();
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'user@example.com',
+        password: 'password123',
+        username: 'user-one'
+      })
+    });
+    const body = await response.json();
+    const cookie = response.headers.get('set-cookie') || '';
+
+    assert.equal(response.status, 201);
+    assert.equal(body.token, 'registration-access-token');
+    assert.equal(body.refreshToken, undefined);
+    assert.equal(body.verificationRequired, false);
+    assert.equal(body.user.emailVerified, true);
+    assert.match(cookie, /nexus_refresh_token=registration-refresh-token/);
+    assert.match(cookie, /HttpOnly/);
+  } finally {
+    AuthService.register = originalRegister;
+    if (originalFlag === undefined) delete process.env.REQUIRE_EMAIL_VERIFICATION;
+    else process.env.REQUIRE_EMAIL_VERIFICATION = originalFlag;
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('registration preserves OTP verification flow when email verification is enabled', async () => {
+  const originalFlag = process.env.REQUIRE_EMAIL_VERIFICATION;
+  process.env.REQUIRE_EMAIL_VERIFICATION = 'true';
+  let verificationEmails = 0;
+  let sessions = 0;
+
+  try {
+    await withPatchedModel([
+      [User, {
+        findOne: async () => null
+      }],
+      [User.prototype, {
+        save: async function save() { return this; }
+      }],
+      [AuthService, {
+        hashPassword: async () => 'password-hash'
+      }],
+      [EmailOtp, {
+        updateMany: async () => ({ modifiedCount: 0 }),
+        create: async (payload) => payload
+      }],
+      [EmailService, {
+        sendVerificationOtpEmail: async () => { verificationEmails += 1; }
+      }],
+      [Session, {
+        create: async () => { sessions += 1; }
+      }]
+    ], async () => {
+      const result = await AuthService.register('enabled@example.com', 'password123', 'enabled-user');
+
+      assert.equal(result.verificationRequired, true);
+      assert.equal(result.verificationSent, true);
+      assert.equal(result.user.emailVerified, false);
+      assert.equal(result.token, undefined);
+      assert.equal(verificationEmails, 1);
+      assert.equal(sessions, 0);
+    });
+  } finally {
+    if (originalFlag === undefined) delete process.env.REQUIRE_EMAIL_VERIFICATION;
+    else process.env.REQUIRE_EMAIL_VERIFICATION = originalFlag;
+  }
+});
+
+test('registration auto-verifies and sends no verification email when disabled', async () => {
+  const originalFlag = process.env.REQUIRE_EMAIL_VERIFICATION;
+  process.env.REQUIRE_EMAIL_VERIFICATION = 'false';
+  let verificationEmails = 0;
+
+  try {
+    await withPatchedModel([
+      [User, {
+        findOne: async () => null
+      }],
+      [User.prototype, {
+        save: async function save() { return this; }
+      }],
+      [AuthService, {
+        hashPassword: async () => 'password-hash'
+      }],
+      [EmailService, {
+        sendVerificationOtpEmail: async () => { verificationEmails += 1; }
+      }],
+      [Session, {
+        create: async (payload) => ({
+          ...payload,
+          _id: '507f1f77bcf86cd799439011',
+          tokenVersion: 0
+        })
+      }]
+    ], async () => {
+      const result = await AuthService.register('demo@example.com', 'password123', 'demo-user');
+
+      assert.equal(result.verificationRequired, false);
+      assert.equal(result.verificationSent, false);
+      assert.equal(result.user.emailVerified, true);
+      assert.equal(typeof result.token, 'string');
+      assert.equal(typeof result.refreshToken, 'string');
+      assert.equal(verificationEmails, 0);
+    });
+  } finally {
+    if (originalFlag === undefined) delete process.env.REQUIRE_EMAIL_VERIFICATION;
+    else process.env.REQUIRE_EMAIL_VERIFICATION = originalFlag;
+  }
+});
+
+test('login rejects unverified accounts when enabled and auto-verifies them when disabled', async () => {
+  const originalFlag = process.env.REQUIRE_EMAIL_VERIFICATION;
+  const user = {
+    _id: '507f1f77bcf86cd799439012',
+    email: 'existing@example.com',
+    username: 'existing-user',
+    passwordHash: 'password-hash',
+    emailVerifiedAt: null,
+    async save() { return this; }
+  };
+
+  try {
+    await withPatchedModel([
+      [User, { findOne: async () => user }],
+      [AuthService, { validatePassword: async () => true }],
+      [Session, {
+        create: async (payload) => ({
+          ...payload,
+          _id: '507f1f77bcf86cd799439011',
+          tokenVersion: 0
+        })
+      }]
+    ], async () => {
+      process.env.REQUIRE_EMAIL_VERIFICATION = 'true';
+      await assert.rejects(
+        () => AuthService.login(user.email, 'password123'),
+        /Please verify your email before signing in/
+      );
+
+      process.env.REQUIRE_EMAIL_VERIFICATION = 'false';
+      const result = await AuthService.login(user.email, 'password123');
+      assert.ok(user.emailVerifiedAt instanceof Date);
+      assert.equal(result.user.emailVerified, true);
+      assert.equal(typeof result.token, 'string');
+    });
+  } finally {
+    if (originalFlag === undefined) delete process.env.REQUIRE_EMAIL_VERIFICATION;
+    else process.env.REQUIRE_EMAIL_VERIFICATION = originalFlag;
+  }
+});
+
+test('verification resend is a no-op when email verification is disabled', async () => {
+  const originalFlag = process.env.REQUIRE_EMAIL_VERIFICATION;
+  process.env.REQUIRE_EMAIL_VERIFICATION = 'false';
+  let verificationEmails = 0;
+
+  try {
+    await withPatchedModel([[EmailService, {
+      sendVerificationOtpEmail: async () => { verificationEmails += 1; }
+    }]], async () => {
+      const result = await AuthService.requestEmailVerification('demo@example.com');
+      assert.match(result.message, /disabled/i);
+      assert.equal(verificationEmails, 0);
+    });
+  } finally {
+    if (originalFlag === undefined) delete process.env.REQUIRE_EMAIL_VERIFICATION;
+    else process.env.REQUIRE_EMAIL_VERIFICATION = originalFlag;
+  }
+});
+
 test('auth payload creates a high-entropy refresh token and stores only its hash', async () => {
   let createdSession = null;
   await withPatchedModel([[Session, {

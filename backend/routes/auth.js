@@ -13,6 +13,7 @@ const { asyncHandler } = require('../utils/AppError');
 const authenticateToken = require('../middleware/auth');
 const AuthService = require('../services/AuthService');
 const { AUTH } = require('../config/constants');
+const { isEmailVerificationRequired } = require('../config/env');
 
 const REFRESH_COOKIE_NAME = 'nexus_refresh_token';
 const OAUTH_STATE_COOKIE_NAME = 'nexus_oauth_state';
@@ -97,10 +98,13 @@ router.post(
   asyncHandler(async (req, res) => {
     const { email, password, username } = req.body;
     const result = await AuthService.register(email, password, username);
+    if (result.refreshToken) setRefreshCookie(res, result.refreshToken);
 
     res.status(201).json({
-      message: 'Account created. Check your email to verify your account before signing in.',
-      ...result
+      message: isEmailVerificationRequired()
+        ? 'Account created. Check your email to verify your account before signing in.'
+        : 'Account created and signed in successfully.',
+      ...publicAuthResult(result)
     });
   })
 );

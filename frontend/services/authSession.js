@@ -476,6 +476,11 @@ export const handleAuthRouteSubmit = async (event) => {
       body: JSON.stringify(payload)
     });
     if (mode === 'register') {
+      if (result.verificationRequired === false) {
+        completeAuthenticatedSession(result);
+        showToast('Account created successfully.');
+        return true;
+      }
       setPendingVerificationEmail(payload.email);
       showToast('Account created. Enter the OTP sent to your email.');
       navigate('verify-email');
@@ -578,6 +583,11 @@ export const handleLegacyAuthFormSubmit = async (event) => {
       body: JSON.stringify(payload)
     });
     if (mode === 'register') {
+      if (result.verificationRequired === false) {
+        completeAuthenticatedSession(result);
+        showToast('Account created successfully.');
+        return;
+      }
       setPendingVerificationEmail(payload.email);
       showToast('Account created. Enter the OTP sent to your email.');
       navigate('verify-email');

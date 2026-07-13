@@ -35,14 +35,17 @@ const parseTrustProxy = () => {
 };
 
 const createCorsOptions = () => {
-  const allowedOrigins = (process.env.CORS_ORIGIN || '')
-    .split(',')
+  const allowedOrigins = [
+    ...(process.env.CORS_ORIGIN || '').split(','),
+    process.env.FRONTEND_ORIGIN || ''
+  ]
     .map((origin) => origin.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((origin) => origin.replace(/\/$/, ''));
   const isProduction = process.env.NODE_ENV === 'production';
 
   if (isProduction && allowedOrigins.length === 0) {
-    throw new Error('CORS_ORIGIN is required in production');
+    throw new Error('CORS_ORIGIN or FRONTEND_ORIGIN is required in production');
   }
 
   return {
@@ -53,7 +56,7 @@ const createCorsOptions = () => {
       if (!isProduction && allowedOrigins.length === 0) {
         return callback(null, true);
       }
-      if (allowedOrigins.includes(origin)) {
+      if (allowedOrigins.includes(origin.replace(/\/$/, ''))) {
         return callback(null, true);
       }
       return callback(new Error('Origin not allowed by CORS'));

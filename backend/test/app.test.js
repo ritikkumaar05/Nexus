@@ -29,12 +29,14 @@ test('createCorsOptions allows requests without an origin header', async () => {
 test('createCorsOptions fails closed in production without configured origins', () => {
   const previousNodeEnv = process.env.NODE_ENV;
   const previousCorsOrigin = process.env.CORS_ORIGIN;
+  const previousFrontendOrigin = process.env.FRONTEND_ORIGIN;
   process.env.NODE_ENV = 'production';
   delete process.env.CORS_ORIGIN;
+  delete process.env.FRONTEND_ORIGIN;
 
   assert.throws(
     () => createCorsOptions(),
-    /CORS_ORIGIN is required in production/
+    /CORS_ORIGIN or FRONTEND_ORIGIN is required in production/
   );
 
   process.env.NODE_ENV = previousNodeEnv;
@@ -42,6 +44,11 @@ test('createCorsOptions fails closed in production without configured origins', 
     delete process.env.CORS_ORIGIN;
   } else {
     process.env.CORS_ORIGIN = previousCorsOrigin;
+  }
+  if (previousFrontendOrigin === undefined) {
+    delete process.env.FRONTEND_ORIGIN;
+  } else {
+    process.env.FRONTEND_ORIGIN = previousFrontendOrigin;
   }
 });
 
@@ -84,4 +91,29 @@ test('createCorsOptions allows only configured origins in production', async () 
   } else {
     process.env.CORS_ORIGIN = previousCorsOrigin;
   }
+});
+
+test('createCorsOptions allows the configured frontend domain', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousCorsOrigin = process.env.CORS_ORIGIN;
+  const previousFrontendOrigin = process.env.FRONTEND_ORIGIN;
+  process.env.NODE_ENV = 'production';
+  delete process.env.CORS_ORIGIN;
+  process.env.FRONTEND_ORIGIN = 'https://app.nexus.example/';
+
+  const corsOptions = createCorsOptions();
+  const allowed = await new Promise((resolve, reject) => {
+    corsOptions.origin('https://app.nexus.example', (err, result) => {
+      if (err) return reject(err);
+      return resolve(result);
+    });
+  });
+
+  assert.equal(allowed, true);
+
+  process.env.NODE_ENV = previousNodeEnv;
+  if (previousCorsOrigin === undefined) delete process.env.CORS_ORIGIN;
+  else process.env.CORS_ORIGIN = previousCorsOrigin;
+  if (previousFrontendOrigin === undefined) delete process.env.FRONTEND_ORIGIN;
+  else process.env.FRONTEND_ORIGIN = previousFrontendOrigin;
 });

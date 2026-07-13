@@ -255,8 +255,10 @@ const globalErrorHandler = (err, req, res, next) => {
  * Useful for handling Mongoose, JWT, and other library errors
  */
 const normalizeError = (err) => {
+  if (err instanceof AppError) return err;
+
   // Mongoose validation error
-  if (err.name === 'ValidationError') {
+  if (err.name === 'ValidationError' && err.errors) {
     const details = Object.entries(err.errors).map(([field, error]) => ({
       field,
       message: error.message

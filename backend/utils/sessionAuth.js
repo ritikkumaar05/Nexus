@@ -42,6 +42,7 @@ const validateAccessToken = async (token) => {
   }
 
   if (session.tokenVersion !== verified.tokenVersion) {
+    console.error(`[AUTH VERSION MISMATCH] session.tokenVersion = ${session.tokenVersion}, verified.tokenVersion = ${verified.tokenVersion}, session ID = ${session._id}`);
     throw new AuthenticationError('Session token has been rotated');
   }
 

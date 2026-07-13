@@ -20,6 +20,7 @@ const authenticateToken = async (req, res, next) => {
     req.user = verified; // Attach the user payload (id & email) to the request object
     next(); // Pass control to the next route handler
   } catch (err) {
+    console.error('[AUTH ERROR] Token verification failed:', err);
     res.status(401).json({ error: 'Invalid or Expired Token' });
   }
 };

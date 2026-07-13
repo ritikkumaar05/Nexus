@@ -12,7 +12,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { AccountToken, EmailOtp, Session, User } = require('../models');
-const { getJwtSecret } = require('../config/env');
+const { getJwtSecret, isEmailVerificationRequired } = require('../config/env');
 const EmailService = require('./EmailService');
 const fetchWithTimeout = require('../utils/fetchWithTimeout');
 const {
@@ -36,6 +36,7 @@ class AuthService {
    * @throws {ConflictError} If email/username already exists
    */
   async register(email, password, username) {
+    const verificationRequired = isEmailVerificationRequired();
     // Validate inputs
     if (!email || typeof email !== 'string') {
       throw new ValidationError('Email is required');
@@ -105,27 +106,35 @@ class AuthService {
       email: normalizedEmail,
       passwordHash,
       authProvider: 'email',
-      emailVerifiedAt: new Date()
+      emailVerifiedAt: verificationRequired ? null : new Date()
     });
 
     const savedUser = await newUser.save();
 
-    try {
-      await this._sendEmailVerificationOtp(savedUser);
-    } catch (err) {
-      await Promise.allSettled([
-        EmailOtp.deleteMany({ user: savedUser._id, purpose: 'email-verification' }),
-        typeof savedUser.deleteOne === 'function'
-          ? savedUser.deleteOne()
-          : User.deleteOne({ _id: savedUser._id })
-      ]);
-      throw err;
+    if (verificationRequired) {
+      try {
+        await this._sendEmailVerificationOtp(savedUser);
+      } catch (err) {
+        await Promise.allSettled([
+          EmailOtp.deleteMany({ user: savedUser._id, purpose: 'email-verification' }),
+          typeof savedUser.deleteOne === 'function'
+            ? savedUser.deleteOne()
+            : User.deleteOne({ _id: savedUser._id })
+        ]);
+        throw err;
+      }
+
+      return {
+        user: this._formatUser(savedUser),
+        verificationRequired: true,
+        verificationSent: true
+      };
     }
 
     return {
-      user: this._formatUser(savedUser),
-      verificationRequired: true,
-      verificationSent: true
+      ...await this._createAuthPayload(savedUser),
+      verificationRequired: false,
+      verificationSent: false
     };
   }
 
@@ -180,7 +189,10 @@ class AuthService {
     }
 
     if (!user.emailVerifiedAt) {
-      throw new AuthenticationError('Please verify your email before signing in');
+      if (isEmailVerificationRequired()) {
+        throw new AuthenticationError('Please verify your email before signing in');
+      }
+      user.emailVerifiedAt = new Date();
     }
 
     // Create auth payload
@@ -245,6 +257,12 @@ class AuthService {
   }
 
   async requestEmailVerification(emailOrUserId) {
+    if (!isEmailVerificationRequired()) {
+      return {
+        message: 'Email verification is disabled for this deployment.'
+      };
+    }
+
     const user = this._isValidObjectId(emailOrUserId)
       ? await User.findById(emailOrUserId)
       : await User.findOne({ email: String(emailOrUserId || '').toLowerCase().trim(), deletedAt: null });
@@ -756,6 +774,8 @@ class AuthService {
   }
 
   async _sendEmailVerificationOtp(user, { enforceCooldown = false } = {}) {
+    if (!isEmailVerificationRequired()) return false;
+
     const normalizedEmail = String(user.email || '').toLowerCase().trim();
     if (!this._isValidEmail(normalizedEmail)) {
       throw new ValidationError('Cannot send OTP to an invalid email address');

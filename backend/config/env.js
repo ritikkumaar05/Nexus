@@ -1,17 +1,29 @@
 const requiredInProduction = [
   'JWT_SECRET',
   'MONGO_URI',
-  'CORS_ORIGIN',
   'FRONTEND_ORIGIN',
   'API_BASE_URL',
-  'EMAIL_PROVIDER_URL',
-  'EMAIL_PROVIDER_API_KEY',
-  'EMAIL_FROM',
   'GEMINI_API_KEY',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
   'GOOGLE_OAUTH_REDIRECT_URI'
 ];
+
+const emailProviderEnv = [
+  'EMAIL_PROVIDER_URL',
+  'EMAIL_PROVIDER_API_KEY',
+  'EMAIL_FROM'
+];
+
+const isEmailVerificationRequired = () => {
+  const value = process.env.REQUIRE_EMAIL_VERIFICATION;
+  if (value === undefined || value === '') return true;
+
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  throw new Error('REQUIRE_EMAIL_VERIFICATION must be either true or false');
+};
 
 const parseOriginList = (value = '') => value
   .split(',')
@@ -70,7 +82,11 @@ const assertPositiveIntegerEnv = (key, defaultValue) => {
 const assertProductionEnv = () => {
   if (process.env.NODE_ENV !== 'production') return;
 
-  const missing = requiredInProduction.filter((key) => !process.env[key]);
+  const verificationRequired = isEmailVerificationRequired();
+  const requiredKeys = verificationRequired
+    ? [...requiredInProduction, ...emailProviderEnv]
+    : requiredInProduction;
+  const missing = requiredKeys.filter((key) => !process.env[key]);
   if (missing.length > 0) {
     throw new Error(`Missing required production env vars: ${missing.join(', ')}`);
   }
@@ -90,18 +106,24 @@ const assertProductionEnv = () => {
     throw new Error(`JWT_SECRET must not contain common placeholder patterns (matched: "${matchedPattern}")`);
   }
 
-  assertUrl('CORS_ORIGIN', { requireHttps: true, allowCommaList: true, disallowLocalhost: true });
+  if (process.env.CORS_ORIGIN) {
+    assertUrl('CORS_ORIGIN', { requireHttps: true, allowCommaList: true, disallowLocalhost: true });
+  }
   assertUrl('FRONTEND_ORIGIN', { requireHttps: true, disallowLocalhost: true });
   assertUrl('API_BASE_URL', { requireHttps: true, disallowLocalhost: true });
-  assertUrl('EMAIL_PROVIDER_URL', { requireHttps: true, disallowLocalhost: true });
+  if (verificationRequired) {
+    assertUrl('EMAIL_PROVIDER_URL', { requireHttps: true, disallowLocalhost: true });
+  }
   assertUrl('GOOGLE_OAUTH_REDIRECT_URI', { requireHttps: true, disallowLocalhost: true });
 
   if (!process.env.GOOGLE_OAUTH_REDIRECT_URI.endsWith('/api/auth/google/callback')) {
     throw new Error('GOOGLE_OAUTH_REDIRECT_URI must end with /api/auth/google/callback');
   }
 
-  assertProductionEmailFrom();
-  assertPositiveIntegerEnv('EMAIL_PROVIDER_TIMEOUT_MS', 10000);
+  if (verificationRequired) {
+    assertProductionEmailFrom();
+    assertPositiveIntegerEnv('EMAIL_PROVIDER_TIMEOUT_MS', 10000);
+  }
   assertPositiveIntegerEnv('GOOGLE_OAUTH_TIMEOUT_MS', 10000);
 
   const allowedSameSite = new Set(['none', 'lax']);
@@ -121,5 +143,6 @@ const getJwtSecret = () => {
 
 module.exports = {
   assertProductionEnv,
-  getJwtSecret
+  getJwtSecret,
+  isEmailVerificationRequired
 };
