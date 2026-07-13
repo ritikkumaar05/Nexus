@@ -57,7 +57,7 @@ export const createTaskPanel = ({
           priority: 'medium',
           dueDate: new Date().toISOString(),
           documentId: state.selectedDocumentId,
-          assignee: { username: state.user?.username || 'Alex Rivera' }
+          assignee: { username: state.user?.username || 'Ritik Kumar' }
         };
         upsertTaskInStore(task);
         els.taskInput.value = '';

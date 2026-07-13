@@ -151,7 +151,7 @@ export const createThreadPanel = ({
       if (state.demoMode) {
         thread.status = nextStatus;
         thread.resolvedAt = nextStatus === 'resolved' ? new Date().toISOString() : null;
-        thread.resolvedBy = nextStatus === 'resolved' ? { username: state.user?.username || 'Alex Rivera' } : null;
+        thread.resolvedBy = nextStatus === 'resolved' ? { username: state.user?.username || 'Ritik Kumar' } : null;
         state.workspaceThreads = state.workspaceThreads.map((item) => item._id === thread._id ? { ...item, ...thread } : item);
         addActivity({ action: nextStatus === 'resolved' ? 'resolved doubt on' : 'reopened doubt on', target: selectedDocumentTitle() });
         if (nextStatus === 'resolved') {

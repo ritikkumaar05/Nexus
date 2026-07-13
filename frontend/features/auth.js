@@ -99,9 +99,9 @@ const renderAuthBelowFoldSections = () => `
                 <div class="preview-nav-item"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>Tasks</div>
               </div>
               <div class="preview-sidebar-footer">
-                <div class="preview-avatar">AK</div>
+                <div class="preview-avatar">RK</div>
                 <div>
-                  <strong>Alex Kumar</strong>
+                  <strong>Ritik Kumar</strong>
                   <small>Demo user</small>
                 </div>
               </div>
@@ -280,9 +280,9 @@ export const renderAuthPage = (mode) => {
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
               <span>Built for study groups racing toward exams</span>
             </div>
-            <h2 class="hero-headline">Turn messy class collaboration into one study workspace.</h2>
+            <h2 class="hero-headline">Your AI Mentor That Remembers Your Learning Journey</h2>
             <p class="hero-subtext">
-              Nexus brings notes, tasks, chat, doubts, and Nexus Mentor into one shared room so teams can move from lecture to revision faster.
+              Turn scattered studying into one guided learning journey.
             </p>
             <div class="hero-actions">
               <a class="hero-btn-primary" href="#/signup">Start free</a>
@@ -560,9 +560,9 @@ export const renderPasswordRecoveryPage = (mode = 'forgot-password') => {
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
               <span>Built for study groups racing toward exams</span>
             </div>
-            <h2 class="hero-headline">Turn messy class collaboration into one study workspace.</h2>
+            <h2 class="hero-headline">Your AI Mentor That Remembers Your Learning Journey</h2>
             <p class="hero-subtext">
-              Nexus brings notes, tasks, chat, doubts, and Nexus Mentor into one shared room so teams can move from lecture to revision faster.
+              Turn scattered studying into one guided learning journey.
             </p>
             <div class="hero-actions">
               <a class="hero-btn-primary" href="#/signup">Start free</a>

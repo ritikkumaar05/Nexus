@@ -2030,7 +2030,7 @@ const renderSessionChrome = () => {
     ? state.user.username || state.user.email?.split('@')[0] || 'Signed in'
     : 'Signed out';
   if (els.sidebarUserAvatar) {
-    const avatarLabel = state.user?.username || state.user?.email || (demo ? 'Alex Rivera' : 'User');
+    const avatarLabel = state.user?.username || state.user?.email || (demo ? 'Ritik Kumar' : 'User');
     els.sidebarUserAvatar.textContent = getInitials(avatarLabel) || 'U';
   }
 
@@ -4332,7 +4332,7 @@ const handleToolPanelClick = async (event) => {
           priority,
           dueDate,
           documentId: doc._id,
-          assignee: { username: state.user?.username || 'Alex Rivera' }
+          assignee: { username: state.user?.username || 'Ritik Kumar' }
         };
         upsertTaskInStore(task);
         closeToolPanel();
@@ -5278,7 +5278,7 @@ els.routePage.addEventListener('click', async (event) => {
     if (state.demoMode) {
       thread.status = nextStatus;
       thread.resolvedAt = nextStatus === 'resolved' ? new Date().toISOString() : null;
-      thread.resolvedBy = nextStatus === 'resolved' ? { username: state.user?.username || 'Alex Rivera' } : null;
+      thread.resolvedBy = nextStatus === 'resolved' ? { username: state.user?.username || 'Ritik Kumar' } : null;
       state.documentMessages = state.documentMessages.map(item => item._id === threadId ? { ...item, ...thread } : item);
       addActivity({ action: nextStatus === 'resolved' ? 'resolved doubt on' : 'reopened doubt on', target: thread.documentTitle || 'Document' });
       if (nextStatus === 'resolved') {

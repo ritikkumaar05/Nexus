@@ -188,14 +188,14 @@ const createDemoState = () => {
   const now = nowDate.toISOString();
   const minutesAgo = (minutes) => new Date(nowDate.getTime() - (minutes * 60 * 1000)).toISOString();
   return {
-    user: { id: 'demo-user-alex', username: 'Alex Rivera', email: 'alex@demo.nexus' },
+    user: { id: 'demo-user-alex', username: 'Ritik Kumar', email: 'alex@demo.nexus' },
     workspaces: [{
       _id: DEMO_WORKSPACE_ID,
       name: 'Semester 5 Exam OS',
       description: 'Learning OS demo with courses, living lectures, doubts, tasks, quizzes, and revision progress.',
-      owner: { _id: 'demo-user-alex', username: 'Alex Rivera', email: 'alex@nexus.demo' },
+      owner: { _id: 'demo-user-alex', username: 'Ritik Kumar', email: 'alex@nexus.demo' },
       members: [
-        { user: { _id: 'demo-user-alex', username: 'Alex Rivera', email: 'alex@nexus.demo' }, role: 'admin' },
+        { user: { _id: 'demo-user-alex', username: 'Ritik Kumar', email: 'alex@nexus.demo' }, role: 'admin' },
         { user: { _id: 'demo-user-priya', username: 'Priya Sharma', email: 'priya@nexus.demo' }, role: 'member' },
         { user: { _id: 'demo-user-rohan', username: 'Rohan Kapoor', email: 'rohan@nexus.demo' }, role: 'viewer' },
         { user: { _id: 'demo-user-sam', username: 'Sam Okafor', email: 'sam@nexus.demo' }, role: 'member' }
@@ -219,7 +219,7 @@ const createDemoState = () => {
       { _id: 'demo-msg-general-1', channelId: 'general', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Morning team. OS midterm is in 12 days, so I marked Deadlocks and CPU Scheduling as high priority.', createdAt: minutesAgo(46), reactions: [{ emoji: '✅', users: ['demo-user-alex', 'demo-user-sam'] }] },
       { _id: 'demo-msg-general-2', channelId: 'general', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'DBMS normalization assignment is due tomorrow. Can we review 3NF examples after lunch?', createdAt: minutesAgo(42) },
       { _id: 'demo-msg-general-3', channelId: 'general', sender: { _id: 'demo-user-sam', username: 'Sam Okafor' }, content: 'I added the Library relation example to the DBMS notes. The transitive dependency part still feels tricky.', createdAt: minutesAgo(38) },
-      { _id: 'demo-msg-general-4', channelId: 'general', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: 'Nice. I scored 3/5 on the deadlocks quiz. Revising Banker algorithm next.', createdAt: minutesAgo(33), reactions: [{ emoji: '🔥', users: ['demo-user-priya'] }] },
+      { _id: 'demo-msg-general-4', channelId: 'general', sender: { _id: 'demo-user-alex', username: 'Ritik Kumar' }, content: 'Nice. I scored 3/5 on the deadlocks quiz. Revising Banker algorithm next.', createdAt: minutesAgo(33), reactions: [{ emoji: '🔥', users: ['demo-user-priya'] }] },
       { _id: 'demo-msg-general-5', channelId: 'general', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Plan: 20 min Deadlocks recap, 15 min CPU Scheduling numericals, then one Memory Management flashcard round.', createdAt: minutesAgo(24) },
       { _id: 'demo-msg-general-6', channelId: 'general', sender: { _id: 'demo-user-sam', username: 'Sam Okafor' }, content: 'I can take Networks. TCP congestion control is my weak topic, especially slow start vs congestion avoidance.', createdAt: minutesAgo(18) },
       { _id: 'demo-msg-general-7', channelId: 'general', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'Dropping one doubt in the Deadlocks channel. Circular wait finally clicked but Banker still confuses me.', createdAt: minutesAgo(12) },
@@ -227,33 +227,33 @@ const createDemoState = () => {
 
       { _id: 'demo-msg-os-1', channelId: 'os-deadlocks', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'Can someone explain why circular wait creates a deadlock if every process is only waiting for one resource?', createdAt: minutesAgo(64) },
       { _id: 'demo-msg-os-2', channelId: 'os-deadlocks', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Because the waiting forms a cycle. P1 waits for P2, P2 waits for P3, and eventually someone waits for P1. No one can release first.', createdAt: minutesAgo(61), reactions: [{ emoji: '💡', users: ['demo-user-rohan', 'demo-user-alex'] }] },
-      { _id: 'demo-msg-os-3', channelId: 'os-deadlocks', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: 'I added that explanation to Lecture 5. Also generated a 5-question quiz from the note.', createdAt: minutesAgo(57) },
+      { _id: 'demo-msg-os-3', channelId: 'os-deadlocks', sender: { _id: 'demo-user-alex', username: 'Ritik Kumar' }, content: 'I added that explanation to Lecture 5. Also generated a 5-question quiz from the note.', createdAt: minutesAgo(57) },
       { _id: 'demo-msg-os-4', channelId: 'os-deadlocks', sender: { _id: 'demo-user-sam', username: 'Sam Okafor' }, content: 'Banker Algorithm check: available + allocated resources should let us find a safe sequence, right?', createdAt: minutesAgo(49) },
       { _id: 'demo-msg-os-5', channelId: 'os-deadlocks', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Yes. If every process can finish in some order, the state is safe. If not, granting the request is risky.', createdAt: minutesAgo(47) },
 
       { _id: 'demo-msg-dbms-1', channelId: 'dbms-normalization', sender: { _id: 'demo-user-sam', username: 'Sam Okafor' }, content: 'For Library(issue_id, book_id, member_id, member_name, return_date), member_name depends on member_id, not issue_id.', createdAt: minutesAgo(73) },
       { _id: 'demo-msg-dbms-2', channelId: 'dbms-normalization', sender: { _id: 'demo-user-rohan', username: 'Rohan Kapoor' }, content: 'So that is a transitive dependency if issue_id is the key?', createdAt: minutesAgo(70) },
       { _id: 'demo-msg-dbms-3', channelId: 'dbms-normalization', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Exactly. Split Member(member_id, member_name) and Issue(issue_id, book_id, member_id, return_date).', createdAt: minutesAgo(67), reactions: [{ emoji: '✅', users: ['demo-user-rohan'] }] },
-      { _id: 'demo-msg-dbms-4', channelId: 'dbms-normalization', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: 'I will turn this into flashcards after the OS revision block.', createdAt: minutesAgo(52) },
+      { _id: 'demo-msg-dbms-4', channelId: 'dbms-normalization', sender: { _id: 'demo-user-alex', username: 'Ritik Kumar' }, content: 'I will turn this into flashcards after the OS revision block.', createdAt: minutesAgo(52) },
 
       { _id: 'demo-msg-cn-1', channelId: 'cn-revision', sender: { _id: 'demo-user-sam', username: 'Sam Okafor' }, content: 'Networks check: slow start grows cwnd exponentially until ssthresh, then congestion avoidance grows linearly.', createdAt: minutesAgo(31) },
-      { _id: 'demo-msg-cn-2', channelId: 'cn-revision', sender: { _id: 'demo-user-alex', username: 'Alex Rivera' }, content: 'And packet loss usually means congestion, so TCP cuts the window. I always forget fast recovery.', createdAt: minutesAgo(29) },
+      { _id: 'demo-msg-cn-2', channelId: 'cn-revision', sender: { _id: 'demo-user-alex', username: 'Ritik Kumar' }, content: 'And packet loss usually means congestion, so TCP cuts the window. I always forget fast recovery.', createdAt: minutesAgo(29) },
       { _id: 'demo-msg-cn-3', channelId: 'cn-revision', sender: { _id: 'demo-user-priya', username: 'Priya Sharma' }, content: 'Add that as a weak topic. Tomorrow we can compare TCP with sliding window protocol.', createdAt: minutesAgo(21) }
     ],
     documentMessages: [
       { _id: 'demo-doc-msg-1', sender: { username: 'Rohan Kapoor' }, body: 'Why does circular wait matter if every process is only waiting for one resource?', linkedText: 'Circular wait: processes form a cycle of resource dependencies.', status: 'open', replies: [
         { _id: 'demo-doc-reply-1', sender: { username: 'Priya Sharma' }, body: 'Because the cycle means each process is blocked by the next one, so none can release what the others need.' },
-        { _id: 'demo-doc-reply-2', sender: { username: 'Alex Rivera' }, body: 'Add a resource allocation graph and it becomes visible.' }
+        { _id: 'demo-doc-reply-2', sender: { username: 'Ritik Kumar' }, body: 'Add a resource allocation graph and it becomes visible.' }
       ] },
-      { _id: 'demo-doc-msg-2', sender: { username: 'Alex Rivera' }, body: 'Is Banker algorithm prevention or avoidance?', linkedText: 'Avoidance checks whether a request keeps the system in a safe state.', status: 'resolved', resolvedBy: { username: 'Priya Sharma' }, resolvedAt: now, replies: [
+      { _id: 'demo-doc-msg-2', sender: { username: 'Ritik Kumar' }, body: 'Is Banker algorithm prevention or avoidance?', linkedText: 'Avoidance checks whether a request keeps the system in a safe state.', status: 'resolved', resolvedBy: { username: 'Priya Sharma' }, resolvedAt: now, replies: [
         { _id: 'demo-doc-reply-3', sender: { username: 'Priya Sharma' }, body: 'Avoidance. It checks safety before granting requests.' }
       ] }
     ],
     documentTasks: [
-      { _id: 'demo-task-1', title: 'Revise Deadlocks before dinner', status: 'todo', priority: 'high', dueDate: now, documentId: 'demo-doc-os-deadlocks', assignee: { username: 'Alex Rivera' } },
+      { _id: 'demo-task-1', title: 'Revise Deadlocks before dinner', status: 'todo', priority: 'high', dueDate: now, documentId: 'demo-doc-os-deadlocks', assignee: { username: 'Ritik Kumar' } },
       { _id: 'demo-task-2', title: 'Solve 5 CPU Scheduling numericals', status: 'done', priority: 'medium', dueDate: now, documentId: 'demo-doc-os-scheduling', assignee: { username: 'Priya Sharma' }, completedAt: now },
       { _id: 'demo-task-3', title: 'Submit DBMS normalization assignment', status: 'todo', priority: 'high', dueDate: now, documentId: 'demo-doc-dbms-normalization', assignee: { username: 'Sam Okafor' } },
-      { _id: 'demo-task-4', title: 'Finish TCP congestion flashcards', status: 'todo', priority: 'medium', dueDate: now, documentId: 'demo-doc-cn-tcp', assignee: { username: 'Alex Rivera' } },
+      { _id: 'demo-task-4', title: 'Finish TCP congestion flashcards', status: 'todo', priority: 'medium', dueDate: now, documentId: 'demo-doc-cn-tcp', assignee: { username: 'Ritik Kumar' } },
       { _id: 'demo-task-5', title: 'Review ACID isolation examples', status: 'done', priority: 'low', dueDate: now, documentId: 'demo-doc-dbms-transactions', assignee: { username: 'Rohan Kapoor' } }
     ],
     presence: [
@@ -265,7 +265,7 @@ const createDemoState = () => {
       { id: 'demo-activity-1', actor: 'Priya Sharma', action: 'revised', target: 'CPU Scheduling', time: '2 min ago', documentId: 'demo-doc-os-scheduling' },
       { id: 'demo-activity-2', actor: 'Rohan Kapoor', action: 'asked a doubt on', target: 'Deadlocks circular wait', time: '8 min ago', documentId: 'demo-doc-os-deadlocks' },
       { id: 'demo-activity-3', actor: 'Sam Okafor', action: 'created task for', target: 'DBMS assignment', time: '15 min ago', documentId: 'demo-doc-dbms-normalization' },
-      { id: 'demo-activity-4', actor: 'Alex Rivera', action: 'generated quiz from', target: 'Deadlocks', time: '22 min ago', documentId: 'demo-doc-os-deadlocks' }
+      { id: 'demo-activity-4', actor: 'Ritik Kumar', action: 'generated quiz from', target: 'Deadlocks', time: '22 min ago', documentId: 'demo-doc-os-deadlocks' }
     ]
   };
 };

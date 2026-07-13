@@ -1196,22 +1196,67 @@ button.ask-ai-tutor-btn:hover,
   line-height: 1.6;
 }
 
-.threads-premium-empty-state .ask-doubt-action-btn {
-  height: 34px;
+.threads-premium-empty-state .empty-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: var(--sp-2);
+}
+
+.threads-premium-empty-state .empty-actions button {
+  width: auto;
+  min-width: 132px;
+  height: 36px;
+  min-height: 36px;
+  margin: 0;
   padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--t-radius-sm);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.threads-premium-empty-state .ask-doubt-action-btn {
   background: var(--primary);
   color: #fff;
   border: none;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(99,102,241,0.26);
   transition: background 0.13s;
-  margin-top: var(--sp-2);
 }
 .threads-premium-empty-state .ask-doubt-action-btn:hover {
   background: var(--primary-strong, #4f46e5);
+}
+
+.threads-premium-empty-state .go-to-docs-btn {
+  background: var(--panel-soft);
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.threads-premium-empty-state .go-to-docs-btn:hover {
+  background: var(--line);
+  border-color: var(--line-strong, var(--line));
+}
+
+@media (max-width: 520px) {
+  .threads-premium-empty-state .empty-actions {
+    width: min(100%, 220px);
+    flex-direction: column;
+  }
+
+  .threads-premium-empty-state .empty-actions button {
+    width: 100%;
+  }
 }
 
 /* ─── Status pill (in document context panel doubts) ────────────────── */

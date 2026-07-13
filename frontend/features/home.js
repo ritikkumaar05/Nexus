@@ -174,7 +174,7 @@ export const renderHomePage = () => {
     });
   }
 
-  const userName = state.demoMode ? 'Alex' : (state.user?.username || state.user?.email?.split('@')[0] || '');
+  const userName = state.demoMode ? 'Ritik' : (state.user?.username || state.user?.email?.split('@')[0] || '');
   const greeting = getTimeGreeting(userName);
   const coach = learningCoachData({ recentDocuments, todayTasks, doubts, stats });
   const primaryDoc = coach.nextLecture || recentDocuments[0];
