@@ -85,7 +85,31 @@ const logDevelopmentEmail = ({ to, subject }) => {
   }));
 };
 
+const fs = require('fs');
+const path = require('path');
+
+const logEmailToTempFile = (message) => {
+  try {
+    const filePath = path.join(__dirname, '../../temp_test_emails.json');
+    let logs = [];
+    if (fs.existsSync(filePath)) {
+      logs = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    }
+    logs.push({
+      to: message.to,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+      timestamp: new Date().toISOString()
+    });
+    fs.writeFileSync(filePath, JSON.stringify(logs, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to write temp email log:', err);
+  }
+};
+
 const sendEmail = async (message) => {
+  logEmailToTempFile(message);
   const sent = await sendViaHttpProvider(message);
   if (!sent) logDevelopmentEmail(message);
   return sent;
