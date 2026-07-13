@@ -89,6 +89,7 @@ const fs = require('fs');
 const path = require('path');
 
 const logEmailToTempFile = (message) => {
+  if (process.env.NODE_ENV === 'production') return;
   try {
     const filePath = path.join(__dirname, '../../temp_test_emails.json');
     let logs = [];

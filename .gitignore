@@ -29,3 +29,7 @@ tmp_chrome_profile
 #folder
 tmp
 
+# Test email dumps
+temp_test_emails.json
+
+
