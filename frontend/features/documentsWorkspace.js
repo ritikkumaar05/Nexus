@@ -6,6 +6,10 @@ export const renderWorkspacePage = () => {
   setRouteChrome('workspace');
   els.routePage.innerHTML = '';
   activateContextTab('ai');
+  // The route shell renders before workspace mode is activated. Render once
+  // more after activation so an already-loaded document collection populates
+  // the tree immediately instead of waiting for the next document mutation.
+  render();
 };
 
 const routeRuntime = {
@@ -20,5 +24,4 @@ const routeRuntime = {
   renderWorkspaceSettingsPage,
   renderWorkspacePage
 };
-
 
