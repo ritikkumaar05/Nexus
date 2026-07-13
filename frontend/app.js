@@ -5517,6 +5517,7 @@ els.workspaceList.addEventListener('click', async (event) => {
     teardownYDoc();
     await Promise.all([loadChannels(), loadDocuments()]);
     render();
+    await renderRoute();
   } catch (err) {
     showToast(friendlyUiMessage('Failed to switch workspace: ' + err.message, { isError: true }), true);
   }
