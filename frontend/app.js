@@ -640,7 +640,12 @@ const toggleTheme = () => {
   apiBase: API_BASE,
   getToken: () => state.token,
   getCsrfToken: () => state.csrfToken,
-  onRefresh: saveSession
+  onRefresh: saveSession,
+  onAuthFailure: async () => {
+    clearSession();
+    navigate('login');
+    await renderRoute();
+  }
 }));
 
 const selectedDocumentTitle = () => selectedDocument()?.title || els.documentTitleInput?.value || 'Untitled lecture';

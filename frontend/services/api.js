@@ -2,8 +2,12 @@ export const createApiClient = ({
   apiBase,
   getToken,
   getCsrfToken,
-  onRefresh
+  onRefresh,
+  onAuthFailure
 }) => {
+  let refreshPromise = null;
+  let authFailureToken = null;
+
   const friendlyError = (message = '', status = 0) => {
     const text = String(message || '').trim();
     const lower = text.toLowerCase();
@@ -45,6 +49,36 @@ export const createApiClient = ({
     }
 
     return text || "Something didn't go through. Please try again.";
+  };
+
+  const refreshSession = (tokenAtDispatch) => {
+    if (refreshPromise) return refreshPromise;
+
+    refreshPromise = (async () => {
+      try {
+        const refreshed = await request('/api/auth/refresh', {
+          method: 'POST',
+          body: JSON.stringify({})
+        }, false);
+        await onRefresh?.(refreshed);
+        authFailureToken = null;
+        return refreshed;
+      } catch (error) {
+        if (authFailureToken !== tokenAtDispatch) {
+          authFailureToken = tokenAtDispatch;
+          try {
+            await onAuthFailure?.(error);
+          } catch (handlerError) {
+            console.error('Session-expiry handling failed:', handlerError);
+          }
+        }
+        throw error;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+
+    return refreshPromise;
   };
 
   const request = async (path, options = {}, retry = true) => {
@@ -92,12 +126,17 @@ export const createApiClient = ({
         '/api/auth/google/complete'
       ].includes(path);
       if (response.status === 401 && retry && canRefresh && path !== '/api/auth/refresh') {
-        const refreshed = await request('/api/auth/refresh', {
-          method: 'POST',
-          body: JSON.stringify({})
-        }, false);
-        onRefresh?.(refreshed);
-        return request(path, options, false);
+        const currentToken = getToken?.() || '';
+        if (currentToken && currentToken !== token) {
+          return request(path, options, false);
+        }
+        if (authFailureToken !== null && authFailureToken === token) {
+          // Another request already determined that this exact session cannot be refreshed.
+          // Fall through and surface the original 401 without contacting refresh again.
+        } else {
+          await refreshSession(token);
+          return request(path, options, false);
+        }
       }
       if (response.status === 413) {
         if (path === '/api/ai/document-action') {
